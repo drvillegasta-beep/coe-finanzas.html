@@ -1192,6 +1192,7 @@ function SM(id){document.getElementById(id).style.display='flex';}
 
 // ── Factura ──
 function openFac(id,tipo){
+  try{
   const f=id?FAC.find(x=>x.id===id):null;
   document.getElementById('mFacT').textContent=f?'Editar Factura':'Nueva Factura';
   document.getElementById('fId').value=f?.id||'';
@@ -1237,6 +1238,7 @@ function openFac(id,tipo){
   document.getElementById('fUuid').value=f?.uuid_cfdi||'';
   document.getElementById('fRfc').value=f?.rfc_emisor||'';
   calcFisc();SM('mFac');
+  }catch(e){console.error('openFac error:',e);toast('Error al abrir: '+e.message,'error');}
 }
 function setTipo(t){
   document.getElementById('fTip').value=t;
