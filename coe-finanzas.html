@@ -276,6 +276,18 @@ tr.drag-over td{border-top:3px solid var(--pr) !important;}
 </head>
 <body>
 
+<!-- LOADING OVERLAY -->
+<div id="loadingOverlay" style="position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;">
+  <div style="font-size:11px;font-weight:700;letter-spacing:4px;color:var(--pr);text-transform:uppercase;">COE</div>
+  <div style="font-size:28px;font-weight:800;color:var(--tx);">Finanzas</div>
+  <div style="color:var(--tm);font-size:13px;margin-top:4px;">Conectando...</div>
+  <div style="display:flex;gap:6px;margin-top:8px;">
+    <div style="width:8px;height:8px;border-radius:50%;background:var(--pr);animation:pulse 1s infinite 0s"></div>
+    <div style="width:8px;height:8px;border-radius:50%;background:var(--pr);animation:pulse 1s infinite .2s"></div>
+    <div style="width:8px;height:8px;border-radius:50%;background:var(--pr);animation:pulse 1s infinite .4s"></div>
+  </div>
+</div>
+
 <!-- LOGIN — visible by default, no Supabase required -->
 <div class="ctr" id="loginScreen">
   <div class="card">
@@ -748,16 +760,7 @@ function dLog(a,d,t){LOG.unshift({id:'l'+Date.now(),tabla:t,usuario_nombre:cu?.n
 // Arrancar apenas el DOM esté listo, sin esperar CDNs
 async function initApp(){
   const n=new Date();calY=n.getFullYear();calM=n.getMonth();
-  // Pantalla de carga inmediata
-  const ls=document.getElementById('loginScreen');
-  if(ls) ls.innerHTML=`<div class="lc" style="text-align:center;padding:60px 36px;">
-    <div class="ll">COE</div><div class="lt">Finanzas</div>
-    <div style="margin-top:20px;color:var(--tm);font-size:13px;">Conectando...</div>
-    <div style="margin-top:14px;display:flex;justify-content:center;gap:6px;">
-      <div style="width:8px;height:8px;border-radius:50%;background:var(--pr);animation:pulse 1s infinite 0s"></div>
-      <div style="width:8px;height:8px;border-radius:50%;background:var(--pr);animation:pulse 1s infinite .2s"></div>
-      <div style="width:8px;height:8px;border-radius:50%;background:var(--pr);animation:pulse 1s infinite .4s"></div>
-    </div></div>`;
+  // Loading overlay ya visible en HTML — no tocar loginScreen
   // Conectar Supabase
   try{
     sb = supabase.createClient('https://ckjkdenwqicdjvodflba.supabase.co','sb_publishable_6kfSTYsmi2KxAeX0AMwymQ_dWPTAxYz');
@@ -768,8 +771,9 @@ async function initApp(){
       if(ud?.length) usuarios = ud; else ldDemo();
     } else { sb=null; isDemo=true; ldDemo(); }
   } catch(e){ sb=null; isDemo=true; ldDemo(); console.warn('Supabase:',e); }
-  // Mostrar login con usuarios reales
-  if(ls) ls.innerHTML='';
+  // Ocultar overlay y mostrar login con usuarios reales
+  const ov=document.getElementById('loadingOverlay');
+  if(ov) ov.style.display='none';
   renderLogin();
   // Prevenir cierre accidental de pestaña
   window.addEventListener('beforeunload', function(e){
