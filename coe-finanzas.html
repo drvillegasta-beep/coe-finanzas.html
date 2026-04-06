@@ -228,9 +228,15 @@ textarea{resize:vertical;min-height:70px;}
 .fiscal-box{background:var(--sf2);border:1px solid var(--br);border-radius:var(--rs);padding:14px;margin-top:4px;}
 .fiscal-row{display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:4px 0;border-bottom:1px solid var(--br);}
 .fiscal-row:last-child{border-bottom:none;font-weight:700;font-size:13px;padding-top:8px;}
+@keyframes pulse{0%,100%{opacity:.3;transform:scale(.8);}50%{opacity:1;transform:scale(1.2);}}
 .apr-tag{font-size:10px;font-weight:700;color:#00C9A7;background:rgba(0,201,167,.12);border:1px solid rgba(0,201,167,.3);border-radius:4px;padding:2px 6px;display:inline-block;margin-top:3px;}
 
 /* ── Grupo / Multi-selección ── */
+
+// UUID validator — returns null if not a real UUID
+const isUUID=v=>!!v&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v));
+const toUUID=v=>isUUID(v)?v:null;
+
 
 
 
@@ -742,17 +748,28 @@ function dLog(a,d,t){LOG.unshift({id:'l'+Date.now(),tabla:t,usuario_nombre:cu?.n
 // Arrancar apenas el DOM esté listo, sin esperar CDNs
 async function initApp(){
   const n=new Date();calY=n.getFullYear();calM=n.getMonth();
-  ldDemo();
-  // ── Auto-connect Supabase ──
+  // Pantalla de carga inmediata
+  const ls=document.getElementById('loginScreen');
+  if(ls) ls.innerHTML=`<div class="lc" style="text-align:center;padding:60px 36px;">
+    <div class="ll">COE</div><div class="lt">Finanzas</div>
+    <div style="margin-top:20px;color:var(--tm);font-size:13px;">Conectando...</div>
+    <div style="margin-top:14px;display:flex;justify-content:center;gap:6px;">
+      <div style="width:8px;height:8px;border-radius:50%;background:var(--pr);animation:pulse 1s infinite 0s"></div>
+      <div style="width:8px;height:8px;border-radius:50%;background:var(--pr);animation:pulse 1s infinite .2s"></div>
+      <div style="width:8px;height:8px;border-radius:50%;background:var(--pr);animation:pulse 1s infinite .4s"></div>
+    </div></div>`;
+  // Conectar Supabase
   try{
     sb = supabase.createClient('https://ckjkdenwqicdjvodflba.supabase.co','sb_publishable_6kfSTYsmi2KxAeX0AMwymQ_dWPTAxYz');
     const {error} = await sb.from('fin_usuarios').select('id').limit(1);
     if(!error){
       isDemo = false;
       const {data:ud} = await sb.from('fin_usuarios').select('*').eq('activo',true).order('nombre');
-      if(ud?.length) usuarios = ud;
+      if(ud?.length) usuarios = ud; else ldDemo();
     } else { sb=null; isDemo=true; ldDemo(); }
   } catch(e){ sb=null; isDemo=true; ldDemo(); console.warn('Supabase:',e); }
+  // Mostrar login con usuarios reales
+  if(ls) ls.innerHTML='';
   renderLogin();
   // Prevenir cierre accidental de pestaña
   window.addEventListener('beforeunload', function(e){
@@ -797,7 +814,17 @@ async function verPin(){
   const u=USR.find(x=>x.id===selUsr);if(!u)return;
   if(u.pin===pinBuf){
     cu=u;
-    if(!isDemo)await loadAll();
+    if(!isDemo){
+      // Si cu tiene ID demo, recargar usuario real de Supabase
+      if(!isUUID(cu.id)){
+        const{data:ru}=await sb.from('fin_usuarios')
+          .select('*').eq('activo',true).order('nombre')
+          .then(r=>({data:r.data?.find(x=>x.nombre===cu.nombre&&x.pin===cu.pin)||null}))
+          .catch(()=>({data:null}));
+        if(ru) cu=ru;
+      }
+      await loadAll();
+    }
     document.getElementById('loginScreen').style.display='none';
     document.getElementById('app').style.display='block';
     document.getElementById('tav').textContent=u.nombre.charAt(0).toUpperCase();
@@ -1421,7 +1448,7 @@ async function submitFac(){
       es_recurrente: document.getElementById('fIsRec')?.checked || false,
       recurrente_id: (document.getElementById('fIsRec')?.checked &&
                       document.getElementById('fRecId')?.value) || null,
-      updated_by: (cu?.id||null)
+      updated_by: toUUID(cu?.id)
     };
     // Optional doc upload
     const docFile = document.getElementById('fDoc').files[0];
@@ -1452,7 +1479,7 @@ async function submitFac(){
     }
     if(isDemo){
       if(id){ const i=FAC.findIndex(f=>f.id===id); if(i>=0) FAC[i]={...FAC[i],...pay}; }
-      else   FAC.unshift({id:'f'+Date.now(),...pay, monto_pagado:0, created_by:(cu?.id||null)});
+      else   FAC.unshift({id:'f'+Date.now(),...pay, monto_pagado:0, created_by:toUUID(cu?.id)});
       dLog(id?'EDITAR':'CREAR', (id?'Editó':'Creó')+': '+des, 'fin_facturas');
     } else {
       let er;
@@ -1461,7 +1488,7 @@ async function submitFac(){
           .update({...pay, updated_at:new Date().toISOString()}).eq('id',id));
       } else {
         const{data:nd,error} = await sb.from('fin_facturas')
-          .insert({...pay, monto_pagado:0, created_by:(cu?.id||null)})
+          .insert({...pay, monto_pagado:0, created_by:toUUID(cu?.id)})
           .select().single();
         er = error;
         if(nd) await aLog('fin_facturas',nd.id,'CREAR','Creó: '+des,pay);
@@ -1537,11 +1564,11 @@ async function submitAbo(){
     const{error}=await sb.from('fin_abonos').insert({factura_id:fid,monto:mnt,fecha_pago:fch,
       referencia:document.getElementById('aRef').value||null,
       notas:document.getElementById('aNot').value||null,
-      comprobante_url:cu2,created_by:(cu?.id||null)});
+      comprobante_url:cu2,created_by:toUUID(cu?.id)});
     if(error){toast('Error: '+error.message,'error');return;}
     await sb.from('fin_facturas').update({monto_pagado:nt,estado:ne,
       fecha_pago:ne==='pagado'?fch:f?.fecha_pago,
-      updated_at:new Date().toISOString(),updated_by:(cu?.id||null)}).eq('id',fid);
+      updated_at:new Date().toISOString(),updated_by:toUUID(cu?.id)}).eq('id',fid);
     await aLog('fin_abonos',fid,'ABONAR',`Abono ${$$(mnt)} \u2192 ${f?.descripcion}`,{monto:mnt,fecha:fch});
     await loadAll();
   }
@@ -1560,7 +1587,7 @@ async function aprobarFac(id){
     const{error}=await sb.from('fin_facturas').update({
       estado:'aprobado',aprobado_por:cu.nombre,
       aprobado_at:new Date().toISOString(),
-      updated_at:new Date().toISOString(),updated_by:(cu?.id||null)
+      updated_at:new Date().toISOString(),updated_by:toUUID(cu?.id)
     }).eq('id',id);
     if(error){toast('Error: '+error.message,'error');return;}
     await aLog('fin_facturas',id,'APROBAR','Aprobó: '+f.descripcion,{aprobado_por:cu.nombre});
@@ -1573,7 +1600,7 @@ async function archFac(id){
   if(!confirm('\u00bfArchivar esta factura?'))return;
   const f=FAC.find(x=>x.id===id);
   if(isDemo){const i=FAC.findIndex(x=>x.id===id);if(i>=0)FAC.splice(i,1);dLog('ARCHIVAR','Archiv\u00f3: '+f?.descripcion,'fin_facturas');}
-  else{await sb.from('fin_facturas').update({estado:'archivado',updated_at:new Date().toISOString(),updated_by:(cu?.id||null)}).eq('id',id);
+  else{await sb.from('fin_facturas').update({estado:'archivado',updated_at:new Date().toISOString(),updated_by:toUUID(cu?.id)}).eq('id',id);
     await aLog('fin_facturas',id,'ARCHIVAR','Archiv\u00f3: '+f?.descripcion,{});await loadAll();}
   toast('Archivada','success');renderTab();
 }
@@ -1721,7 +1748,7 @@ async function submitGRc(){
     numero_factura:document.getElementById('grNum').value||null,
     fecha_vencimiento:document.getElementById('grVen').value,
     estado:'pendiente',es_recurrente:true,recurrente_id:rid,
-    created_by:(cu?.id||null),updated_by:(cu?.id||null)};
+    created_by:toUUID(cu?.id),updated_by:toUUID(cu?.id)};
   if(isDemo){
     FAC.unshift({id:'f'+Date.now(),...pay});
     dLog('CREAR',`Gener\u00f3 recurrente: ${r.descripcion} &middot; ${$$(mnt)}`,'fin_facturas');
@@ -1739,7 +1766,7 @@ async function submitGRc(){
 async function aLog(tab,rid,ac,des,ch){
   const isUUID=v=>v&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
   const safeRid=isUUID(rid)?rid:null;
-  const safeUid=isUUID(cu?.id)?cu.id:null;
+  const safeUid=toUUID(cu?.id);
   try{await sb.from('fin_log').insert({tabla:tab,registro_id:safeRid,
     usuario_id:safeUid,usuario_nombre:cu?.nombre||'—',accion:ac,descripcion:des,cambios:ch||{}});}
   catch(e){console.warn('log err',e);}
@@ -2009,7 +2036,7 @@ async function submitGrp(){
     if(isDemo){
       ABO.unshift({id:'a'+Date.now()+Math.random(),factura_id:f.id,
         monto:abonoMonto,fecha_pago:fecha,referencia:ref,
-        comprobante_url:compUrl,notas,grupo_id:grpId,created_by:(cu?.id||null)});
+        comprobante_url:compUrl,notas,grupo_id:grpId,created_by:toUUID(cu?.id)});
       const i=FAC.findIndex(x=>x.id===f.id);
       if(i>=0){FAC[i].monto_pagado=nuevoTotal;FAC[i].estado=nuevoEst;
         if(nuevoEst==='pagado')FAC[i].fecha_pago=fecha;}
@@ -2017,12 +2044,12 @@ async function submitGrp(){
       const{error}=await sb.from('fin_abonos').insert({
         factura_id:f.id,monto:abonoMonto,fecha_pago:fecha,
         referencia:ref,comprobante_url:compUrl,notas,
-        grupo_id:grpId,created_by:(cu?.id||null)});
+        grupo_id:grpId,created_by:toUUID(cu?.id)});
       if(!error){
         await sb.from('fin_facturas').update({
           monto_pagado:nuevoTotal,estado:nuevoEst,
           fecha_pago:nuevoEst==='pagado'?fecha:f.fecha_pago,
-          updated_at:new Date().toISOString(),updated_by:(cu?.id||null)
+          updated_at:new Date().toISOString(),updated_by:toUUID(cu?.id)
         }).eq('id',f.id);
       } else errCount++;
     }
