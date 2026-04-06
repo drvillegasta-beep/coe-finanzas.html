@@ -1154,10 +1154,28 @@ function rCfg(){
       ${ENT.map(e=>`<tr><td style="font-weight:600;">${e.nombre}</td>
         <td><span class="bdg ${e.tipo==='proveedor'?'bdg-egr':'bdg-ing'}">${e.tipo}</span></td>
         <td class="mn">${e.descuento_pp||0}%</td>
-        <td><button class="btn btn-s btn-sm" onclick="OM('mEnt','${e.id}')">Editar</button></td>
+        <td style="display:flex;gap:4px;">
+          <button class="btn btn-s btn-sm" onclick="OM('mEnt','${e.id}')">&#9998;</button>
+          <button class="btn btn-s btn-sm" style="background:var(--dd);color:var(--dg);border:1px solid var(--dg);" onclick="delEnt('${e.id}','${e.nombre}')">&#128465;</button>
+        </td>
       </tr>`).join('')}</tbody></table></div>
     </div>
   </div>`;
+}
+
+// ── Eliminar entidad
+async function delEnt(id,nom){
+  if(!confirm('\u00bfEliminar '+nom+'?\nSolo si no tiene facturas asociadas.'))return;
+  if(isDemo){
+    const i=ENT.findIndex(e=>e.id===id);if(i>=0)ENT.splice(i,1);
+    toast('Eliminado','success');renderTab();return;
+  }
+  const{data:ff}=await sb.from('fin_facturas').select('id').eq('entidad_id',id).limit(1);
+  if(ff?.length){toast('Tiene facturas — no se puede eliminar','error');return;}
+  const{error}=await sb.from('fin_entidades').delete().eq('id',id);
+  if(error){toast('Error: '+error.message,'error');return;}
+  await aLog('fin_entidades',id,'ELIMINAR','Eliminó: '+nom,{});
+  await loadAll();toast('Eliminado','success');renderTab();
 }
 
 // ══ MODALS ═══════════════════════════════
@@ -1294,7 +1312,7 @@ async function submitFac(){
     isr_pct:(()=>{const s=document.getElementById('fIsr')?.value||'0';return s==='custom'?(parseFloat(document.getElementById('fIsrC')?.value)||0).toString():s;})(),
     uuid_cfdi:document.getElementById('fUuid')?.value.trim()||null,
     rfc_emisor:document.getElementById('fRfc')?.value.trim()||null,
-    estado:fp?'pagado':'pendiente',updated_by:cu.id};
+    estado:fp?'pagado':'pendiente',updated_by:safeId(cu?.id)};
   // Handle doc upload
   const docFile=document.getElementById('fDoc').files[0];
   if(docFile&&!isDemo){
@@ -1308,12 +1326,12 @@ async function submitFac(){
   }
   if(isDemo){
     if(id){const i=FAC.findIndex(f=>f.id===id);if(i>=0)FAC[i]={...FAC[i],...pay};}
-    else FAC.unshift({id:'f'+Date.now(),...pay,monto_pagado:0,created_by:cu.id});
+    else FAC.unshift({id:'f'+Date.now(),...pay,monto_pagado:0,created_by:safeId(cu?.id)});
     dLog(id?'EDITAR':'CREAR',`${id?'Edit\u00f3':'Cre\u00f3'}: ${des}`,'fin_facturas');
   }else{
     let er;
     if(id){({error:er}=await sb.from('fin_facturas').update({...pay,updated_at:new Date().toISOString()}).eq('id',id));}
-    else{const{data:nd,error}=await sb.from('fin_facturas').insert({...pay,monto_pagado:0,created_by:cu.id}).select().single();er=error;if(nd)await aLog('fin_facturas',nd.id,'CREAR','Cre\u00f3: '+des,pay);}
+    else{const{data:nd,error}=await sb.from('fin_facturas').insert({...pay,monto_pagado:0,created_by:safeId(cu?.id)}).select().single();er=error;if(nd)await aLog('fin_facturas',nd.id,'CREAR','Cre\u00f3: '+des,pay);}
     if(er){toast('Error: '+er.message,'error');return;}
     if(id)await aLog('fin_facturas',id,'EDITAR','Edit\u00f3: '+des,pay);
     await loadAll();
@@ -1380,11 +1398,11 @@ async function submitAbo(){
     const{error}=await sb.from('fin_abonos').insert({factura_id:fid,monto:mnt,fecha_pago:fch,
       referencia:document.getElementById('aRef').value||null,
       notas:document.getElementById('aNot').value||null,
-      comprobante_url:cu2,created_by:cu.id});
+      comprobante_url:cu2,created_by:safeId(cu?.id)});
     if(error){toast('Error: '+error.message,'error');return;}
     await sb.from('fin_facturas').update({monto_pagado:nt,estado:ne,
       fecha_pago:ne==='pagado'?fch:f?.fecha_pago,
-      updated_at:new Date().toISOString(),updated_by:cu.id}).eq('id',fid);
+      updated_at:new Date().toISOString(),updated_by:safeId(cu?.id)}).eq('id',fid);
     await aLog('fin_abonos',fid,'ABONAR',`Abono ${$$(mnt)} \u2192 ${f?.descripcion}`,{monto:mnt,fecha:fch});
     await loadAll();
   }
@@ -1403,7 +1421,7 @@ async function aprobarFac(id){
     const{error}=await sb.from('fin_facturas').update({
       estado:'aprobado',aprobado_por:cu.nombre,
       aprobado_at:new Date().toISOString(),
-      updated_at:new Date().toISOString(),updated_by:cu.id
+      updated_at:new Date().toISOString(),updated_by:safeId(cu?.id)
     }).eq('id',id);
     if(error){toast('Error: '+error.message,'error');return;}
     await aLog('fin_facturas',id,'APROBAR','Aprobó: '+f.descripcion,{aprobado_por:cu.nombre});
@@ -1416,7 +1434,7 @@ async function archFac(id){
   if(!confirm('\u00bfArchivar esta factura?'))return;
   const f=FAC.find(x=>x.id===id);
   if(isDemo){const i=FAC.findIndex(x=>x.id===id);if(i>=0)FAC.splice(i,1);dLog('ARCHIVAR','Archiv\u00f3: '+f?.descripcion,'fin_facturas');}
-  else{await sb.from('fin_facturas').update({estado:'archivado',updated_at:new Date().toISOString(),updated_by:cu.id}).eq('id',id);
+  else{await sb.from('fin_facturas').update({estado:'archivado',updated_at:new Date().toISOString(),updated_by:safeId(cu?.id)}).eq('id',id);
     await aLog('fin_facturas',id,'ARCHIVAR','Archiv\u00f3: '+f?.descripcion,{});await loadAll();}
   toast('Archivada','success');renderTab();
 }
@@ -1561,7 +1579,7 @@ async function submitGRc(){
     numero_factura:document.getElementById('grNum').value||null,
     fecha_vencimiento:document.getElementById('grVen').value,
     estado:'pendiente',es_recurrente:true,recurrente_id:rid,
-    created_by:cu.id,updated_by:cu.id};
+    created_by:safeId(cu?.id),updated_by:safeId(cu?.id)};
   if(isDemo){
     FAC.unshift({id:'f'+Date.now(),...pay});
     dLog('CREAR',`Gener\u00f3 recurrente: ${r.descripcion} &middot; ${$$(mnt)}`,'fin_facturas');
@@ -1578,7 +1596,7 @@ async function submitGRc(){
 // ══ AUDIT ════════════════════════════════
 async function aLog(tab,rid,ac,des,ch){
   try{await sb.from('fin_log').insert({tabla:tab,registro_id:rid||null,
-    usuario_id:cu.id,usuario_nombre:cu.nombre,accion:ac,descripcion:des,cambios:ch||{}});}
+    usuario_id:safeId(cu?.id),usuario_nombre:cu.nombre,accion:ac,descripcion:des,cambios:ch||{}});}
   catch(e){console.warn('log err',e);}
 }
 async function expLogXls(){
@@ -1846,7 +1864,7 @@ async function submitGrp(){
     if(isDemo){
       ABO.unshift({id:'a'+Date.now()+Math.random(),factura_id:f.id,
         monto:abonoMonto,fecha_pago:fecha,referencia:ref,
-        comprobante_url:compUrl,notas,grupo_id:grpId,created_by:cu.id});
+        comprobante_url:compUrl,notas,grupo_id:grpId,created_by:safeId(cu?.id)});
       const i=FAC.findIndex(x=>x.id===f.id);
       if(i>=0){FAC[i].monto_pagado=nuevoTotal;FAC[i].estado=nuevoEst;
         if(nuevoEst==='pagado')FAC[i].fecha_pago=fecha;}
@@ -1854,12 +1872,12 @@ async function submitGrp(){
       const{error}=await sb.from('fin_abonos').insert({
         factura_id:f.id,monto:abonoMonto,fecha_pago:fecha,
         referencia:ref,comprobante_url:compUrl,notas,
-        grupo_id:grpId,created_by:cu.id});
+        grupo_id:grpId,created_by:safeId(cu?.id)});
       if(!error){
         await sb.from('fin_facturas').update({
           monto_pagado:nuevoTotal,estado:nuevoEst,
           fecha_pago:nuevoEst==='pagado'?fecha:f.fecha_pago,
-          updated_at:new Date().toISOString(),updated_by:cu.id
+          updated_at:new Date().toISOString(),updated_by:safeId(cu?.id)
         }).eq('id',f.id);
       } else errCount++;
     }
@@ -2007,4 +2025,5 @@ function toast(msg,type='info'){
 
 </script>
 </body>
-</html>
+</html
+function safeId(id){if(!id)return null;return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id))?id:null;}>
