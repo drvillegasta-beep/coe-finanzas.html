@@ -1197,7 +1197,7 @@ function rCfg(){
       <div class="tc"><table><thead><tr><th>Nombre</th><th>Rol</th><th></th></tr></thead><tbody>
       ${USR.map(u=>`<tr><td style="font-weight:600;">${u.nombre}</td>
         <td><span class="bdg ${u.rol==='admin'?'bdg-adm':'bdg-cat'}">${u.rol}</span></td>
-        <td><button class="btn btn-s btn-sm" onclick="OM('mUsr','${u.id}')">Editar</button></td>
+        <td style="display:flex;gap:4px;"><button class="btn btn-s btn-sm" onclick="OM('mUsr','${u.id}')">&#9998; Editar</button>${u.id!==cu?.id?`<button class="btn bsm" style="background:var(--dd);color:var(--dg);border:1px solid var(--dg);" onclick="delUsr('${u.id}','${u.nombre}')">&#128465;</button>`:''}</td>
       </tr>`).join('')}</tbody></table></div>
     </div>
     <div>
@@ -1216,6 +1216,29 @@ function rCfg(){
       </tr>`).join('')}</tbody></table></div>
     </div>
   </div>`;
+}
+
+// ── Eliminar usuario
+async function delUsr(id, nom){
+  if(id === cu?.id){ toast('No puedes eliminar tu propio usuario','error'); return; }
+  reqPin(
+    '\u26a0\ufe0f Eliminar Usuario',
+    'El usuario "'+nom+'" ser\u00e1 eliminado permanentemente.',
+    async () => {
+      if(isDemo){
+        const i=USR.findIndex(u=>u.id===id); if(i>=0)USR.splice(i,1);
+        dLog('ELIMINAR','Elimin\u00f3 usuario: '+nom,'fin_usuarios');
+        toast('Usuario eliminado','success'); renderTab();
+        return;
+      }
+      const{error}=await sb.from('fin_usuarios').update({activo:false}).eq('id',id);
+      if(error){toast('Error: '+error.message,'error');return;}
+      await aLog('fin_usuarios',id,'ELIMINAR','Elimin\u00f3 usuario: '+nom,{});
+      const{data}=await sb.from('fin_usuarios').select('*').eq('activo',true).order('nombre');
+      if(data)USR=data;
+      toast('Usuario eliminado','success'); renderTab();
+    }
+  );
 }
 
 // ── Eliminar entidad
@@ -1612,13 +1635,16 @@ async function submitUsr(){
   if(pin&&!/^\d{4}$/.test(pin)){toast('PIN debe ser 4 d\u00edgitos','error');return;}
   const pay={nombre:nom,rol:document.getElementById('uRol').value,activo:true};
   if(pin)pay.pin=pin;
+  // If id looks like a demo id (not UUID), treat as new insert in live mode
+  const isRealId = id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  const effectiveId = isRealId ? id : '';
   if(isDemo){
     if(id){const i=USR.findIndex(u=>u.id===id);if(i>=0)USR[i]={...USR[i],...pay};}
     else{if(!pin){toast('PIN obligatorio','error');return;}USR.push({id:'u'+Date.now(),...pay});}
     dLog(id?'EDITAR':'CREAR',`${id?'Edit\u00f3':'Cre\u00f3'} usuario: ${nom}`,'fin_usuarios');
   }else{
     let er;
-    if(id){({error:er}=await sb.from('fin_usuarios').update(pay).eq('id',id));}
+    if(effectiveId){({error:er}=await sb.from('fin_usuarios').update(pay).eq('id',effectiveId));}
     else{if(!pin){toast('PIN obligatorio','error');return;}({error:er}=await sb.from('fin_usuarios').insert(pay));}
     if(er){toast('Error: '+er.message,'error');return;}
     await aLog('fin_usuarios',id||null,id?'EDITAR':'CREAR',`${id?'Edit\u00f3':'Cre\u00f3'} usuario: ${nom}`,{nombre:nom,rol:pay.rol});
