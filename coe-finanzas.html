@@ -143,7 +143,7 @@ tr:hover td{background:rgba(255,255,255,.02);}
 .prw{height:5px;background:var(--sf3);border-radius:3px;width:100%;margin-top:4px;}
 .prb{height:5px;border-radius:3px;background:var(--pr);}
 .prb.full{background:var(--sc);}.prb.low{background:var(--dg);}
-.mov{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;
+.mov{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9998;
   display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);}
 .mod{background:var(--sf);border:1px solid var(--br);border-radius:16px;
   width:100%;max-width:560px;max-height:90vh;overflow-y:auto;box-shadow:var(--sh);}
@@ -442,7 +442,7 @@ tr.drag-over td{border-top:3px solid var(--pr) !important;}
   <span class="selbar-clr" onclick="clearSel()">&#x2715; Deseleccionar</span>
 </div>
 <!-- MODAL: Confirmar con PIN -->
-<div class="mover" id="mPin" style="display:none;z-index:9999;" onclick="if(event.target===this)cancelPinConfirm()">
+<div class="mover" id="mPin" style="display:none;position:fixed;top:0;left:var(--sw);right:0;bottom:0;background:rgba(0,0,0,.75);z-index:9999;display:none;align-items:center;justify-content:center;backdrop-filter:blur(3px);" onclick="if(event.target===this)cancelPinConfirm()">
   <div class="mdl" style="max-width:340px;">
     <div class="mhd">
       <span class="mtit" id="mPinTit">&#128272; Confirmar con PIN</span>
