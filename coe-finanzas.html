@@ -267,9 +267,99 @@ input[type=checkbox].rowcb{width:15px;height:15px;accent-color:var(--pr);cursor:
 .dh:hover{color:var(--pr);}
 tr.dragging{opacity:.35;}
 tr.drag-over td{border-top:3px solid var(--pr) !important;}
+
+/* ══════════════════════════════════════════
+   RESPONSIVE MÓVIL
+══════════════════════════════════════════ */
+.hmb{display:none;background:none;border:none;color:var(--tx);
+  font-size:22px;cursor:pointer;padding:8px;line-height:1;flex-shrink:0;}
+
+@media(max-width:768px){
+  :root{--sw:240px;}
+
+  /* Hamburger visible */
+  .hmb{display:flex;align-items:center;justify-content:center;}
+
+  /* Sidebar oculto por defecto, slide-in al activar */
+  .sdb{transform:translateX(-100%);transition:transform .25s ease;z-index:300;}
+  .sdb.open{transform:translateX(0);}
+
+  /* Overlay oscuro al abrir sidebar */
+  .sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);
+    z-index:299;}
+  .sb-overlay.show{display:block;}
+
+  /* Main ocupa toda la pantalla */
+  .main{margin-left:0 !important;padding:12px 10px;}
+
+  /* Topbar compacta */
+  .topbar{padding:0 10px;gap:8px;}
+  .ttit{font-size:15px;}
+  .tlog{font-size:13px;}
+  .tsep{display:none;}
+  .tsp{display:none;}
+  .tusr span:last-child{display:none;} /* oculta "Salir" text */
+
+  /* Page headers */
+  .ph{flex-direction:column;align-items:flex-start;gap:10px;padding:14px;}
+  .ph>div:last-child{width:100%;display:flex;flex-wrap:wrap;gap:8px;}
+  .ph>div:last-child .btn{flex:1;min-width:80px;text-align:center;}
+
+  /* Toolbar filtros — stack vertical */
+  .ttb{flex-direction:column;gap:8px;padding:10px;}
+  .ttb .sbox{width:100% !important;}
+  .ttb .fsel{width:100% !important;}
+  .ttb .view-toggle{width:100%;}
+  .ttb .vt-btn{flex:1;}
+
+  /* Tabla — scroll horizontal */
+  .tc{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  table{min-width:600px;}
+  td,th{padding:9px 10px;font-size:12px;}
+
+  /* Filas menos altas */
+  tr td{line-height:1.3;}
+
+  /* Drag handle — más pequeño en móvil */
+  .dh{padding:0 3px;font-size:14px;}
+
+  /* Dashboard cards — 2 columnas */
+  .dg{grid-template-columns:1fr 1fr !important;}
+  .dg .dc.sp2{grid-column:span 1;}
+
+  /* Modal — pantalla completa en móvil */
+  .mdl{width:100% !important;max-width:100% !important;
+    max-height:92vh;margin:0;border-radius:16px 16px 0 0;}
+  .mover{align-items:flex-end !important;padding:0 !important;}
+  .fgrd{grid-template-columns:1fr !important;}
+  .fgrd .sp2{grid-column:span 1 !important;}
+
+  /* PIN modal — centrado en área de contenido */
+  #mPin{left:0 !important;}
+
+  /* Selección bar — más compacta */
+  .selbar{width:90%;font-size:12px;padding:10px 14px;gap:8px;bottom:16px;}
+  .selbar-lbl{font-size:11px;}
+
+  /* Config grid */
+  .cfgg{grid-template-columns:1fr !important;}
+
+  /* Botones de acción en rows — más pequeños */
+  .btn-sm{padding:4px 7px;font-size:11px;}
+}
+
+@media(max-width:400px){
+  .dg{grid-template-columns:1fr !important;}
+  td,th{padding:7px 8px;font-size:11px;}
+  table{min-width:480px;}
+}
+
 </style>
 </head>
 <body>
+
+<!-- SIDEBAR OVERLAY (mobile) -->
+<div class="sb-overlay" id="sbOverlay" onclick="togSb()"></div>
 
 <!-- LOADING OVERLAY -->
 <div id="loadingOverlay" style="position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;">
@@ -319,6 +409,7 @@ tr.drag-over td{border-top:3px solid var(--pr) !important;}
 <!-- APP -->
 <div id="app">
   <div class="topbar">
+    <button class="hmb" onclick="togSb()" aria-label="Menú">&#9776;</button>
     <span class="tlog">COE</span><div class="tsep"></div>
     <span class="ttit">Finanzas</span>
     <span class="mbdg" id="mbdg">&#9679; DEMO</span>
@@ -934,6 +1025,7 @@ function dsmAlerts(){adDismissed=true;document.getElementById('alb').style.displ
 // ══ NAV ══════════════════════════════════
 function goTab(t){
   clearSel();
+  closeSb(); // auto-cerrar sidebar en móvil
   tab=t;
   document.querySelectorAll('.ni').forEach(n=>n.classList.remove('act'));
   document.getElementById('nav-'+t)?.classList.add('act');
@@ -2239,6 +2331,21 @@ function togRecFac(checked){
     sel.innerHTML = '<option value="">— Nueva plantilla (automática) —</option>' +
       REC.map(r=>`<option value="${r.id}">${r.descripcion}</option>`).join('');
   }
+}
+
+// ── Sidebar toggle (móvil)
+function togSb(){
+  const sb=document.querySelector('.sdb');
+  const ov=document.getElementById('sbOverlay');
+  if(!sb)return;
+  const open=sb.classList.toggle('open');
+  if(ov) ov.classList.toggle('show',open);
+}
+function closeSb(){
+  const sb=document.querySelector('.sdb');
+  const ov=document.getElementById('sbOverlay');
+  if(sb) sb.classList.remove('open');
+  if(ov) ov.classList.remove('show');
 }
 
 // ══ EXPORT ═══════════════════════════════
