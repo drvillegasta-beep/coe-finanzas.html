@@ -701,6 +701,11 @@ async function initApp(){
     } else { sb=null; isDemo=true; ldDemo(); }
   } catch(e){ sb=null; isDemo=true; ldDemo(); console.warn('Supabase:',e); }
   renderLogin();
+  // Prevenir cierre accidental de pestaña
+  window.addEventListener('beforeunload', function(e){
+    e.preventDefault();
+    e.returnValue = '';
+  });
 }
 // Doble disparo: DOMContentLoaded Y window.onload como fallback
 if(document.readyState==='loading'){
