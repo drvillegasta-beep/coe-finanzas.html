@@ -233,11 +233,6 @@ textarea{resize:vertical;min-height:70px;}
 
 /* ── Grupo / Multi-selección ── */
 
-// UUID validator — returns null if not a real UUID
-const isUUID=v=>!!v&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v));
-const toUUID=v=>isUUID(v)?v:null;
-
-
 
 
 .cb-wrap{width:20px;height:20px;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
@@ -677,6 +672,8 @@ tr.drag-over td{border-top:3px solid var(--pr) !important;}
 </div>
 
 <script>
+const isUUID=v=>!!v&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v));
+const toUUID=v=>isUUID(v)?v:null;
 // Guard global para errores — muestra login aunque algo falle
 window.addEventListener('error', function(e){
   console.warn('COE Finanzas error (no crítico):', e.message);
