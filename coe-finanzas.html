@@ -443,6 +443,38 @@ tr.drag-over td{border-top:3px solid var(--pr) !important;}
   </button>
   <span class="selbar-clr" onclick="clearSel()">&#x2715; Deseleccionar</span>
 </div>
+<!-- MODAL: Confirmar con PIN -->
+<div class="mover" id="mPin" style="display:none;" onclick="if(event.target===this)cancelPinConfirm()">
+  <div class="mdl" style="max-width:340px;">
+    <div class="mhd">
+      <span class="mtit" id="mPinTit">&#128272; Confirmar con PIN</span>
+      <span class="mcls" onclick="cancelPinConfirm()">&#x2715;</span>
+    </div>
+    <div class="mbdy" style="text-align:center;padding:24px;">
+      <div id="mPinMsg" style="font-size:13px;color:var(--tm);margin-bottom:20px;"></div>
+      <div style="display:flex;justify-content:center;gap:10px;margin-bottom:18px;" id="mPinDots">
+        <div class="dot" id="pd0"></div><div class="dot" id="pd1"></div>
+        <div class="dot" id="pd2"></div><div class="dot" id="pd3"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+        <button class="pk" onclick="pinCfmKey('1')">1</button>
+        <button class="pk" onclick="pinCfmKey('2')">2</button>
+        <button class="pk" onclick="pinCfmKey('3')">3</button>
+        <button class="pk" onclick="pinCfmKey('4')">4</button>
+        <button class="pk" onclick="pinCfmKey('5')">5</button>
+        <button class="pk" onclick="pinCfmKey('6')">6</button>
+        <button class="pk" onclick="pinCfmKey('7')">7</button>
+        <button class="pk" onclick="pinCfmKey('8')">8</button>
+        <button class="pk" onclick="pinCfmKey('9')">9</button>
+        <button class="pk" style="visibility:hidden;"></button>
+        <button class="pk" onclick="pinCfmKey('0')">0</button>
+        <button class="pk" style="font-size:16px;" onclick="pinCfmDel()">&#9003;</button>
+      </div>
+      <div style="color:var(--dg);font-size:12px;margin-top:12px;min-height:18px;" id="mPinErr"></div>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <!-- MODALS -->
@@ -495,6 +527,26 @@ tr.drag-over td{border-top:3px solid var(--pr) !important;}
     <input type="text" id="fRfc" placeholder="XAXX010101000" style="font-family:var(--mo);font-size:12px;" oninput="this.value=this.value.toUpperCase()"/></div>
   <div class="fgp"><label>Vencimiento *</label><input type="date" id="fVen"/></div>
   <div class="fgp"><label>Fecha Pago (si ya pag&#243;)</label><input type="date" id="fFPg"/></div>
+  <div class="fgp sp2">
+    <label>&#128260; Pago Recurrente</label>
+    <div style="display:flex;align-items:center;gap:12px;background:var(--sf2);
+      border:1px solid var(--br);border-radius:var(--rs);padding:10px 14px;">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;
+        font-size:13px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx);">
+        <input type="checkbox" id="fIsRec" onchange="togRecFac(this.checked)"
+          style="width:16px;height:16px;accent-color:var(--pr);cursor:pointer;"/>
+        Esta factura pertenece a un pago recurrente
+      </label>
+    </div>
+    <div id="fRecWrap" style="display:none;margin-top:8px;">
+      <select id="fRecId" style="width:100%;">
+        <option value="">— Nueva plantilla (se creará automáticamente) —</option>
+      </select>
+      <div style="font-size:11px;color:var(--tm);margin-top:4px;">
+        Selecciona una plantilla existente o deja en blanco para crear una nueva.
+      </div>
+    </div>
+  </div>
   <div class="fgp sp2"><label>Notas</label><textarea id="fNot" placeholder="Observaciones..."></textarea></div>
   <div class="fgp sp2" style="grid-column:span 2;">
     <label>&#128196; Documento adjunto <span style="font-size:10px;color:var(--tm);font-weight:400;text-transform:none;">Cotizaci&#243;n / Pedido / Factura PDF/XML</span></label>
@@ -609,7 +661,6 @@ tr.drag-over td{border-top:3px solid var(--pr) !important;}
 </div>
 
 <script>
-function safeId(id){if(!id)return null;return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id))?id:null;}
 // Guard global para errores — muestra login aunque algo falle
 window.addEventListener('error', function(e){
   console.warn('COE Finanzas error (no crítico):', e.message);
@@ -981,6 +1032,7 @@ function rFRows(list,tipo){
       <td><span style="font-weight:600;">${en?.nombre||'\u2014'}</span></td>
       <td><div>${f.descripcion}</div>
         ${f.numero_factura?`<div style="font-size:11px;color:var(--tm);">${f.numero_factura}</div>`:''}
+        ${f.es_recurrente?`<div style="font-size:10px;color:var(--pr);margin-top:2px;">&#128260; Recurrente</div>`:''}
         ${f.uuid_cfdi?`<div style="font-size:10px;color:var(--td);font-family:var(--mo);" title="UUID CFDI">&#128196; ${f.uuid_cfdi.substring(0,8)}&hellip;</div>`:''}
         ${f.rfc_emisor?`<div style="font-size:10px;color:var(--td);" title="RFC Emisor">RFC: ${f.rfc_emisor}</div>`:''}
         ${f.cotizacion_url?`<div style="font-size:11px;margin-top:2px;"><a href="${f.cotizacion_url.startsWith('[demo]')?'#':f.cotizacion_url}" target="_blank" style="color:var(--pr);text-decoration:none;" title="Ver documento adjunto">&#128206; Doc adjunto</a></div>`:''}
@@ -1006,6 +1058,7 @@ function rFRows(list,tipo){
         ${(f.estado==='aprobado'||cu?.rol==='admin')&&f.estado!=='pagado'&&f.estado!=='archivado'?`<button class="btn btn-p btn-sm" onclick="OM('mAbo','${f.id}')" title="Registrar pago">&#128176;</button>`:''}
         <button class="btn btn-s btn-sm" onclick="OM('mFac','${f.tipo}','${f.id}')" title="Editar">&#9998;&#65039;</button>
         ${cu?.rol==='admin'&&f.estado==='pagado'?`<button class="btn btn-s btn-sm" onclick="archFac('${f.id}')" title="Archivar">&#128230;</button>`:''}
+        ${cu?.rol==='admin'?`<button class="btn btn-sm" onclick="delFacPin('${f.id}')" title="Eliminar" style="background:var(--dd);color:var(--dg);border:1px solid var(--dg);">&#128465;</button>`:''}
       </div></td>
     </tr>`;
   }).join('')}</tbody></table>`;
@@ -1228,6 +1281,19 @@ function openFac(id,tipo){
   document.getElementById('fFPg').value=f?.fecha_pago||'';
   document.getElementById('fNot').value=f?.notas||'';
   calcPP();
+  // Recurring fields
+  const isRecEl = document.getElementById('fIsRec');
+  const recWrap  = document.getElementById('fRecWrap');
+  const recSel   = document.getElementById('fRecId');
+  if(isRecEl){
+    const isRec = !!(f?.es_recurrente);
+    isRecEl.checked = isRec;
+    if(recWrap) recWrap.style.display = isRec ? 'block' : 'none';
+    if(recSel){
+      recSel.innerHTML = '<option value="">— Nueva plantilla —</option>' +
+        REC.map(r=>`<option value="${r.id}"${f?.recurrente_id===r.id?' selected':''}>${r.descripcion}</option>`).join('');
+    }
+  }
   // Fiscal fields
   const fIvaEl=document.getElementById('fIva');
   const fIsrEl=document.getElementById('fIsr');
@@ -1331,7 +1397,10 @@ async function submitFac(){
       rfc_emisor:       document.getElementById('fRfc')?.value.trim()||null,
       // Past vencimiento is fine — solo indica que ya está vencida
       estado: fp ? 'pagado' : 'pendiente',
-      updated_by: safeId(cu?.id)
+      es_recurrente: document.getElementById('fIsRec')?.checked || false,
+      recurrente_id: (document.getElementById('fIsRec')?.checked &&
+                      document.getElementById('fRecId')?.value) || null,
+      updated_by: (cu?.id||null)
     };
     // Optional doc upload
     const docFile = document.getElementById('fDoc').files[0];
@@ -1347,9 +1416,21 @@ async function submitFac(){
       pay.cotizacion_url = '[demo] '+docFile.name;
     }
     // Save
+    // Auto-create recurring template if needed
+    if(pay.es_recurrente && !pay.recurrente_id){
+      const vencDay = pay.fecha_vencimiento ? parseInt(pay.fecha_vencimiento.split('-')[2]) : 1;
+      const newRec = {id:'r'+Date.now(), tipo:pay.tipo, entidad_id:pay.entidad_id||null,
+        descripcion:des, categoria:pay.categoria||null, dia_vencimiento:vencDay, activo:true};
+      if(isDemo){
+        REC.push(newRec);
+      } else {
+        const{data:rd} = await sb.from('fin_recurrentes').insert(newRec).select().single();
+        if(rd){ pay.recurrente_id=rd.id; }
+      }
+    }
     if(isDemo){
       if(id){ const i=FAC.findIndex(f=>f.id===id); if(i>=0) FAC[i]={...FAC[i],...pay}; }
-      else   FAC.unshift({id:'f'+Date.now(),...pay, monto_pagado:0, created_by:safeId(cu?.id)});
+      else   FAC.unshift({id:'f'+Date.now(),...pay, monto_pagado:0, created_by:(cu?.id||null)});
       dLog(id?'EDITAR':'CREAR', (id?'Editó':'Creó')+': '+des, 'fin_facturas');
     } else {
       let er;
@@ -1358,7 +1439,7 @@ async function submitFac(){
           .update({...pay, updated_at:new Date().toISOString()}).eq('id',id));
       } else {
         const{data:nd,error} = await sb.from('fin_facturas')
-          .insert({...pay, monto_pagado:0, created_by:safeId(cu?.id)})
+          .insert({...pay, monto_pagado:0, created_by:(cu?.id||null)})
           .select().single();
         er = error;
         if(nd) await aLog('fin_facturas',nd.id,'CREAR','Creó: '+des,pay);
@@ -1434,11 +1515,11 @@ async function submitAbo(){
     const{error}=await sb.from('fin_abonos').insert({factura_id:fid,monto:mnt,fecha_pago:fch,
       referencia:document.getElementById('aRef').value||null,
       notas:document.getElementById('aNot').value||null,
-      comprobante_url:cu2,created_by:safeId(cu?.id)});
+      comprobante_url:cu2,created_by:(cu?.id||null)});
     if(error){toast('Error: '+error.message,'error');return;}
     await sb.from('fin_facturas').update({monto_pagado:nt,estado:ne,
       fecha_pago:ne==='pagado'?fch:f?.fecha_pago,
-      updated_at:new Date().toISOString(),updated_by:safeId(cu?.id)}).eq('id',fid);
+      updated_at:new Date().toISOString(),updated_by:(cu?.id||null)}).eq('id',fid);
     await aLog('fin_abonos',fid,'ABONAR',`Abono ${$$(mnt)} \u2192 ${f?.descripcion}`,{monto:mnt,fecha:fch});
     await loadAll();
   }
@@ -1457,7 +1538,7 @@ async function aprobarFac(id){
     const{error}=await sb.from('fin_facturas').update({
       estado:'aprobado',aprobado_por:cu.nombre,
       aprobado_at:new Date().toISOString(),
-      updated_at:new Date().toISOString(),updated_by:safeId(cu?.id)
+      updated_at:new Date().toISOString(),updated_by:(cu?.id||null)
     }).eq('id',id);
     if(error){toast('Error: '+error.message,'error');return;}
     await aLog('fin_facturas',id,'APROBAR','Aprobó: '+f.descripcion,{aprobado_por:cu.nombre});
@@ -1470,7 +1551,7 @@ async function archFac(id){
   if(!confirm('\u00bfArchivar esta factura?'))return;
   const f=FAC.find(x=>x.id===id);
   if(isDemo){const i=FAC.findIndex(x=>x.id===id);if(i>=0)FAC.splice(i,1);dLog('ARCHIVAR','Archiv\u00f3: '+f?.descripcion,'fin_facturas');}
-  else{await sb.from('fin_facturas').update({estado:'archivado',updated_at:new Date().toISOString(),updated_by:safeId(cu?.id)}).eq('id',id);
+  else{await sb.from('fin_facturas').update({estado:'archivado',updated_at:new Date().toISOString(),updated_by:(cu?.id||null)}).eq('id',id);
     await aLog('fin_facturas',id,'ARCHIVAR','Archiv\u00f3: '+f?.descripcion,{});await loadAll();}
   toast('Archivada','success');renderTab();
 }
@@ -1615,7 +1696,7 @@ async function submitGRc(){
     numero_factura:document.getElementById('grNum').value||null,
     fecha_vencimiento:document.getElementById('grVen').value,
     estado:'pendiente',es_recurrente:true,recurrente_id:rid,
-    created_by:safeId(cu?.id),updated_by:safeId(cu?.id)};
+    created_by:(cu?.id||null),updated_by:(cu?.id||null)};
   if(isDemo){
     FAC.unshift({id:'f'+Date.now(),...pay});
     dLog('CREAR',`Gener\u00f3 recurrente: ${r.descripcion} &middot; ${$$(mnt)}`,'fin_facturas');
@@ -1632,7 +1713,7 @@ async function submitGRc(){
 // ══ AUDIT ════════════════════════════════
 async function aLog(tab,rid,ac,des,ch){
   try{await sb.from('fin_log').insert({tabla:tab,registro_id:rid||null,
-    usuario_id:safeId(cu?.id),usuario_nombre:cu.nombre,accion:ac,descripcion:des,cambios:ch||{}});}
+    usuario_id:(cu?.id||null),usuario_nombre:cu.nombre,accion:ac,descripcion:des,cambios:ch||{}});}
   catch(e){console.warn('log err',e);}
 }
 async function expLogXls(){
@@ -1900,7 +1981,7 @@ async function submitGrp(){
     if(isDemo){
       ABO.unshift({id:'a'+Date.now()+Math.random(),factura_id:f.id,
         monto:abonoMonto,fecha_pago:fecha,referencia:ref,
-        comprobante_url:compUrl,notas,grupo_id:grpId,created_by:safeId(cu?.id)});
+        comprobante_url:compUrl,notas,grupo_id:grpId,created_by:(cu?.id||null)});
       const i=FAC.findIndex(x=>x.id===f.id);
       if(i>=0){FAC[i].monto_pagado=nuevoTotal;FAC[i].estado=nuevoEst;
         if(nuevoEst==='pagado')FAC[i].fecha_pago=fecha;}
@@ -1908,12 +1989,12 @@ async function submitGrp(){
       const{error}=await sb.from('fin_abonos').insert({
         factura_id:f.id,monto:abonoMonto,fecha_pago:fecha,
         referencia:ref,comprobante_url:compUrl,notas,
-        grupo_id:grpId,created_by:safeId(cu?.id)});
+        grupo_id:grpId,created_by:(cu?.id||null)});
       if(!error){
         await sb.from('fin_facturas').update({
           monto_pagado:nuevoTotal,estado:nuevoEst,
           fecha_pago:nuevoEst==='pagado'?fecha:f.fecha_pago,
-          updated_at:new Date().toISOString(),updated_by:safeId(cu?.id)
+          updated_at:new Date().toISOString(),updated_by:(cu?.id||null)
         }).eq('id',f.id);
       } else errCount++;
     }
@@ -2010,6 +2091,98 @@ async function saveOrden(updates){
       await sb.from('fin_facturas').update({ orden: u.orden }).eq('id', u.id);
     }
   } catch(e){ console.warn('orden save:', e); }
+}
+
+
+// ════════════════════════════════════════════════
+// PIN CONFIRMATION — para acciones destructivas
+// ════════════════════════════════════════════════
+let _pinCfmBuf = '';
+let _pinCfmCb  = null;   // callback a ejecutar si PIN correcto
+
+function reqPin(titulo, mensaje, callback){
+  _pinCfmBuf = '';
+  _pinCfmCb  = callback;
+  document.getElementById('mPinTit').textContent = titulo;
+  document.getElementById('mPinMsg').textContent  = mensaje;
+  document.getElementById('mPinErr').textContent  = '';
+  updPinDots();
+  SM('mPin');
+}
+
+function pinCfmKey(k){
+  if(_pinCfmBuf.length >= 4) return;
+  _pinCfmBuf += k;
+  updPinDots();
+  if(_pinCfmBuf.length === 4) verPinCfm();
+}
+function pinCfmDel(){ _pinCfmBuf = _pinCfmBuf.slice(0,-1); updPinDots(); }
+function updPinDots(){
+  for(let i=0;i<4;i++) document.getElementById('pd'+i)?.classList.toggle('f', i<_pinCfmBuf.length);
+}
+function cancelPinConfirm(){
+  _pinCfmBuf=''; _pinCfmCb=null;
+  CM('mPin');
+}
+function verPinCfm(){
+  if(_pinCfmBuf === cu?.pin){
+    CM('mPin');
+    const cb = _pinCfmCb;
+    _pinCfmBuf=''; _pinCfmCb=null;
+    if(cb) cb();
+  } else {
+    document.getElementById('mPinErr').textContent = 'PIN incorrecto';
+    _pinCfmBuf=''; updPinDots();
+    setTimeout(()=>{ document.getElementById('mPinErr').textContent=''; }, 2000);
+  }
+}
+
+// ── Eliminar factura con PIN
+function delFacPin(id){
+  const f = FAC.find(x=>x.id===id);
+  if(!f) return;
+  reqPin(
+    '\u26a0\ufe0f Eliminar Factura',
+    '"'+f.descripcion+'" ser\u00e1 eliminada permanentemente. Esta acci\u00f3n no se puede deshacer.',
+    () => delFac(id, f)
+  );
+}
+
+async function delFac(id, f){
+  if(isDemo){
+    const i = FAC.findIndex(x=>x.id===id);
+    if(i>=0) FAC.splice(i,1);
+    // Also remove abonos
+    for(let j=ABO.length-1;j>=0;j--){ if(ABO[j].factura_id===id) ABO.splice(j,1); }
+    dLog('ELIMINAR','Elimin\u00f3: '+f.descripcion,'fin_facturas');
+    toast('Factura eliminada','success');
+    renderTab(); chkAlerts();
+    return;
+  }
+  try{
+    // Delete abonos first (foreign key)
+    await sb.from('fin_abonos').delete().eq('factura_id', id);
+    // Delete factura
+    const{error} = await sb.from('fin_facturas').delete().eq('id', id);
+    if(error){ toast('Error: '+error.message,'error'); return; }
+    await aLog('fin_facturas', id, 'ELIMINAR', 'Elimin\u00f3: '+f.descripcion, {});
+    await loadAll();
+    toast('Factura eliminada','success');
+    renderTab(); chkAlerts();
+  } catch(e){
+    toast('Error al eliminar: '+e.message,'error');
+  }
+}
+
+// ── Toggle recurrente en modal factura
+function togRecFac(checked){
+  const wrap = document.getElementById('fRecWrap');
+  const sel  = document.getElementById('fRecId');
+  if(wrap) wrap.style.display = checked ? 'block' : 'none';
+  if(checked && sel){
+    sel.innerHTML = '<option value="">— Nueva plantilla (automática) —</option>' +
+      REC.map(r=>`<option value="${r.id}">${r.descripcion}</option>`).join('');
+  }
 }
 
 // ══ EXPORT ═══════════════════════════════
