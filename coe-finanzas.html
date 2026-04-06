@@ -1294,51 +1294,81 @@ function clrDocExist(){
 }
 
 async function submitFac(){
-  const id=document.getElementById('fId').value;
-  const des=document.getElementById('fDes').value;
-  const mnt=parseFloat(document.getElementById('fMnt').value);
-  const ven=document.getElementById('fVen').value;
-  if(!des){toast('Ingresa descripci\u00f3n','error');return;}
-  if(!mnt||mnt<=0){toast('Ingresa monto v\u00e1lido','error');return;}
-  if(!ven){toast('Ingresa fecha de vencimiento','error');return;}
-  const fp=document.getElementById('fFPg').value;
-  const pay={tipo:document.getElementById('fTip').value,
-    entidad_id:document.getElementById('fEnt').value||null,
-    numero_factura:document.getElementById('fNum').value||null,
-    descripcion:des,categoria:document.getElementById('fCat').value||null,
-    monto_total:mnt,descuento_pp:parseFloat(document.getElementById('fPP').value)||0,
-    fecha_vencimiento:ven,fecha_pago:fp||null,
-    notas:document.getElementById('fNot').value||null,
-    cotizacion_url:document.getElementById('fDocUrl').value||null,
-    iva_pct:document.getElementById('fIva')?.value||'16',
-    isr_pct:(()=>{const s=document.getElementById('fIsr')?.value||'0';return s==='custom'?(parseFloat(document.getElementById('fIsrC')?.value)||0).toString():s;})(),
-    uuid_cfdi:document.getElementById('fUuid')?.value.trim()||null,
-    rfc_emisor:document.getElementById('fRfc')?.value.trim()||null,
-    estado:fp?'pagado':'pendiente',updated_by:safeId(cu?.id)};
-  // Handle doc upload
-  const docFile=document.getElementById('fDoc').files[0];
-  if(docFile&&!isDemo){
-    const ext=docFile.name.split('.').pop();
-    const path='docs/'+(id||'new-'+Date.now())+'/'+Date.now()+'.'+ext;
-    const{error:ue}=await sb.storage.from(BKT).upload(path,docFile);
-    if(!ue){const{data:ud}=sb.storage.from(BKT).getPublicUrl(path);pay.cotizacion_url=ud.publicUrl;}
-    else toast('Aviso: no se pudo subir el doc ('+ue.message+')','warning');
-  } else if(docFile&&isDemo){
-    pay.cotizacion_url='[demo] '+docFile.name;
+  try{
+    const id   = document.getElementById('fId').value;
+    const des  = (document.getElementById('fDes').value||'').trim();
+    const mnt  = parseFloat(document.getElementById('fMnt').value);
+    const ven  = document.getElementById('fVen').value;
+    // Validation — show toast and stop
+    if(!des)  { toast('Ingresa una descripción','error'); return; }
+    if(!mnt||mnt<=0){ toast('Ingresa un monto válido','error'); return; }
+    if(!ven)  { toast('Ingresa la fecha de vencimiento','error'); return; }
+    const fp   = document.getElementById('fFPg').value;
+    const isrEl= document.getElementById('fIsr');
+    const isrVal= isrEl?.value||'0';
+    const isrFinal = isrVal==='custom'
+      ? (parseFloat(document.getElementById('fIsrC')?.value)||0).toString()
+      : isrVal;
+    const pay = {
+      tipo:             document.getElementById('fTip').value,
+      entidad_id:       document.getElementById('fEnt').value||null,
+      numero_factura:   document.getElementById('fNum').value||null,
+      descripcion:      des,
+      categoria:        document.getElementById('fCat').value||null,
+      monto_total:      mnt,
+      descuento_pp:     parseFloat(document.getElementById('fPP').value)||0,
+      fecha_vencimiento:ven,
+      fecha_pago:       fp||null,
+      notas:            document.getElementById('fNot').value||null,
+      cotizacion_url:   document.getElementById('fDocUrl').value||null,
+      iva_pct:          document.getElementById('fIva')?.value||'16',
+      isr_pct:          isrFinal,
+      uuid_cfdi:        document.getElementById('fUuid')?.value.trim()||null,
+      rfc_emisor:       document.getElementById('fRfc')?.value.trim()||null,
+      // Past vencimiento is fine — solo indica que ya está vencida
+      estado: fp ? 'pagado' : 'pendiente',
+      updated_by: safeId(cu?.id)
+    };
+    // Optional doc upload
+    const docFile = document.getElementById('fDoc').files[0];
+    if(docFile && !isDemo){
+      try{
+        const ext  = docFile.name.split('.').pop();
+        const path = 'docs/'+(id||'new-'+Date.now())+'/'+Date.now()+'.'+ext;
+        const{error:ue} = await sb.storage.from(BKT).upload(path, docFile);
+        if(!ue){ const{data:ud}=sb.storage.from(BKT).getPublicUrl(path); pay.cotizacion_url=ud.publicUrl; }
+        else toast('Doc no subido: '+ue.message,'warning');
+      }catch(ue){ toast('Doc no subido: '+ue.message,'warning'); }
+    } else if(docFile && isDemo){
+      pay.cotizacion_url = '[demo] '+docFile.name;
+    }
+    // Save
+    if(isDemo){
+      if(id){ const i=FAC.findIndex(f=>f.id===id); if(i>=0) FAC[i]={...FAC[i],...pay}; }
+      else   FAC.unshift({id:'f'+Date.now(),...pay, monto_pagado:0, created_by:safeId(cu?.id)});
+      dLog(id?'EDITAR':'CREAR', (id?'Editó':'Creó')+': '+des, 'fin_facturas');
+    } else {
+      let er;
+      if(id){
+        ({error:er} = await sb.from('fin_facturas')
+          .update({...pay, updated_at:new Date().toISOString()}).eq('id',id));
+      } else {
+        const{data:nd,error} = await sb.from('fin_facturas')
+          .insert({...pay, monto_pagado:0, created_by:safeId(cu?.id)})
+          .select().single();
+        er = error;
+        if(nd) await aLog('fin_facturas',nd.id,'CREAR','Creó: '+des,pay);
+      }
+      if(er){ toast('Error Supabase: '+er.message,'error'); return; }
+      if(id) await aLog('fin_facturas',id,'EDITAR','Editó: '+des,pay);
+      try{ await loadAll(); }catch(le){ console.warn('loadAll:',le); }
+    }
+    toast('Factura guardada','success');
+    CM('mFac'); renderTab(); chkAlerts();
+  } catch(e){
+    console.error('submitFac error:',e);
+    toast('Error al guardar: '+e.message,'error');
   }
-  if(isDemo){
-    if(id){const i=FAC.findIndex(f=>f.id===id);if(i>=0)FAC[i]={...FAC[i],...pay};}
-    else FAC.unshift({id:'f'+Date.now(),...pay,monto_pagado:0,created_by:safeId(cu?.id)});
-    dLog(id?'EDITAR':'CREAR',`${id?'Edit\u00f3':'Cre\u00f3'}: ${des}`,'fin_facturas');
-  }else{
-    let er;
-    if(id){({error:er}=await sb.from('fin_facturas').update({...pay,updated_at:new Date().toISOString()}).eq('id',id));}
-    else{const{data:nd,error}=await sb.from('fin_facturas').insert({...pay,monto_pagado:0,created_by:safeId(cu?.id)}).select().single();er=error;if(nd)await aLog('fin_facturas',nd.id,'CREAR','Cre\u00f3: '+des,pay);}
-    if(er){toast('Error: '+er.message,'error');return;}
-    if(id)await aLog('fin_facturas',id,'EDITAR','Edit\u00f3: '+des,pay);
-    await loadAll();
-  }
-  toast('Guardado','success');CM('mFac');renderTab();chkAlerts();
 }
 
 // ── Abono ──
