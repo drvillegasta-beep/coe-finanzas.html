@@ -231,6 +231,9 @@ textarea{resize:vertical;min-height:70px;}
 .apr-tag{font-size:10px;font-weight:700;color:#00C9A7;background:rgba(0,201,167,.12);border:1px solid rgba(0,201,167,.3);border-radius:4px;padding:2px 6px;display:inline-block;margin-top:3px;}
 
 /* ── Grupo / Multi-selección ── */
+
+
+
 .cb-wrap{width:20px;height:20px;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
 input[type=checkbox].rowcb{width:15px;height:15px;accent-color:var(--pr);cursor:pointer;}
 .grp-hdr{background:var(--sf2);border-top:2px solid var(--br);cursor:pointer;transition:.2s;}
@@ -606,6 +609,7 @@ tr.drag-over td{border-top:3px solid var(--pr) !important;}
 </div>
 
 <script>
+function safeId(id){if(!id)return null;return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id))?id:null;}
 // Guard global para errores — muestra login aunque algo falle
 window.addEventListener('error', function(e){
   console.warn('COE Finanzas error (no crítico):', e.message);
@@ -2057,5 +2061,4 @@ function toast(msg,type='info'){
 
 </script>
 </body>
-</html
-function safeId(id){if(!id)return null;return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id))?id:null;}>
+</html>
