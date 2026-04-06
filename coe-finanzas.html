@@ -1440,12 +1440,13 @@ async function submitFac(){
     // Auto-create recurring template if needed
     if(pay.es_recurrente && !pay.recurrente_id){
       const vencDay = pay.fecha_vencimiento ? parseInt(pay.fecha_vencimiento.split('-')[2]) : 1;
-      const newRec = {id:'r'+Date.now(), tipo:pay.tipo, entidad_id:pay.entidad_id||null,
+      const newRec = {tipo:pay.tipo, entidad_id:pay.entidad_id||null,
         descripcion:des, categoria:pay.categoria||null, dia_vencimiento:vencDay, activo:true};
       if(isDemo){
         REC.push(newRec);
       } else {
-        const{data:rd} = await sb.from('fin_recurrentes').insert(newRec).select().single();
+        const{data:rd,error:re} = await sb.from('fin_recurrentes').insert(newRec).select().single();
+        if(re){ console.warn('recurrente create:',re.message); }
         if(rd){ pay.recurrente_id=rd.id; }
       }
     }
@@ -1736,8 +1737,11 @@ async function submitGRc(){
 
 // ══ AUDIT ════════════════════════════════
 async function aLog(tab,rid,ac,des,ch){
-  try{await sb.from('fin_log').insert({tabla:tab,registro_id:rid||null,
-    usuario_id:(cu?.id||null),usuario_nombre:cu.nombre,accion:ac,descripcion:des,cambios:ch||{}});}
+  const isUUID=v=>v&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+  const safeRid=isUUID(rid)?rid:null;
+  const safeUid=isUUID(cu?.id)?cu.id:null;
+  try{await sb.from('fin_log').insert({tabla:tab,registro_id:safeRid,
+    usuario_id:safeUid,usuario_nombre:cu?.nombre||'—',accion:ac,descripcion:des,cambios:ch||{}});}
   catch(e){console.warn('log err',e);}
 }
 async function expLogXls(){
