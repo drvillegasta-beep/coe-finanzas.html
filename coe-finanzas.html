@@ -768,7 +768,7 @@ async function initApp(){
     if(!error){
       isDemo = false;
       const {data:ud} = await sb.from('fin_usuarios').select('*').eq('activo',true).order('nombre');
-      if(ud?.length) usuarios = ud; else ldDemo();
+      if(ud?.length) USR = ud; else ldDemo();
     } else { sb=null; isDemo=true; ldDemo(); }
   } catch(e){ sb=null; isDemo=true; ldDemo(); console.warn('Supabase:',e); }
   // Ocultar overlay y mostrar login con usuarios reales
