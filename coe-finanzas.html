@@ -334,6 +334,80 @@ textarea{resize:vertical;min-height:72px;}
   table{min-width:460px;}
 }
 
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+
+/* Layout */
+.mbdg.demo{background:var(--wd);color:var(--wn);border:1px solid var(--wn);}
+.bdg-bor{background:var(--sf3);color:var(--tm);}
+.bdg-pen{background:var(--wd);color:var(--wn);}
+.bdg-a1{background:var(--id);color:var(--in);}
+.bdg-aut{background:var(--sd);color:var(--sc);}
+.bdg-ped{background:var(--pd);color:var(--pr);}
+.bdg-rec{background:var(--sd);color:var(--sc);}
+.bdg-can{background:var(--dd);color:var(--dg);}
+.btn-w{background:var(--wd);color:var(--wn);border:1px solid var(--wn);}
+.mdl-xl{max-width:1000px;}
+.fgrp.sp3{grid-column:span 3;}
+.conc-tbl{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px;}
+.conc-tbl th{background:var(--sf2);padding:8px 10px;text-align:left;font-size:10px;
+  font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--tm);}
+.conc-tbl td{padding:6px 4px;border-top:1px solid var(--br);vertical-align:middle;}
+.conc-tbl input{background:var(--sf3);border:1px solid var(--br);border-radius:4px;
+  color:var(--tx);padding:6px 8px;font-family:var(--fn);font-size:12px;width:100%;}
+.conc-tbl input:focus{outline:none;border-color:var(--pr);}
+.conc-total{display:flex;justify-content:flex-end;gap:20px;margin-top:12px;
+  padding:10px 14px;background:var(--sf2);border-radius:var(--rs);font-size:13px;}
+.conc-total span:last-child{font-weight:700;font-size:16px;font-family:var(--mo);color:var(--pr);}
+
+/* Auth steps */
+.auth-step{background:var(--sf2);border:1px solid var(--br);border-radius:var(--rd);
+  padding:16px;margin-bottom:12px;position:relative;}
+.auth-step.done{border-color:var(--sc);background:var(--sd);}
+.auth-step.pending{border-color:var(--wn);background:var(--wd);}
+.auth-num{width:28px;height:28px;border-radius:50%;background:var(--br2);
+  display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;
+  flex-shrink:0;}
+.auth-num.done{background:var(--sc);color:#000;}
+.auth-num.active{background:var(--pr);color:#000;}
+.pin-row{display:flex;justify-content:center;gap:8px;margin:12px 0;}
+.pin-dot.f{background:var(--pr);}
+.pgr2{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;max-width:220px;margin:0 auto;}
+.pbtn2{background:var(--sf3);border:1px solid var(--br);border-radius:var(--rs);
+  padding:12px;font-size:16px;font-weight:600;cursor:pointer;font-family:var(--fn);
+  transition:.2s;text-align:center;}
+.pbtn2:hover{border-color:var(--pr);}
+.pbtn2:active{transform:scale(.95);}
+
+/* PDF preview */
+.pdf-prev{background:#fff;color:#000;border-radius:var(--rs);padding:32px;
+  font-family:'Arial',sans-serif;font-size:12px;line-height:1.5;max-height:70vh;overflow-y:auto;}
+.pdf-prev h1{font-size:20px;font-weight:700;color:#1a1a1a;margin-bottom:4px;}
+.pdf-prev h2{font-size:13px;font-weight:400;color:#666;margin-bottom:20px;}
+.pdf-prev .pdf-row{display:flex;justify-content:space-between;margin-bottom:6px;}
+.pdf-prev .pdf-sep{border:none;border-top:2px solid #00C9A7;margin:16px 0;}
+.pdf-prev table{width:100%;border-collapse:collapse;margin-top:8px;}
+.pdf-prev th{background:#f5f5f5;padding:8px;text-align:left;font-size:11px;font-weight:700;border-bottom:2px solid #ddd;}
+.pdf-prev td{padding:8px;border-bottom:1px solid #eee;font-size:12px;}
+.pdf-prev .total-row{font-weight:700;font-size:14px;background:#f9f9f9;}
+.pdf-prev .sigs{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:32px;}
+.pdf-prev .sig-box{border-top:1px solid #ccc;padding-top:8px;text-align:center;font-size:11px;}
+
+/* Login */
+.ubtn:hover,.ubtn.sel{border-color:var(--pr);background:var(--pd);}
+.dg4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;}
+.timeline{display:flex;align-items:center;gap:0;margin:16px 0;font-size:11px;}
+.tl-step{display:flex;flex-direction:column;align-items:center;flex:1;position:relative;}
+.tl-step::before{content:'';position:absolute;top:14px;left:-50%;right:50%;height:2px;background:var(--br);}
+.tl-step:first-child::before{display:none;}
+.tl-step.done::before,.tl-step.done::after{background:var(--sc);}
+.tl-circle{width:28px;height:28px;border-radius:50%;border:2px solid var(--br);
+  background:var(--sf);display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:700;z-index:1;transition:.2s;}
+.tl-step.done .tl-circle{background:var(--sc);border-color:var(--sc);color:#000;}
+.tl-step.act .tl-circle{background:var(--pr);border-color:var(--pr);color:#000;}
+.tl-label{margin-top:6px;color:var(--tm);text-align:center;font-weight:500;}
+.tl-step.done .tl-label,.tl-step.act .tl-label{color:var(--tx);}
+
 </style>
 </head>
 <body>
@@ -412,6 +486,10 @@ textarea{resize:vertical;min-height:72px;}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>Ingresos (CxC)</div>
     <div class="ni" onclick="goTab('cal')" id="n-cal">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Calendario</div>
+    <div class="ns">Compras</div>
+    <div class="ni" onclick="goTab('cot')" id="n-cot">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+      Cotizaciones</div>
     <div class="ns">Config</div>
     <div class="ni" onclick="goTab('pag')" id="n-pag">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
@@ -753,6 +831,165 @@ textarea{resize:vertical;min-height:72px;}
 </div>
 
 <!-- Toast -->
+<!-- COT Modals -->
+<!-- ══ MODALS ══ -->
+
+<!-- Nueva / Editar Cotización -->
+<div class="mov" id="mCot" style="display:none;" onclick="if(event.target===this)CM('mCot')">
+ <div class="mdl mdl-xl">
+  <div class="mhd">
+   <span class="mtit" id="mCotT">Nueva Cotización</span>
+   <span class="mcls" onclick="CM('mCot')">✕</span>
+  </div>
+  <div class="mbdy">
+   <input type="hidden" id="cId"/>
+   <div class="fgrd" style="margin-bottom:20px;">
+    <div class="fgrp sp2"><label>Proveedor *</label><select id="cEnt"></select></div>
+    <div class="fgrp"><label>Referencia Proveedor</label>
+     <input type="text" id="cRef" placeholder="No. cotización del proveedor"/></div>
+    <div class="fgrp"><label>Vigencia (días)</label>
+     <input type="number" id="cVig" value="5" min="1" max="365"/></div>
+    <div class="fgrp"><label>Fecha Entrega Estimada</label>
+     <input type="date" id="cFEnt"/></div>
+    <div class="fgrp"><label>Condiciones de Pago</label>
+     <input type="text" id="cCond" placeholder="Ej: 30 días, contado..."/></div>
+    <div class="fgrp sp2"><label>Notas</label>
+     <textarea id="cNot" placeholder="Observaciones generales..."></textarea></div>
+   </div>
+
+   <!-- Conceptos -->
+   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+    <label style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--tm);">Conceptos / Productos</label>
+    <button class="btn btn-s btn-sm" onclick="addConc()">+ Agregar línea</button>
+   </div>
+   <div style="overflow-x:auto;">
+    <table class="conc-tbl">
+     <thead><tr>
+      <th style="width:35%">Descripción *</th>
+      <th style="width:10%">Cant.</th>
+      <th style="width:8%">Unidad</th>
+      <th style="width:15%">Precio Unit.</th>
+      <th style="width:8%">Desc.%</th>
+      <th style="width:14%">Subtotal</th>
+      <th style="width:10%">Clave/Lote</th>
+      <th style="width:30px"></th>
+     </tr></thead>
+     <tbody id="concBody"></tbody>
+    </table>
+   </div>
+   <div class="conc-total">
+    <span>IVA (16%): <span id="cIvaTotal" class="amt">$0.00</span></span>
+    <span>Total: <span id="cGrandTotal">$0.00</span></span>
+   </div>
+  </div>
+  <div class="mft">
+   <button class="btn btn-s" onclick="CM('mCot')">Cancelar</button>
+   <button class="btn btn-s" onclick="submitCot('borrador')">Guardar Borrador</button>
+   <button class="btn btn-p" onclick="submitCot('pendiente')">Enviar para Autorización →</button>
+  </div>
+ </div>
+</div>
+
+<!-- Detalle / Flujo de Cotización -->
+<div class="mov" id="mDet" style="display:none;" onclick="if(event.target===this)CM('mDet')">
+ <div class="mdl mdl-xl">
+  <div class="mhd">
+   <div>
+    <span class="mtit" id="mDetT">Detalle</span>
+    <div id="mDetNum" style="font-size:12px;color:var(--tm);margin-top:2px;"></div>
+   </div>
+   <span class="mcls" onclick="CM('mDet')">✕</span>
+  </div>
+  <div class="mbdy">
+   <!-- Timeline -->
+   <div class="timeline" id="detTimeline"></div>
+   <!-- Content changes by state -->
+   <div id="detContent"></div>
+  </div>
+  <div class="mft" id="detFooter"></div>
+ </div>
+</div>
+
+<!-- Autorización PIN -->
+<div class="mov" id="mAuth" style="display:none;">
+ <div class="mdl mdl-sm">
+  <div class="mhd">
+   <span class="mtit" id="mAuthT">✍️ Autorizar</span>
+   <span class="mcls" onclick="CM('mAuth')">✕</span>
+  </div>
+  <div class="mbdy" style="text-align:center;">
+   <div id="mAuthInfo" style="font-size:13px;color:var(--tm);margin-bottom:16px;"></div>
+   <div class="fgrp" style="margin-bottom:14px;text-align:left;">
+    <label>Tu Nombre</label>
+    <input type="text" id="authNom" placeholder="Nombre completo"/>
+   </div>
+   <div style="font-size:12px;font-weight:600;color:var(--tm);margin-bottom:8px;">Ingresa tu PIN</div>
+   <div class="pin-row">
+    <div class="pin-dot" id="ap0"></div><div class="pin-dot" id="ap1"></div>
+    <div class="pin-dot" id="ap2"></div><div class="pin-dot" id="ap3"></div>
+   </div>
+   <div class="pgr2">
+    <button class="pbtn2" onclick="apk('1')">1</button><button class="pbtn2" onclick="apk('2')">2</button><button class="pbtn2" onclick="apk('3')">3</button>
+    <button class="pbtn2" onclick="apk('4')">4</button><button class="pbtn2" onclick="apk('5')">5</button><button class="pbtn2" onclick="apk('6')">6</button>
+    <button class="pbtn2" onclick="apk('7')">7</button><button class="pbtn2" onclick="apk('8')">8</button><button class="pbtn2" onclick="apk('9')">9</button>
+    <button class="pbtn2" style="visibility:hidden"></button>
+    <button class="pbtn2" onclick="apk('0')">0</button>
+    <button class="pbtn2" onclick="apdel()">⌫</button>
+   </div>
+   <div class="perr" id="authErr"></div>
+  </div>
+ </div>
+</div>
+
+<!-- Recepción -->
+<div class="mov" id="mRcp" style="display:none;" onclick="if(event.target===this)CM('mRcp')">
+ <div class="mdl mdl-xl">
+  <div class="mhd"><span class="mtit">📦 Registrar Recepción</span><span class="mcls" onclick="CM('mRcp')">✕</span></div>
+  <div class="mbdy">
+   <input type="hidden" id="rcpId"/>
+   <div id="rcpInfo" style="background:var(--sf2);border:1px solid var(--br);border-radius:var(--rs);padding:12px;margin-bottom:16px;font-size:13px;"></div>
+   <div class="fgrd" style="margin-bottom:16px;">
+    <div class="fgrp"><label>UUID CFDI de Factura</label>
+     <input type="text" id="rcpUuid" placeholder="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX" style="font-family:var(--mo);font-size:11px;"/></div>
+    <div class="fgrp"><label>RFC Emisor</label>
+     <input type="text" id="rcpRfc" placeholder="XAXX010101000" style="font-family:var(--mo);"/></div>
+    <div class="fgrp"><label>No. Factura Proveedor</label>
+     <input type="text" id="rcpNfac" placeholder="PGDL-509"/></div>
+    <div class="fgrp"><label>No. Pedido Proveedor</label>
+     <input type="text" id="rcpNped" placeholder="S0002675033"/></div>
+   </div>
+   <label style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--tm);display:block;margin-bottom:8px;">Cantidades Recibidas</label>
+   <table class="conc-tbl">
+    <thead><tr>
+     <th>Descripción</th><th>Pedido</th><th>Recibido *</th><th>Lote</th><th>Caducidad</th><th>Notas</th>
+    </tr></thead>
+    <tbody id="rcpBody"></tbody>
+   </table>
+   <div class="fgrp" style="margin-top:14px;"><label>Notas de Recepción</label>
+    <textarea id="rcpNot" placeholder="Diferencias, daños, observaciones..."></textarea></div>
+  </div>
+  <div class="mft">
+   <button class="btn btn-s" onclick="CM('mRcp')">Cancelar</button>
+   <button class="btn btn-p" onclick="submitRcp()">✓ Confirmar Recepción → Enviar a Finanzas</button>
+  </div>
+ </div>
+</div>
+
+<!-- PDF Preview -->
+<div class="mov" id="mPdf" style="display:none;" onclick="if(event.target===this)CM('mPdf')">
+ <div class="mdl mdl-xl">
+  <div class="mhd">
+   <span class="mtit">📄 Orden de Compra</span>
+   <div style="display:flex;gap:8px;">
+    <button class="btn btn-s btn-sm" onclick="copyPedNum()">📋 Copiar No. Pedido</button>
+    <button class="btn btn-p btn-sm" onclick="printPed()">🖨️ Imprimir</button>
+    <span class="mcls" onclick="CM('mPdf')" style="margin-left:8px;">✕</span>
+   </div>
+  </div>
+  <div class="mbdy"><div id="pdfContent"></div></div>
+ </div>
+</div>
+
 <div id="toast"></div>
 <script>
 /*
@@ -943,6 +1180,7 @@ function renderTab(){
   else if(tab==='egr') mc.innerHTML=rFacs('egreso');
   else if(tab==='ing') mc.innerHTML=rFacs('ingreso');
   else if(tab==='cal') mc.innerHTML=rCal();
+  else if(tab==='cot') mc.innerHTML=rCotMain();
   else if(tab==='pag') mc.innerHTML=rPagos();
   else if(tab==='aud') mc.innerHTML=rAud();
   else if(tab==='cfg') mc.innerHTML=rCfg();
@@ -2213,6 +2451,639 @@ function renovarRec(id){
   SM('mFac');
   toast('Factura pre-llenada para el siguiente período — ajusta el monto si cambió','info');
 }
+
+
+// ══ COT MODULE ══════════════════════════════════
+
+function getCotList(){
+  const filtros={todas:null,pend:['borrador','pendiente','auth1'],aut:['autorizado'],ped:['pedido'],rec:['recibido']};
+  const filter=filtros[_cotTab];
+  return filter?COTS.filter(c=>filter.includes(c.estado)):COTS;
+}
+
+// ══ COT MODULE STATE ══════════════════════════════
+let COTS=[], CONCS=[];
+let _cotTab='todas', _concRows=[], _authBuf='', _authStep=0, _authCot=null;
+
+// Entry point called from renderTab
+function rCotMain(){
+  // Load data if not loaded yet
+  if(!isDemo && !COTS.length) cotLoadAll().then(()=>{ const mc=document.getElementById('mainContent'); if(mc&&tab==='cot'){ mc.innerHTML=cotRenderPage(); } });
+  return cotRenderPage();
+}
+function cotRenderPage(){
+  return rDashCot() + rListCot(getCotList());
+}
+
+// ══ DATA ══════════════════════════════════════════
+async function cotLoadAll(){
+  if(isDemo)return;
+  try{
+    const[c,cn]= await Promise.all([
+      sb.from('cot_cotizaciones').select('*').order('created_at',{ascending:false}),
+      sb.from('cot_conceptos').select('*').order('orden'),
+    ]);
+    COTS=c.data||[]; CONCS=cn.data||[]; // ENT already loaded by finanzas loadAll
+    if(c.error) console.error('COTS:',c.error.message); if(cn.error) console.error('CONCS:',cn.error.message);
+  }catch(e){ toast('Error cargando datos: '+e.message,'error'); }
+}
+
+// ══ NAVIGATION ════════════════════════════════════
+function cotGoTab(t){
+  tab=t;
+  document.querySelectorAll('.ni').forEach(n=>n.classList.remove('act'));
+  const ni=document.getElementById('n-'+t); if(ni) ni.classList.add('act');
+  cotRenderTab();
+}
+function cotRenderTab(){
+  const mc=document.getElementById('mainContent'); if(!mc)return;
+  if(tab!=='cot'){ renderTab(); return; }
+  mc.innerHTML=cotRenderPage();
+}
+function _cotFilterHelper(){
+  const filtros={
+    todas: null,
+    pend:  ['borrador','pendiente','auth1'],
+    aut:   ['autorizado'],
+    ped:   ['pedido'],
+    rec:   ['recibido'],
+  };
+  const filter=filtros[tab];
+  const list=filter?COTS.filter(c=>filter.includes(c.estado)):COTS;
+  mc.innerHTML=rDashCot()+rListCot(list);
+}
+
+// ══ DASHBOARD ═════════════════════════════════════
+function rDashCot(){
+  const hoy=new Date(); hoy.setHours(0,0,0,0);
+  const tot=COTS.filter(c=>c.estado!=='cancelado').length;
+  const pend=COTS.filter(c=>['pendiente','auth1'].includes(c.estado)).length;
+  const aut=COTS.filter(c=>c.estado==='autorizado').length;
+  const ped=COTS.filter(c=>c.estado==='pedido').length;
+  const venc=COTS.filter(c=>['pendiente','auth1','borrador'].includes(c.estado)&&c.fecha_vigencia&&new Date(c.fecha_vigencia+'T00:00:00')<hoy).length;
+  return`<div style="padding:24px 24px 0;">
+    <div class="dg4">
+      <div class="dc"><div class="dlbl">Total</div><div class="dval">${tot}</div></div>
+      <div class="dc"><div class="dlbl">Por Autorizar</div><div class="dval" style="color:var(--wn);">${pend}</div></div>
+      <div class="dc"><div class="dlbl">Autorizadas</div><div class="dval" style="color:var(--sc);">${aut}</div></div>
+      <div class="dc"><div class="dlbl">Pedidos Activos</div><div class="dval" style="color:var(--pr);">${ped}</div></div>
+    </div>
+    ${venc?`<div style="background:var(--dd);border:1px solid var(--dg);border-radius:var(--rs);padding:10px 16px;margin-bottom:16px;font-size:13px;color:var(--dg);font-weight:600;">⚠️ ${venc} cotización${venc>1?'es':''} con vigencia vencida</div>`:''}
+  </div>`;
+}
+
+// ══ LIST ══════════════════════════════════════════
+function rListCot(list){
+  const estados={borrador:'bor',pendiente:'pen',auth1:'a1',autorizado:'aut',pedido:'ped',recibido:'rec',cancelado:'can'};
+  const etiquetas={borrador:'Borrador',pendiente:'Pend. Auth.',auth1:'Auth. 1/2',autorizado:'Autorizado',pedido:'Pedido',recibido:'Recibido',cancelado:'Cancelado'};
+  const hoy=new Date(); hoy.setHours(0,0,0,0);
+  return`<div style="padding:0 24px 24px;">
+    <div class="ph" style="background:var(--sf);border-radius:var(--rd) var(--rd) 0 0;">
+      <div><div class="ptit">📋 ${_cotTab==='todas'?'Todas las cotizaciones':_cotTab==='pend'?'Pendientes de autorizar':_cotTab==='aut'?'Autorizadas':_cotTab==='ped'?'Pedidos activos':'Recibidos'}</div></div>
+      <div style="display:flex;gap:8px;">
+        <input class="sbox" id="cotSrch" placeholder="Buscar proveedor, número..." oninput="filCots()" style="width:220px;"/>
+        <button class="btn btn-p" onclick="openCot()">+ Nueva Cotización</button>
+      </div>
+    </div>
+    <div class="tc" style="border-radius:0 0 var(--rd) var(--rd);">
+    ${list.length?`<table><thead><tr>
+      <th>Número</th><th>Proveedor</th><th>Ref. Proveedor</th>
+      <th>Total</th><th>Vigencia</th><th>Estado</th><th>Autorizaciones</th><th>Acciones</th>
+    </tr></thead><tbody>
+    ${list.map(c=>{
+      const en=ENT.find(e=>e.id===c.entidad_id);
+      const concs=CONCS.filter(x=>x.cotizacion_id===c.id);
+      const total=concs.reduce((s,x)=>s+(x.subtotal||0),0);
+      const venc=c.fecha_vigencia&&new Date(c.fecha_vigencia+'T00:00:00')<hoy&&!['autorizado','pedido','recibido','cancelado'].includes(c.estado);
+      const est=venc?'ven':(estados[c.estado]||'bor');
+      const etq=venc?'Vencida':(etiquetas[c.estado]||c.estado);
+      return`<tr>
+        <td><span style="font-family:var(--mo);font-size:12px;color:var(--pr);">${c.numero||'—'}</span>
+          ${c.numero_pedido?`<div style="font-size:10px;color:var(--sc);">🛒 ${c.numero_pedido}</div>`:''}</td>
+        <td style="font-weight:600;">${en?.nombre||'—'}</td>
+        <td style="font-size:12px;color:var(--tm);">${c.ref_proveedor||'—'}</td>
+        <td class="amt">${$$(total)}</td>
+        <td style="font-size:11px;${venc?'color:var(--dg);':''}">${fmtD(c.fecha_vigencia)}</td>
+        <td><span class="bdg bdg-${est}">${etq}</span></td>
+        <td style="font-size:11px;">
+          ${c.auth1_usuario?`<div style="color:var(--sc);">✓ ${c.auth1_usuario}</div>`:'<div style="color:var(--tm);">○ Pendiente 1</div>'}
+          ${c.auth2_usuario?`<div style="color:var(--sc);">✓ ${c.auth2_usuario}</div>`:'<div style="color:var(--tm);">○ Pendiente 2</div>'}
+        </td>
+        <td><div style="display:flex;gap:4px;flex-wrap:wrap;">
+          <button class="btn btn-p btn-sm" onclick="openDet('${c.id}')">Ver →</button>
+          ${['borrador','pendiente','auth1'].includes(c.estado)?`<button class="btn btn-s btn-sm" onclick="openCot('${c.id}')">✏️</button>`:''}
+        </div></td>
+      </tr>`;
+    }).join('')}</tbody></table>`
+    :'<div class="emp"><div class="ic">📋</div><p>Sin cotizaciones. Crea la primera.</p></div>'}
+    </div>
+  </div>`;
+}
+function filCots(){
+  const q=(document.getElementById('cotSrch')?.value||'').toLowerCase();
+  const filtros={todas:null,pend:['borrador','pendiente','auth1'],aut:['autorizado'],ped:['pedido'],rec:['recibido']};
+  const filter=filtros[_cotTab];
+  let list=filter?COTS.filter(c=>filter.includes(c.estado)):COTS;
+  if(q) list=list.filter(c=>(ENT.find(e=>e.id===c.entidad_id)?.nombre||'').toLowerCase().includes(q)||(c.numero||'').toLowerCase().includes(q)||(c.ref_proveedor||'').toLowerCase().includes(q));
+  const mc=document.getElementById('mainContent');
+  if(mc) mc.innerHTML=rDashCot()+rListCot(list);
+  // Restore search value
+  const srch=document.getElementById('cotSrch');
+  if(srch){ srch.value=q; srch.focus(); }
+}
+
+// ══ NUEVA / EDITAR COT ════════════════════════════
+function openCot(id){
+  const c=id?COTS.find(x=>x.id===id):null;
+  document.getElementById('mCotT').textContent=c?'Editar Cotización':'Nueva Cotización';
+  document.getElementById('cId').value=c?.id||'';
+  // Fill entidades
+  const sel=document.getElementById('cEnt');
+  sel.innerHTML='<option value="">Seleccionar proveedor...</option>'+
+    ENT.filter(e=>e.tipo==='proveedor').map(e=>`<option value="${e.id}"${c?.entidad_id===e.id?' selected':''}>${e.nombre}</option>`).join('');
+  document.getElementById('cRef').value=c?.ref_proveedor||'';
+  document.getElementById('cVig').value=c?.vigencia_dias||5;
+  document.getElementById('cFEnt').value=c?.fecha_entrega_est||'';
+  document.getElementById('cCond').value=c?.condiciones||'';
+  document.getElementById('cNot').value=c?.notas||'';
+  // Load concepts
+  _concRows=c?CONCS.filter(x=>x.cotizacion_id===c.id).map(x=>({...x})):[];
+  if(!_concRows.length) _concRows=[newConcRow()];
+  renderConcBody();
+  SM('mCot');
+}
+function newConcRow(){ return{_tmp:Date.now()+Math.random(),descripcion:'',cantidad:1,unidad:'pza',precio_unitario:0,descuento_pct:0,clave_producto:'',lote:'',caducidad:''}; }
+function addConc(){ _concRows.push(newConcRow()); renderConcBody(); }
+function delConc(idx){ _concRows.splice(idx,1); if(!_concRows.length) _concRows=[newConcRow()]; renderConcBody(); }
+function renderConcBody(){
+  const tbody=document.getElementById('concBody'); if(!tbody)return;
+  tbody.innerHTML=_concRows.map((r,i)=>`<tr>
+    <td><input type="text" value="${r.descripcion}" placeholder="Descripción del producto"
+      onchange="_concRows[${i}].descripcion=this.value"/></td>
+    <td><input type="number" value="${r.cantidad}" min="0.001" step="0.001"
+      style="width:70px;" onchange="_concRows[${i}].cantidad=parseFloat(this.value)||1;calcConcTotals()"/></td>
+    <td><input type="text" value="${r.unidad||'pza'}" style="width:50px;"
+      onchange="_concRows[${i}].unidad=this.value"/></td>
+    <td><input type="number" value="${r.precio_unitario}" min="0" step="0.01"
+      onchange="_concRows[${i}].precio_unitario=parseFloat(this.value)||0;calcConcTotals()"/></td>
+    <td><input type="number" value="${r.descuento_pct||0}" min="0" max="100" step="0.1"
+      style="width:55px;" onchange="_concRows[${i}].descuento_pct=parseFloat(this.value)||0;calcConcTotals()"/></td>
+    <td class="amt" id="sub-${i}">${$$(r.cantidad*(r.precio_unitario||0)*(1-(r.descuento_pct||0)/100))}</td>
+    <td><input type="text" value="${r.clave_producto||''}" placeholder="Clave/Lote"
+      onchange="_concRows[${i}].clave_producto=this.value" style="width:90px;font-size:11px;"/></td>
+    <td><button class="btn btn-sm btn-d" onclick="delConc(${i})">✕</button></td>
+  </tr>`).join('');
+  calcConcTotals();
+}
+function calcConcTotals(){
+  let subtot=0;
+  _concRows.forEach((r,i)=>{
+    const s=r.cantidad*(r.precio_unitario||0)*(1-(r.descuento_pct||0)/100);
+    r._sub=s; subtot+=s;
+    const el=document.getElementById('sub-'+i); if(el) el.textContent=$$(s);
+  });
+  const iva=subtot*0.16;
+  const ivEl=document.getElementById('cIvaTotal'); if(ivEl) ivEl.textContent=$$(iva);
+  const totEl=document.getElementById('cGrandTotal'); if(totEl) totEl.textContent=$$(subtot+iva);
+}
+
+async function submitCot(newState){
+  const id=document.getElementById('cId').value;
+  const eid=document.getElementById('cEnt').value;
+  if(!eid){ toast('Selecciona un proveedor','error'); return; }
+  const validConcs=_concRows.filter(r=>r.descripcion.trim()&&r.precio_unitario>0);
+  if(!validConcs.length){ toast('Agrega al menos un concepto con precio','error'); return; }
+  const vig=parseInt(document.getElementById('cVig').value)||5;
+  const today=new Date();
+  const fechaVig=isoD(new Date(today.getTime()+vig*86400000));
+  const pay={
+    entidad_id:eid, ref_proveedor:document.getElementById('cRef').value||null,
+    vigencia_dias:vig, fecha_vigencia:fechaVig,
+    fecha_entrega_est:document.getElementById('cFEnt').value||null,
+    condiciones:document.getElementById('cCond').value||null,
+    notas:document.getElementById('cNot').value||null,
+    estado:newState, updated_at:new Date().toISOString(),
+  };
+  let cotId=id;
+  if(isDemo){
+    if(id){ const i=COTS.findIndex(c=>c.id===id); if(i>=0) COTS[i]={...COTS[i],...pay}; }
+    else{
+      const num=await nextNum('COT');
+      cotId='c'+Date.now();
+      COTS.unshift({id:cotId,numero:num,...pay,fecha_emision:isoD(today),created_by:toUUID(cu?.id),created_at:new Date().toISOString()});
+    }
+    // Save concepts in memory
+    CONCS=CONCS.filter(c=>c.cotizacion_id!==cotId);
+    validConcs.forEach((r,i)=>CONCS.push({id:'x'+Date.now()+i,cotizacion_id:cotId,...r,orden:i}));
+  } else {
+    if(id){
+      const{error}=await sb.from('cot_cotizaciones').update(pay).eq('id',id);
+      if(error){ toast('Error: '+error.message,'error'); return; }
+    } else {
+      const num=await nextNum('COT');
+      const{data:nd,error}=await sb.from('cot_cotizaciones').insert({...pay,numero:num,fecha_emision:isoD(today),created_by:toUUID(cu?.id)}).select().single();
+      if(error){ toast('Error: '+error.message,'error'); return; }
+      cotId=nd.id;
+    }
+    // Save concepts — delete old, insert new
+    await sb.from('cot_conceptos').delete().eq('cotizacion_id',cotId);
+    for(let i=0;i<validConcs.length;i++){
+      const r=validConcs[i];
+      await sb.from('cot_conceptos').insert({cotizacion_id:cotId,descripcion:r.descripcion,cantidad:r.cantidad,unidad:r.unidad,precio_unitario:r.precio_unitario,descuento_pct:r.descuento_pct||0,clave_producto:r.clave_producto||null,orden:i});
+    }
+    await cotLog(cotId, id?'EDITAR':'CREAR', (id?'Editó':'Creó')+' cotización');
+    await cotLoadAll();
+  }
+  toast(newState==='borrador'?'Borrador guardado':'Enviada para autorización','success');
+  CM('mCot'); cotRenderTab();
+}
+
+// ══ DETALLE / FLUJO ═══════════════════════════════
+function openDet(id){
+  const c=COTS.find(x=>x.id===id); if(!c)return;
+  const en=ENT.find(e=>e.id===c.entidad_id);
+  document.getElementById('mDetT').textContent=en?.nombre||'Cotización';
+  document.getElementById('mDetNum').textContent=c.numero+(c.numero_pedido?' → '+c.numero_pedido:'');
+  renderTimeline(c);
+  renderDetContent(c);
+  renderDetFooter(c);
+  SM('mDet');
+}
+function renderTimeline(c){
+  const steps=[
+    {k:'borrador',l:'Borrador'},
+    {k:'pendiente',l:'En revisión'},
+    {k:'auth1',l:'Auth. 1'},
+    {k:'autorizado',l:'Autorizado'},
+    {k:'pedido',l:'Pedido'},
+    {k:'recibido',l:'Recibido'},
+  ];
+  const order=['borrador','pendiente','auth1','autorizado','pedido','recibido'];
+  const cur=order.indexOf(c.estado);
+  document.getElementById('detTimeline').innerHTML=steps.map((s,i)=>{
+    const st=i<cur?'done':i===cur?'act':'';
+    return`<div class="tl-step ${st}">
+      <div class="tl-circle">${i<cur?'✓':(i+1)}</div>
+      <div class="tl-label">${s.l}</div>
+    </div>`;
+  }).join('');
+}
+function renderDetContent(c){
+  const en=ENT.find(e=>e.id===c.entidad_id);
+  const concs=CONCS.filter(x=>x.cotizacion_id===c.id);
+  const total=concs.reduce((s,x)=>s+(x.subtotal||0),0);
+  const hoy=new Date(); hoy.setHours(0,0,0,0);
+  const venc=c.fecha_vigencia&&new Date(c.fecha_vigencia+'T00:00:00')<hoy;
+  let html=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">
+    <div style="background:var(--sf2);border:1px solid var(--br);border-radius:var(--rs);padding:14px;font-size:13px;">
+      <div style="font-weight:700;margin-bottom:8px;">Proveedor</div>
+      <div>${en?.nombre||'—'}</div>
+      ${en?.clabe?`<div style="font-size:11px;color:var(--tm);margin-top:4px;font-family:var(--mo);">CLABE: ${en.clabe}</div>`:''}
+      ${en?.convenio_cie?`<div style="font-size:11px;color:var(--tm);">Ref CIE: ${en.convenio_cie}</div>`:''}
+    </div>
+    <div style="background:var(--sf2);border:1px solid var(--br);border-radius:var(--rs);padding:14px;font-size:13px;">
+      <div style="font-weight:700;margin-bottom:8px;">Detalles</div>
+      <div>Vigencia: <span style="${venc?'color:var(--dg);font-weight:700;':''}">${fmtD(c.fecha_vigencia)}${venc?' ⚠️ VENCIDA':''}</span></div>
+      <div>Entrega est.: ${fmtD(c.fecha_entrega_est)}</div>
+      ${c.condiciones?`<div>Condiciones: ${c.condiciones}</div>`:''}
+      ${c.ref_proveedor?`<div>Ref. proveedor: ${c.ref_proveedor}</div>`:''}
+    </div>
+  </div>
+  <table><thead><tr>
+    <th>Descripción</th><th>Cant.</th><th>Unidad</th><th>Precio Unit.</th><th>Desc.%</th><th>Subtotal</th>
+  </tr></thead><tbody>
+  ${concs.map(r=>`<tr>
+    <td>${r.descripcion}${r.clave_producto?`<div style="font-size:10px;color:var(--tm);">${r.clave_producto}</div>`:''}</td>
+    <td class="amt">${r.cantidad}</td><td>${r.unidad||'pza'}</td>
+    <td class="amt">${$$(r.precio_unitario)}</td>
+    <td>${r.descuento_pct?r.descuento_pct+'%':'—'}</td>
+    <td class="amt">${$$(r.subtotal||0)}</td>
+  </tr>`).join('')}
+  </tbody></table>
+  <div style="display:flex;justify-content:flex-end;gap:20px;margin-top:10px;padding:10px;background:var(--sf2);border-radius:var(--rs);font-size:13px;">
+    <span>Subtotal: <span class="amt">${$$(total)}</span></span>
+    <span>IVA 16%: <span class="amt">${$$(total*.16)}</span></span>
+    <span style="font-weight:700;font-size:15px;">Total: <span class="amt" style="color:var(--pr);">${$$(total*1.16)}</span></span>
+  </div>
+  <!-- Authorizations -->
+  <div style="margin-top:20px;">
+    <div style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--tm);margin-bottom:10px;">Estado de Autorizaciones</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div class="auth-step ${c.auth1_usuario?'done':c.estado==='pendiente'?'pending':''}">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div class="auth-num ${c.auth1_usuario?'done':c.estado==='pendiente'?'active':''}">1</div>
+          <div><div style="font-weight:600;font-size:13px;">Autorización 1</div>
+          <div style="font-size:12px;color:var(--tm);">${c.auth1_usuario?c.auth1_usuario+' · '+fmtDT(c.auth1_at):'Pendiente'}</div></div>
+        </div>
+      </div>
+      <div class="auth-step ${c.auth2_usuario?'done':c.auth1_usuario&&!c.auth2_usuario?'pending':''}">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div class="auth-num ${c.auth2_usuario?'done':c.auth1_usuario&&!c.auth2_usuario?'active':''}">2</div>
+          <div><div style="font-weight:600;font-size:13px;">Autorización 2</div>
+          <div style="font-size:12px;color:var(--tm);">${c.auth2_usuario?c.auth2_usuario+' · '+fmtDT(c.auth2_at):'Pendiente'}</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  ${c.notas?`<div style="margin-top:14px;font-size:12px;color:var(--tm);background:var(--sf2);padding:10px;border-radius:var(--rs);">📝 ${c.notas}</div>`:''}`;
+  document.getElementById('detContent').innerHTML=html;
+}
+function renderDetFooter(c){
+  const ft=document.getElementById('detFooter'); if(!ft)return;
+  let btns=`<button class="btn btn-s" onclick="CM('mDet')">Cerrar</button>`;
+  if(['pendiente','auth1'].includes(c.estado)) btns+=`<button class="btn btn-p" onclick="openAuth('${c.id}')">✍️ Autorizar</button>`;
+  if(c.estado==='autorizado') btns+=`<button class="btn btn-p" onclick="generarPedido('${c.id}')">🛒 Generar Pedido →</button>`;
+  if(c.estado==='pedido') btns+=`<button class="btn btn-s" onclick="openPdf('${c.id}')">📄 Ver Orden de Compra</button><button class="btn btn-p" onclick="openRcp('${c.id}')">📦 Registrar Recepción →</button>`;
+  if(['borrador','pendiente'].includes(c.estado)) btns+=`<button class="btn btn-d" onclick="cancelarCot('${c.id}')">✕ Cancelar</button>`;
+  ft.innerHTML=btns;
+}
+
+// ══ AUTORIZACIÓN ══════════════════════════════════
+function openAuth(id){
+  const c=COTS.find(x=>x.id===id); if(!c)return;
+  _authCot=c; _authBuf=''; _authStep=c.auth1_usuario?2:1;
+  document.getElementById('mAuthT').textContent='✍️ Autorización '+(c.auth1_usuario?'2':'1')+' de 2';
+  document.getElementById('mAuthInfo').textContent=c.auth1_usuario?
+    'Primera autorización: '+c.auth1_usuario+'. Ingresa tu nombre y PIN para la segunda.':
+    'Ingresa tu nombre y PIN para la primera autorización.';
+  document.getElementById('authNom').value=cu?.nombre||'';
+  document.getElementById('authErr').textContent='';
+  updAuthDots(); SM('mAuth');
+}
+function apk(k){ if(_authBuf.length>=4)return; _authBuf+=k; updAuthDots(); if(_authBuf.length===4) verAuth(); }
+function apdel(){ _authBuf=_authBuf.slice(0,-1); updAuthDots(); }
+function updAuthDots(){ for(let i=0;i<4;i++) document.getElementById('ap'+i)?.classList.toggle('f',i<_authBuf.length); }
+async function verAuth(){
+  const nom=(document.getElementById('authNom').value||'').trim();
+  if(!nom){ toast('Ingresa tu nombre','error'); _authBuf=''; updAuthDots(); return; }
+  // Verify PIN against any user
+  const user=USR.find(u=>String(u.pin)===_authBuf);
+  if(!user){
+    document.getElementById('authErr').textContent='PIN incorrecto';
+    _authBuf=''; updAuthDots();
+    setTimeout(()=>{ const e=document.getElementById('authErr'); if(e) e.textContent=''; },2000);
+    return;
+  }
+  // Check not same as auth1
+  if(_authStep===2&&_authCot.auth1_usuario===nom){
+    document.getElementById('authErr').textContent='No puede ser la misma persona que autorizó primero';
+    _authBuf=''; updAuthDots(); return;
+  }
+  // Apply authorization
+  const now=new Date().toISOString();
+  const c=_authCot;
+  let updates={};
+  if(_authStep===1){ updates={auth1_usuario:nom,auth1_at:now,estado:'auth1'}; }
+  else { updates={auth2_usuario:nom,auth2_at:now,estado:'autorizado'}; }
+  if(isDemo){
+    const i=COTS.findIndex(x=>x.id===c.id); if(i>=0) COTS[i]={...COTS[i],...updates};
+  } else {
+    const{error}=await sb.from('cot_cotizaciones').update(updates).eq('id',c.id);
+    if(error){ toast('Error: '+error.message,'error'); return; }
+    await cotLog(c.id,'AUTORIZAR','Autorización '+_authStep+' por '+nom);
+    await cotLoadAll();
+  }
+  CM('mAuth');
+  toast(_authStep===1?'Autorización 1 registrada — falta una más':'¡Cotización completamente autorizada!','success');
+  // Refresh detail
+  const updated=COTS.find(x=>x.id===c.id)||{...c,...updates};
+  renderTimeline(updated); renderDetContent(updated); renderDetFooter(updated);
+  cotRenderTab();
+}
+
+// ══ GENERAR PEDIDO ════════════════════════════════
+async function generarPedido(id){
+  const c=COTS.find(x=>x.id===id); if(!c)return;
+  const num=await nextNum('COE');
+  const updates={estado:'pedido',numero_pedido:num,fecha_pedido:new Date().toISOString()};
+  if(isDemo){ const i=COTS.findIndex(x=>x.id===id); if(i>=0) COTS[i]={...COTS[i],...updates}; }
+  else {
+    const{error}=await sb.from('cot_cotizaciones').update(updates).eq('id',id);
+    if(error){ toast('Error: '+error.message,'error'); return; }
+    await cotLog(id,'PEDIDO','Pedido generado: '+num);
+    await cotLoadAll();
+  }
+  toast('Pedido '+num+' generado','success');
+  const updated=COTS.find(x=>x.id===id)||{...c,...updates};
+  renderTimeline(updated); renderDetContent(updated); renderDetFooter(updated);
+  cotRenderTab();
+  // Auto-open PDF
+  setTimeout(()=>openPdf(id),300);
+}
+
+// ══ PDF / ORDEN DE COMPRA ═════════════════════════
+function openPdf(id){
+  const c=COTS.find(x=>x.id===id); if(!c)return;
+  const en=ENT.find(e=>e.id===c.entidad_id);
+  const concs=CONCS.filter(x=>x.cotizacion_id===id);
+  const total=concs.reduce((s,x)=>s+(x.subtotal||0),0);
+  const iva=total*.16;
+  document.getElementById('pdfContent').innerHTML=`
+  <div class="pdf-prev" id="printArea">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
+      <div>
+        <div style="font-size:10px;font-weight:800;letter-spacing:3px;color:#00C9A7;">COE</div>
+        <h1>Centro Ocular Especializado</h1>
+        <h2>ORDEN DE COMPRA</h2>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:22px;font-weight:800;color:#00C9A7;">${c.numero_pedido||c.numero}</div>
+        <div style="font-size:12px;color:#666;">Fecha: ${fmtD(isoD(new Date()))}</div>
+        ${c.fecha_entrega_est?`<div style="font-size:12px;color:#666;">Entrega est.: ${fmtD(c.fecha_entrega_est)}</div>`:''}
+      </div>
+    </div>
+    <hr class="pdf-sep"/>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+      <div><div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#999;margin-bottom:6px;">Proveedor</div>
+        <div style="font-weight:700;">${en?.nombre||'—'}</div>
+        ${en?.rfc?`<div style="font-size:11px;color:#666;">RFC: ${en.rfc}</div>`:''}
+        ${en?.clabe?`<div style="font-size:11px;color:#666;font-family:monospace;">CLABE: ${en.clabe}</div>`:''}
+        ${en?.convenio_cie?`<div style="font-size:11px;color:#666;">CIE/Ref: ${en.convenio_cie}</div>`:''}
+      </div>
+      <div><div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#999;margin-bottom:6px;">COE Tacámbaro</div>
+        <div style="font-weight:700;">Centro Ocular Especializado</div>
+        <div style="font-size:11px;color:#666;">Dr. José Antonio Villegas Ávila</div>
+        <div style="font-size:11px;color:#666;">Tacámbaro, Michoacán</div>
+        ${c.condiciones?`<div style="font-size:11px;color:#666;margin-top:4px;">Cond. pago: ${c.condiciones}</div>`:''}
+      </div>
+    </div>
+    <table>
+      <thead><tr>
+        <th>#</th><th>Descripción</th><th style="text-align:center;">Cant.</th>
+        <th>Unidad</th><th style="text-align:right;">P. Unit.</th>
+        <th style="text-align:center;">Desc.</th><th style="text-align:right;">Subtotal</th>
+      </tr></thead>
+      <tbody>
+      ${concs.map((r,i)=>`<tr>
+        <td>${i+1}</td>
+        <td>${r.descripcion}${r.clave_producto?`<br/><small style="color:#999">${r.clave_producto}</small>`:''}</td>
+        <td style="text-align:center;">${r.cantidad}</td>
+        <td>${r.unidad||'pza'}</td>
+        <td style="text-align:right;">${$$(r.precio_unitario)}</td>
+        <td style="text-align:center;">${r.descuento_pct?r.descuento_pct+'%':'—'}</td>
+        <td style="text-align:right;">${$$(r.subtotal||0)}</td>
+      </tr>`).join('')}
+      </tbody>
+      <tfoot>
+        <tr><td colspan="6" style="text-align:right;">Subtotal</td><td style="text-align:right;">${$$(total)}</td></tr>
+        <tr><td colspan="6" style="text-align:right;">IVA 16%</td><td style="text-align:right;">${$$(iva)}</td></tr>
+        <tr class="total-row"><td colspan="6" style="text-align:right;">TOTAL</td><td style="text-align:right;">${$$(total+iva)}</td></tr>
+      </tfoot>
+    </table>
+    ${c.notas?`<div style="margin-top:14px;padding:10px;background:#f5f5f5;border-radius:4px;font-size:11px;color:#666;">📝 ${c.notas}</div>`:''}
+    <div class="sigs">
+      <div class="sig-box">
+        <div style="font-weight:700;">${c.auth1_usuario||'___________________'}</div>
+        <div>${c.auth1_at?fmtDT(c.auth1_at):''}</div>
+        <div>Autorización 1</div>
+      </div>
+      <div class="sig-box">
+        <div style="font-weight:700;">${c.auth2_usuario||'___________________'}</div>
+        <div>${c.auth2_at?fmtDT(c.auth2_at):''}</div>
+        <div>Autorización 2</div>
+      </div>
+    </div>
+    <div style="margin-top:20px;padding:10px;background:#f0fdf4;border:1px solid #00C9A7;border-radius:4px;font-size:11px;text-align:center;color:#666;">
+      Este documento es una Orden de Compra oficial de Centro Ocular Especializado.<br/>
+      No. Pedido: <strong>${c.numero_pedido||c.numero}</strong> — Favor de indicar este número en su factura.
+    </div>
+  </div>`;
+  CM('mDet'); SM('mPdf');
+}
+function copyPedNum(){
+  const c=COTS.find(x=>x.numero_pedido);
+  const el=document.getElementById('pdfContent');
+  const num=el?.querySelector('.pdf-prev')?.innerText?.match(/COE-\d{4}-\d+/)?.[0]||'';
+  if(num){ navigator.clipboard?.writeText(num).then(()=>toast('Número copiado: '+num,'success')).catch(()=>toast(num,'info')); }
+}
+function printPed(){
+  const el=document.getElementById('printArea'); if(!el)return;
+  const w=window.open('','_blank');
+  w.document.write('<html><head><style>body{font-family:Arial,sans-serif;font-size:12px;color:#000;padding:20px;}table{width:100%;border-collapse:collapse;}th,td{padding:7px;border-bottom:1px solid #ddd;font-size:11px;}th{background:#f5f5f5;font-weight:700;}@media print{body{padding:0;}}</style></head><body>'+el.innerHTML+'</body></html>');
+  w.document.close(); w.print();
+}
+
+// ══ RECEPCIÓN ═════════════════════════════════════
+function openRcp(id){
+  const c=COTS.find(x=>x.id===id); if(!c)return;
+  const en=ENT.find(e=>e.id===c.entidad_id);
+  const concs=CONCS.filter(x=>x.cotizacion_id===id);
+  document.getElementById('rcpId').value=id;
+  document.getElementById('rcpInfo').innerHTML=`<strong>${en?.nombre||'—'}</strong> · Pedido: <span style="color:var(--pr);font-family:var(--mo);">${c.numero_pedido||c.numero}</span>`;
+  document.getElementById('rcpUuid').value='';
+  document.getElementById('rcpRfc').value=en?.rfc||'';
+  document.getElementById('rcpNfac').value='';
+  document.getElementById('rcpNped').value=c.numero_pedido||'';
+  document.getElementById('rcpNot').value='';
+  document.getElementById('rcpBody').innerHTML=concs.map((r,i)=>`<tr>
+    <td>${r.descripcion}</td>
+    <td class="amt">${r.cantidad} ${r.unidad||'pza'}</td>
+    <td><input type="number" id="rcq-${i}" data-id="${r.id}" value="${r.cantidad}" min="0" step="0.001" style="width:80px;"/></td>
+    <td><input type="text" id="rclot-${i}" data-id="${r.id}" value="${r.lote||''}" placeholder="Lote" style="width:90px;font-size:11px;"/></td>
+    <td><input type="date" id="rccad-${i}" data-id="${r.id}" value="${r.caducidad||''}"/></td>
+    <td><input type="text" id="rcnot-${i}" data-id="${r.id}" placeholder="Obs." style="font-size:11px;"/></td>
+  </tr>`).join('');
+  CM('mDet'); SM('mRcp');
+}
+async function submitRcp(){
+  const id=document.getElementById('rcpId').value;
+  const c=COTS.find(x=>x.id===id); if(!c)return;
+  const en=ENT.find(e=>e.id===c.entidad_id);
+  const concs=CONCS.filter(x=>x.cotizacion_id===id);
+  const uuid=document.getElementById('rcpUuid').value.trim();
+  const rfc=document.getElementById('rcpRfc').value.trim();
+  const nfac=document.getElementById('rcpNfac').value.trim();
+  const nped=document.getElementById('rcpNped').value.trim();
+  const notas=document.getElementById('rcpNot').value||null;
+  // Collect received quantities
+  const recibidos=concs.map((r,i)=>({
+    id:r.id, cantidad_recibida:parseFloat(document.getElementById('rcq-'+i)?.value)||0,
+    lote:document.getElementById('rclot-'+i)?.value||null,
+    caducidad:document.getElementById('rccad-'+i)?.value||null,
+    notas_recepcion:document.getElementById('rcnot-'+i)?.value||null,
+  }));
+  // Total for fin_facturas
+  const total=concs.reduce((s,x)=>s+(x.subtotal||0),0);
+  const updates={estado:'recibido',fecha_recepcion:new Date().toISOString(),uuid_cfdi:uuid||null,rfc_emisor:rfc||null};
+  if(isDemo){
+    const i=COTS.findIndex(x=>x.id===id); if(i>=0) COTS[i]={...COTS[i],...updates};
+    toast('Recepción registrada (demo — no se creó egreso en Finanzas)','info');
+    CM('mRcp'); cotRenderTab(); return;
+  }
+  // Update cotizacion
+  await sb.from('cot_cotizaciones').update(updates).eq('id',id);
+  // Update concepts with received quantities
+  for(const r of recibidos){
+    await sb.from('cot_conceptos').update({cantidad_recibida:r.cantidad_recibida,lote:r.lote,caducidad:r.caducidad,notas_recepcion:r.notas_recepcion}).eq('id',r.id);
+  }
+  // Create egreso in fin_facturas (COE Finanzas integration)
+  const{data:fac,error:ferr}=await sb.from('fin_facturas').insert({
+    tipo:'egreso', entidad_id:c.entidad_id,
+    numero_pedido:c.numero_pedido||c.numero,
+    numero_factura:nfac||null,
+    descripcion:'Pedido '+( c.numero_pedido||c.numero)+' · '+(en?.nombre||''),
+    monto_total:parseFloat((total*1.16).toFixed(2)),
+    monto_pagado:0, estado:'pendiente',
+    fecha_vencimiento:c.fecha_entrega_est||isoD(new Date()),
+    uuid_cfdi:uuid||null, rfc_emisor:rfc||null,
+    clabe_proveedor:en?.clabe||null,
+    referencia_cie:en?.convenio_cie||null,
+    notas:notas,
+    created_by:toUUID(cu?.id),
+  }).select().single();
+  if(!ferr&&fac){
+    await sb.from('cot_cotizaciones').update({factura_id:fac.id}).eq('id',id);
+    toast('Recepción registrada · Egreso creado en COE Finanzas ✓','success');
+  } else {
+    toast('Recepción guardada · Error al crear egreso: '+(ferr?.message||''),'warning');
+  }
+  await cotLog(id,'RECEPCION','Recepción registrada · '+(fac?'Egreso '+fac.id:'sin egreso'));
+  await cotLoadAll(); CM('mRcp'); cotRenderTab();
+}
+
+// ══ CANCELAR ══════════════════════════════════════
+async function delCot(id, num){
+  if(!confirm('¿Eliminar cotización '+(num||id)+'?\nEsta acción no se puede deshacer.')) return;
+  if(isDemo){
+    COTS.splice(COTS.findIndex(c=>c.id===id),1);
+    CONCS=CONCS.filter(c=>c.cotizacion_id!==id);
+    toast('Eliminada','success'); cotRenderTab(); return;
+  }
+  await sb.from('cot_conceptos').delete().eq('cotizacion_id',id);
+  await sb.from('cot_log').delete().eq('cotizacion_id',id);
+  const{error}=await sb.from('cot_cotizaciones').delete().eq('id',id);
+  if(error){ toast('Error: '+error.message,'error'); return; }
+  await cotLoadAll();
+  toast('Cotización eliminada','success');
+  cotRenderTab();
+}
+async function cancelarCot(id){
+  if(!confirm('¿Cancelar esta cotización?')) return;
+  if(isDemo){ const i=COTS.findIndex(x=>x.id===id); if(i>=0) COTS[i].estado='cancelado'; }
+  else { await sb.from('cot_cotizaciones').update({estado:'cancelado'}).eq('id',id); await cotLoadAll(); }
+  toast('Cancelada','warning'); CM('mDet'); cotRenderTab();
+}
+
+// ══ UTILS ═════════════════════════════════════════
+async function nextNum(prefix){
+  const year=new Date().getFullYear();
+  if(isDemo){
+    const existing=COTS.filter(c=>c.numero?.startsWith(prefix+'-'+year));
+    return`${prefix}-${year}-${String(existing.length+1).padStart(3,'0')}`;
+  }
+  const col=prefix==='COT'?'numero':'numero_pedido';
+  const{data}=await sb.from('cot_cotizaciones').select(col).like(col,`${prefix}-${year}-%`);
+  const n=(data?.length||0)+1;
+  return`${prefix}-${year}-${String(n).padStart(3,'0')}`;
+}
+async function cotLog(cotId,accion,desc){
+  if(isDemo)return;
+  try{ await sb.from('cot_log').insert({cotizacion_id:cotId,usuario_nombre:cu?.nombre||'—',accion,descripcion:desc}); }catch(e){}
+}
+
+// ══ START ═════════════════════════════════════════
+// COT module loaded
+
 
 // ══ EXPORT ════════════════════════════════════════
 function expXls(tipo){
