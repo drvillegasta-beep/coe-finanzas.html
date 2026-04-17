@@ -1414,13 +1414,17 @@ async function submitFac(){
     if(pay.es_recurrente&&!pay.recurrente_id){
       const dia=pay.fecha_vencimiento?parseInt(pay.fecha_vencimiento.split('-')[2]):1;
       const nr={tipo:pay.tipo,entidad_id:pay.entidad_id,descripcion:des,categoria:pay.categoria,dia_vencimiento:dia,activo:true};
-      if(!isDemo){ const{data:rd}=await sb.from('fin_recurrentes').insert(nr).select().single().catch(()=>({data:null})); if(rd) pay.recurrente_id=rd.id; }
+      if(!isDemo){ const{data:rd,error:re}=await sb.from('fin_recurrentes').insert(nr).select().single();
+        if(!re&&rd) pay.recurrente_id=rd.id; }
     }
     // Save pending lines first
     if(_pendingLines.length&&!id){
       for(const ln of _pendingLines){
         if(isDemo) FAC.unshift({id:'f'+Date.now()+Math.random(),...ln,monto_pagado:0,created_by:toUUID(cu?.id)});
-        else await sb.from('fin_facturas').insert({...ln,monto_pagado:0,created_by:toUUID(cu?.id)}).catch(e=>toast('Error línea: '+e.message,'warning'));
+        else {
+          const{error:lineErr}=await sb.from('fin_facturas').insert({...ln,monto_pagado:0,created_by:toUUID(cu?.id)});
+          if(lineErr) toast('Error línea: '+lineErr.message,'warning');
+        }
       }
       _pendingLines=[];
     }
@@ -1850,6 +1854,12 @@ async function submitUsr(){
     let er;
     if(realId){ ({error:er}=await sb.from('fin_usuarios').update(pay).eq('id',realId)); }
     else { if(!pin){ toast('PIN obligatorio','error'); return; } ({error:er}=await sb.from('fin_usuarios').insert(pay)); }
+    // If permisos column doesn't exist yet, retry without it
+    if(er&&er.message&&er.message.includes('permisos')){
+      const pay2={...pay}; delete pay2.permisos;
+      if(realId){ ({error:er}=await sb.from('fin_usuarios').update(pay2).eq('id',realId)); }
+      else { ({error:er}=await sb.from('fin_usuarios').insert(pay2)); }
+    }
     if(er){ toast('Error: '+er.message,'error'); return; }
     const{data}=await sb.from('fin_usuarios').select('*').eq('activo',true).order('nombre');
     if(data) USR=data;
