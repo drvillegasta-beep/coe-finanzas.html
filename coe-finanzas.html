@@ -844,7 +844,8 @@ textarea{resize:vertical;min-height:72px;}
   <div class="mbdy">
    <input type="hidden" id="cId"/>
    <div class="fgrd" style="margin-bottom:20px;">
-    <div class="fgrp sp2"><label>Proveedor *</label><select id="cEnt"></select></div>
+    <div class="fgrp sp2"><label>Proveedor *</label><select id="cEnt"></select>
+     <div id="provSuggWrap" style="display:none;margin-top:8px;"></div></div>
     <div class="fgrp"><label>Referencia Proveedor</label>
      <input type="text" id="cRef" placeholder="No. cotización del proveedor"/></div>
     <div class="fgrp"><label>Vigencia (días)</label>
@@ -2601,6 +2602,10 @@ function openCot(id){
   const sel=document.getElementById('cEnt');
   sel.innerHTML='<option value="">Seleccionar proveedor...</option>'+
     ENT.filter(e=>e.tipo==='proveedor').map(e=>`<option value="${e.id}"${c?.entidad_id===e.id?' selected':''}>${e.nombre}</option>`).join('');
+  // Add change handler for supplier suggestions
+  sel.onchange=()=>showProvSuggestion(sel.value);
+  // Show suggestion for current provider if editing
+  if(c?.entidad_id) showProvSuggestion(c.entidad_id);
   document.getElementById('cRef').value=c?.ref_proveedor||'';
   document.getElementById('cVig').value=c?.vigencia_dias||5;
   document.getElementById('cFEnt').value=c?.fecha_entrega_est||'';
@@ -2785,7 +2790,10 @@ function renderDetContent(c){
       </div>
     </div>
   </div>
-  ${c.notas?`<div style="margin-top:14px;font-size:12px;color:var(--tm);background:var(--sf2);padding:10px;border-radius:var(--rs);">📝 ${c.notas}</div>`:''}`;
+  ${c.notas?`<div style="margin-top:14px;font-size:12px;color:var(--tm);background:var(--sf2);padding:10px;border-radius:var(--rs);">📝 ${c.notas}</div>`:''}
+  ${c.estado==='recibido'?`<div id="difSection-${c.id}" style="margin-top:14px;"></div>`:''}`;
+  // Load differences after render
+  if(c.estado==='recibido') setTimeout(()=>loadDifs(c.id), 100);
   document.getElementById('detContent').innerHTML=html;
 }
 function renderDetFooter(c){
@@ -2995,14 +3003,24 @@ async function submitRcp(){
   const nfac=document.getElementById('rcpNfac').value.trim();
   const nped=document.getElementById('rcpNped').value.trim();
   const notas=document.getElementById('rcpNot').value||null;
-  // Collect received quantities
+  // Collect received quantities + detect differences
   const recibidos=concs.map((r,i)=>({
-    id:r.id, cantidad_recibida:parseFloat(document.getElementById('rcq-'+i)?.value)||0,
+    id:r.id,
+    cantidad_pedida:r.cantidad,
+    cantidad_recibida:parseFloat(document.getElementById('rcq-'+i)?.value)||0,
     lote:document.getElementById('rclot-'+i)?.value||null,
     caducidad:document.getElementById('rccad-'+i)?.value||null,
     notas_recepcion:document.getElementById('rcnot-'+i)?.value||null,
+    descripcion:r.descripcion,
+    precio_unitario:r.precio_unitario,
+    clave_producto:r.clave_producto||null,
+    unidad:r.unidad||'pza',
   }));
-  // Total for fin_facturas
+  // Detect differences
+  const diferencias=recibidos.filter(r=>Math.abs(r.cantidad_recibida-r.cantidad_pedida)>0.001);
+  const hayDiferencias=diferencias.length>0;
+  // Total based on RECEIVED quantities (not ordered)
+  const totalRecibido=recibidos.reduce((s,r)=>s+(r.cantidad_recibida*r.precio_unitario),0);
   const total=concs.reduce((s,x)=>s+(x.subtotal||0),0);
   const updates={estado:'recibido',fecha_recepcion:new Date().toISOString(),uuid_cfdi:uuid||null,rfc_emisor:rfc||null};
   if(isDemo){
@@ -3014,30 +3032,69 @@ async function submitRcp(){
   await sb.from('cot_cotizaciones').update(updates).eq('id',id);
   // Update concepts with received quantities
   for(const r of recibidos){
-    await sb.from('cot_conceptos').update({cantidad_recibida:r.cantidad_recibida,lote:r.lote,caducidad:r.caducidad,notas_recepcion:r.notas_recepcion}).eq('id',r.id);
+    await sb.from('cot_conceptos').update({
+      cantidad_recibida:r.cantidad_recibida, lote:r.lote,
+      caducidad:r.caducidad, notas_recepcion:r.notas_recepcion
+    }).eq('id',r.id);
   }
-  // Create egreso in fin_facturas (COE Finanzas integration)
+  // Save differences if any
+  if(hayDiferencias){
+    for(const d of diferencias){
+      await sb.from('cot_diferencias').insert({
+        cotizacion_id:id, descripcion:d.descripcion,
+        cantidad_pedida:d.cantidad_pedida, cantidad_recibida:d.cantidad_recibida,
+        diferencia:d.cantidad_recibida-d.cantidad_pedida,
+        precio_unitario:d.precio_unitario,
+        impacto_economico:parseFloat(((d.cantidad_recibida-d.cantidad_pedida)*d.precio_unitario).toFixed(2)),
+        notas:d.notas_recepcion||null,
+      }).catch(()=>{});
+    }
+  }
+  // Link to COE Quirofano inventory
+  for(const r of recibidos){
+    if(r.cantidad_recibida>0){
+      await sb.from('qui_entradas').insert({
+        descripcion:r.descripcion, clave_producto:r.clave_producto,
+        cantidad:r.cantidad_recibida, unidad:r.unidad,
+        precio_unitario:r.precio_unitario,
+        lote:r.lote||null, caducidad:r.caducidad||null,
+        proveedor_id:c.entidad_id,
+        numero_pedido:c.numero_pedido||c.numero,
+        cotizacion_id:id, fecha_entrada:isoD(new Date()),
+        created_by:toUUID(cu?.id),
+      }).catch(()=>{});
+    }
+  }
+  // Egreso — adjust to received amount if differences exist
+  const montoFinal=parseFloat(((hayDiferencias?totalRecibido:total)*1.16).toFixed(2));
+  const notasFac=[
+    notas,
+    hayDiferencias?'⚠️ Diferencias: '+diferencias.map(d=>`${d.descripcion} pedido:${d.cantidad_pedida} recibido:${d.cantidad_recibida}`).join(' | '):null
+  ].filter(Boolean).join(' | ');
   const{data:fac,error:ferr}=await sb.from('fin_facturas').insert({
     tipo:'egreso', entidad_id:c.entidad_id,
     numero_pedido:c.numero_pedido||c.numero,
     numero_factura:nfac||null,
-    descripcion:'Pedido '+( c.numero_pedido||c.numero)+' · '+(en?.nombre||''),
-    monto_total:parseFloat((total*1.16).toFixed(2)),
-    monto_pagado:0, estado:'pendiente',
+    descripcion:'Pedido '+(c.numero_pedido||c.numero)+' · '+(en?.nombre||'')+(hayDiferencias?' ⚠️':''),
+    monto_total:montoFinal, monto_pagado:0, estado:'pendiente',
     fecha_vencimiento:c.fecha_entrega_est||isoD(new Date()),
     uuid_cfdi:uuid||null, rfc_emisor:rfc||null,
     clabe_proveedor:en?.clabe||null,
     referencia_cie:en?.convenio_cie||null,
-    notas:notas,
-    created_by:toUUID(cu?.id),
+    notas:notasFac||null, created_by:toUUID(cu?.id),
   }).select().single();
   if(!ferr&&fac){
     await sb.from('cot_cotizaciones').update({factura_id:fac.id}).eq('id',id);
-    toast('Recepción registrada · Egreso creado en COE Finanzas ✓','success');
+    toast(hayDiferencias?
+      `⚠️ ${diferencias.length} diferencia(s) registradas · Egreso ajustado a ${$$(montoFinal)}`:
+      'Recepción completa · Egreso creado en COE Finanzas ✓',
+      hayDiferencias?'warning':'success');
   } else {
-    toast('Recepción guardada · Error al crear egreso: '+(ferr?.message||''),'warning');
+    toast('Recepción guardada · Error egreso: '+(ferr?.message||''),'warning');
   }
-  await cotLog(id,'RECEPCION','Recepción registrada · '+(fac?'Egreso '+fac.id:'sin egreso'));
+  await cotLog(id,'RECEPCION',
+    (hayDiferencias?`⚠️ ${diferencias.length} diferencias. `:'Completa. ')+
+    'Egreso: '+(fac?.id||'error'));
   await cotLoadAll(); CM('mRcp'); cotRenderTab();
 }
 
@@ -3084,6 +3141,107 @@ async function cotLog(cotId,accion,desc){
 // ══ START ═════════════════════════════════════════
 // COT module loaded
 
+
+
+// ══ DIFERENCIAS DE RECEPCIÓN ════════════════════════
+async function loadDifs(cotId){
+  const el=document.getElementById('difSection-'+cotId); if(!el)return;
+  if(isDemo){ el.innerHTML=''; return; }
+  try{
+    const{data:difs}=await sb.from('cot_diferencias').select('*').eq('cotizacion_id',cotId);
+    if(!difs?.length){ el.innerHTML=''; return; }
+    const impacto=difs.reduce((s,d)=>s+(d.impacto_economico||0),0);
+    el.innerHTML=`<div style="background:var(--wd);border:1px solid var(--wn);border-radius:var(--rd);padding:14px;margin-top:12px;">
+      <div style="font-weight:700;color:var(--wn);margin-bottom:10px;">
+        ⚠️ Diferencias en Recepción (${difs.length} línea${difs.length>1?'s':''})
+        — Impacto: <span class="amt">${$$(impacto)}</span>
+      </div>
+      <table style="font-size:12px;width:100%;border-collapse:collapse;">
+        <thead><tr style="background:rgba(227,179,65,.1);">
+          <th style="padding:6px;text-align:left;">Producto</th>
+          <th style="padding:6px;text-align:center;">Pedido</th>
+          <th style="padding:6px;text-align:center;">Recibido</th>
+          <th style="padding:6px;text-align:center;">Diferencia</th>
+          <th style="padding:6px;text-align:right;">Impacto $</th>
+        </tr></thead><tbody>
+        ${difs.map(d=>`<tr style="border-top:1px solid rgba(227,179,65,.2);">
+          <td style="padding:6px;">${d.descripcion}</td>
+          <td style="padding:6px;text-align:center;">${d.cantidad_pedida}</td>
+          <td style="padding:6px;text-align:center;">${d.cantidad_recibida}</td>
+          <td style="padding:6px;text-align:center;color:${d.diferencia<0?'var(--dg)':'var(--sc)'};">
+            ${d.diferencia>0?'+':''}${d.diferencia}</td>
+          <td style="padding:6px;text-align:right;font-family:var(--mo);">${$$(d.impacto_economico)}</td>
+        </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  }catch(e){}
+}
+
+// ══ SUGERENCIA DE PROVEEDOR ══════════════════════════
+function showProvSuggestion(entId){
+  const wrap=document.getElementById('provSuggWrap'); if(!wrap)return;
+  if(!entId){ wrap.style.display='none'; return; }
+  // Analyze order history for this provider
+  const cotsProv=COTS.filter(c=>c.entidad_id===entId&&c.estado!=='cancelado');
+  if(!cotsProv.length){ wrap.style.display='none'; return; }
+  const total=cotsProv.length;
+  const completadas=cotsProv.filter(c=>c.estado==='recibido').length;
+  const enProceso=cotsProv.filter(c=>['pedido','autorizado','auth1','pendiente'].includes(c.estado)).length;
+  // Calculate average delivery time
+  const tiempos=cotsProv.filter(c=>c.fecha_pedido&&c.fecha_recepcion).map(c=>{
+    const dias=Math.round((new Date(c.fecha_recepcion)-new Date(c.fecha_pedido))/(1000*60*60*24));
+    return dias;
+  });
+  const avgDias=tiempos.length?Math.round(tiempos.reduce((s,d)=>s+d,0)/tiempos.length):null;
+  // Most ordered concepts from this provider
+  const concsProv=CONCS.filter(con=>cotsProv.some(c=>c.id===con.cotizacion_id));
+  const concCount={};
+  concsProv.forEach(c=>{ concCount[c.descripcion]=(concCount[c.descripcion]||0)+1; });
+  const topConcs=Object.entries(concCount).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const en=ENT.find(e=>e.id===entId);
+  wrap.style.display='block';
+  wrap.innerHTML=`<div style="background:var(--pd);border:1px solid var(--pr);border-radius:var(--rs);padding:12px 14px;font-size:12px;">
+    <div style="font-weight:700;color:var(--pr);margin-bottom:8px;">
+      📊 Historial con ${en?.nombre||'este proveedor'}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;">
+      <div style="text-align:center;background:rgba(0,0,0,.2);padding:8px;border-radius:var(--rs);">
+        <div style="font-size:18px;font-weight:800;color:var(--pr);">${total}</div>
+        <div style="color:var(--tm);">pedidos totales</div>
+      </div>
+      <div style="text-align:center;background:rgba(0,0,0,.2);padding:8px;border-radius:var(--rs);">
+        <div style="font-size:18px;font-weight:800;color:var(--sc);">${completadas}</div>
+        <div style="color:var(--tm);">completados</div>
+      </div>
+      <div style="text-align:center;background:rgba(0,0,0,.2);padding:8px;border-radius:var(--rs);">
+        <div style="font-size:18px;font-weight:800;color:var(--wn);">${avgDias||'—'}</div>
+        <div style="color:var(--tm);">días promedio entrega</div>
+      </div>
+    </div>
+    ${enProceso?`<div style="color:var(--wn);margin-bottom:8px;">⚠️ Tiene ${enProceso} pedido(s) en proceso actualmente</div>`:''}
+    ${topConcs.length?`<div style="color:var(--tm);margin-bottom:4px;font-weight:600;">Productos más pedidos:</div>
+    <div style="display:flex;flex-wrap:wrap;gap:4px;">
+      ${topConcs.map(([desc,cnt])=>`<span style="background:var(--sf3);border-radius:20px;padding:3px 10px;cursor:pointer;"
+        onclick="agregarConceptoRapido('${desc.replace(/'/g,"\\\\'")}')">
+        ${desc} <span style="color:var(--pr);font-weight:700;">×${cnt}</span>
+      </span>`).join('')}
+    </div>
+    <div style="color:var(--td);font-size:11px;margin-top:6px;">Toca un producto para agregarlo rápido</div>`:''}
+  </div>`;
+}
+
+function agregarConceptoRapido(desc){
+  // Add a new concept row with this description pre-filled
+  const newRow=newConcRow();
+  newRow.descripcion=desc;
+  // Pre-fill price from last order if available
+  const lastConc=CONCS.filter(c=>c.descripcion===desc).sort((a,b)=>b.id.localeCompare(a.id))[0];
+  if(lastConc) newRow.precio_unitario=lastConc.precio_unitario;
+  _concRows.push(newRow);
+  renderConcBody();
+  toast('Producto agregado — verifica precio y cantidad','info');
+}
 
 // ══ EXPORT ════════════════════════════════════════
 function expXls(tipo){
