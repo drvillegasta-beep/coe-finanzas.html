@@ -856,6 +856,29 @@ textarea{resize:vertical;min-height:72px;}
      <input type="text" id="cCond" placeholder="Ej: 30 días, contado..."/></div>
     <div class="fgrp sp2"><label>Notas</label>
      <textarea id="cNot" placeholder="Observaciones generales..."></textarea></div>
+
+   <!-- Documento adjunto -->
+   <div class="fgrp sp2" style="margin-top:4px;">
+    <label>📎 Documento Adjunto <span style="font-size:10px;font-weight:400;text-transform:none;color:var(--td);">Foto, PDF o imagen de la cotización del proveedor</span></label>
+    <div class="upz" id="cotUpZ" onmouseover="this.style.borderColor='var(--pr)'" onmouseout="this.style.borderColor='var(--br)'">
+     <input type="file" id="cotFile" accept="image/*,application/pdf"
+       onchange="cotPrevFile(this)" capture="environment"/>
+     <p style="font-size:13px;color:var(--tm);">📷 Toca para tomar foto o seleccionar archivo</p>
+     <p style="font-size:11px;color:var(--td);margin-top:4px;">JPG, PNG, PDF — máx 10MB</p>
+    </div>
+    <div class="upv" id="cotUpV">
+     <span style="font-size:12px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="cotUpN"></span>
+     <button class="btn btn-sm btn-d" onclick="cotClrFile()">✕</button>
+    </div>
+    <!-- Existing doc if editing -->
+    <div id="cotDocExist" style="display:none;align-items:center;gap:8px;padding:8px 12px;
+      background:var(--sd);border:1px solid var(--sc);border-radius:var(--rs);margin-top:4px;">
+     <span style="font-size:12px;color:var(--sc);">📎 Adjunto actual:</span>
+     <a id="cotDocLink" href="#" target="_blank" style="font-size:12px;color:var(--pr);flex:1;
+       overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="cotDocName"></a>
+     <button class="btn btn-sm btn-d" onclick="cotClrDocExist()">✕</button>
+    </div>
+   </div>
    </div>
 
    <!-- Conceptos -->
@@ -1501,6 +1524,11 @@ function openFac(id,tipo){
     const a=document.getElementById('fDocExistLnk'); if(a){ a.textContent=f.cotizacion_url.split('/').pop().split('?')[0]||'documento'; a.href=f.cotizacion_url.startsWith('[demo]')?'#':f.cotizacion_url; }
   } else { de.style.display='none'; }
   clrDocF();
+  // Store the entidad_id so setTipo can restore it
+  const prevEl=document.getElementById('fEntPrev')||
+    (() => { const h=document.createElement('input'); h.type='hidden'; h.id='fEntPrev';
+      document.getElementById('mFac')?.appendChild(h); return h; })();
+  prevEl.value=f?.entidad_id||'';
   setTipo(f?.tipo||tipo||'egreso');
   // Fill fields
   document.getElementById('fPed').value=f?.numero_pedido||'';
@@ -1544,6 +1572,9 @@ function setTipo(t){
   const sel=document.getElementById('fEnt');
   const list=ENT.filter(e=>t==='egreso'?e.tipo==='proveedor':e.tipo==='cliente');
   sel.innerHTML='<option value="">Seleccionar...</option>'+list.map(e=>`<option value="${e.id}">${e.nombre}</option>`).join('');
+  // Restore previously selected entidad if editing
+  const prevEnt=document.getElementById('fEntPrev')?.value||'';
+  if(prevEnt) sel.value=prevEnt;
   sel.onchange=()=>{
     const en=ENT.find(e=>e.id===sel.value);
     if(en?.descuento_pp) document.getElementById('fPP').value=en.descuento_pp;
@@ -2615,6 +2646,16 @@ function openCot(id){
   _concRows=c?CONCS.filter(x=>x.cotizacion_id===c.id).map(x=>({...x})):[];
   if(!_concRows.length) _concRows=[newConcRow()];
   renderConcBody();
+  // Load existing doc
+  const cotDocExist=document.getElementById('cotDocExist');
+  const cotDocLink=document.getElementById('cotDocLink');
+  if(c?.doc_url&&cotDocExist&&cotDocLink){
+    cotDocExist.style.display='flex';
+    cotDocLink.href=c.doc_url.startsWith('[demo]')?'#':c.doc_url;
+    cotDocLink.textContent=c.doc_url.split('/').pop().split('?')[0]||'Ver documento';
+  } else if(cotDocExist){ cotDocExist.style.display='none'; }
+  cotClrFile();
+  document.getElementById('cotUpZ').style.display='block';
   SM('mCot');
 }
 function newConcRow(){ return{_tmp:Date.now()+Math.random(),descripcion:'',cantidad:1,unidad:'pza',precio_unitario:0,descuento_pct:0,clave_producto:'',lote:'',caducidad:''}; }
@@ -2661,12 +2702,26 @@ async function submitCot(newState){
   const vig=parseInt(document.getElementById('cVig').value)||5;
   const today=new Date();
   const fechaVig=isoD(new Date(today.getTime()+vig*86400000));
+  // Handle file upload
+  let docUrl=document.getElementById('cotDocUrl')?.value||null;
+  const cotFileEl=document.getElementById('cotFile');
+  const cotFileObj=cotFileEl?.files[0];
+  if(cotFileObj&&!isDemo){
+    try{
+      const ext=cotFileObj.name.split('.').pop().toLowerCase();
+      const path='cotizaciones/'+(id||'new-'+Date.now())+'-'+Date.now()+'.'+ext;
+      const{error:ue,data:ud}=await sb.storage.from(BKT).upload(path,cotFileObj,{upsert:true});
+      if(!ue&&ud){ const{data:pd}=sb.storage.from(BKT).getPublicUrl(path); docUrl=pd.publicUrl; }
+      else if(ue) toast('Doc no subido: '+ue.message,'warning');
+    }catch(e){ toast('Error subiendo doc: '+e.message,'warning'); }
+  } else if(cotFileObj&&isDemo){ docUrl='[demo] '+cotFileObj.name; }
   const pay={
     entidad_id:eid, ref_proveedor:document.getElementById('cRef').value||null,
     vigencia_dias:vig, fecha_vigencia:fechaVig,
     fecha_entrega_est:document.getElementById('cFEnt').value||null,
     condiciones:document.getElementById('cCond').value||null,
     notas:document.getElementById('cNot').value||null,
+    doc_url:docUrl,
     estado:newState, updated_at:new Date().toISOString(),
   };
   let cotId=id;
@@ -2739,7 +2794,8 @@ function renderDetContent(c){
   const total=concs.reduce((s,x)=>s+(x.subtotal||0),0);
   const hoy=new Date(); hoy.setHours(0,0,0,0);
   const venc=c.fecha_vigencia&&new Date(c.fecha_vigencia+'T00:00:00')<hoy;
-  let html=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">
+  const docHtml=c.doc_url?`<div style="background:var(--sf2);border:1px solid var(--br);border-radius:var(--rs);padding:14px;margin-bottom:16px;"><div style="font-weight:700;font-size:13px;margin-bottom:8px;">&#128206; Cotización del Proveedor</div>${c.doc_url.match(/\.(jpg|jpeg|png|gif|webp)/i)?`<img src="${c.doc_url}" style="max-width:100%;max-height:260px;object-fit:contain;border-radius:var(--rs);cursor:pointer;display:block;" onclick="window.open('${c.doc_url}','_blank')" title="Clic para ampliar"/>`:`<a href="${c.doc_url.startsWith('[demo]')?'#':c.doc_url}" target="_blank" class="btn btn-s btn-sm">&#128196; Ver documento</a>`}</div>`:'';
+  let html=docHtml+`<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">
     <div style="background:var(--sf2);border:1px solid var(--br);border-radius:var(--rs);padding:14px;font-size:13px;">
       <div style="font-weight:700;margin-bottom:8px;">Proveedor</div>
       <div>${en?.nombre||'—'}</div>
@@ -3241,6 +3297,23 @@ function agregarConceptoRapido(desc){
   _concRows.push(newRow);
   renderConcBody();
   toast('Producto agregado — verifica precio y cantidad','info');
+}
+
+// ── COT file upload helpers
+function cotPrevFile(inp){
+  if(!inp.files[0])return;
+  document.getElementById('cotUpV').style.display='flex';
+  document.getElementById('cotUpN').textContent=inp.files[0].name;
+  document.getElementById('cotUpZ').style.display='none';
+}
+function cotClrFile(){
+  const el=document.getElementById('cotFile'); if(el) el.value='';
+  const upv=document.getElementById('cotUpV'); if(upv) upv.style.display='none';
+  const upz=document.getElementById('cotUpZ'); if(upz) upz.style.display='block';
+}
+function cotClrDocExist(){
+  const el=document.getElementById('cotDocUrl'); if(el) el.value='';
+  const de=document.getElementById('cotDocExist'); if(de) de.style.display='none';
 }
 
 // ══ EXPORT ════════════════════════════════════════
