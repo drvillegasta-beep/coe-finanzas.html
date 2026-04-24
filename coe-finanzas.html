@@ -1175,11 +1175,36 @@ async function refreshAll(){
 // ══ ALERTS ════════════════════════════════════════
 function chkAlerts(){
   const bar=document.getElementById('alrtBar'); if(!bar) return;
-  const t=new Date(); t.setHours(0,0,0,0);
-  const venc=FAC.filter(f=>f.fecha_vencimiento&&new Date(f.fecha_vencimiento+'T00:00:00')<t&&f.estado!=='pagado'&&f.estado!=='archivado');
-  if(!venc.length){ bar.style.display='none'; return; }
+  const hoy=new Date(); hoy.setHours(0,0,0,0);
+  const mesActual=hoy.getFullYear()*100+hoy.getMonth(); // YYYYMM number
+
+  // Vencidas hoy
+  const venc=FAC.filter(f=>f.fecha_vencimiento&&
+    new Date(f.fecha_vencimiento+'T00:00:00')<hoy&&
+    f.estado!=='pagado'&&f.estado!=='archivado');
+
+  // Pendientes de meses anteriores (no vencidas por fecha pero de meses pasados)
+  const mesesAnt=FAC.filter(f=>{
+    if(f.estado==='pagado'||f.estado==='archivado') return false;
+    if(!f.fecha_vencimiento) return false;
+    const fv=new Date(f.fecha_vencimiento+'T00:00:00');
+    const mesFac=fv.getFullYear()*100+fv.getMonth();
+    return mesFac < mesActual; // pertenece a un mes anterior
+  });
+  // Remove duplicates with venc
+  const soloMesAnt=mesesAnt.filter(f=>!venc.some(v=>v.id===f.id));
+
+  const totalProblemas=venc.length+soloMesAnt.length;
+  if(!totalProblemas){ bar.style.display='none'; return; }
+
+  const msgs=[];
+  if(venc.length) msgs.push(`&#9888;&#65039; <strong>${venc.length} vencida${venc.length>1?'s':''}</strong>`);
+  if(soloMesAnt.length) msgs.push(`&#128197; <strong>${soloMesAnt.length} de meses anteriores</strong> sin pagar`);
+
   bar.style.display='flex';
-  bar.innerHTML=`<span class="alrt-msg">&#9888;&#65039; ${venc.length} factura${venc.length>1?'s':''} VENCIDA${venc.length>1?'S':''}</span><span class="alrt-cls" onclick="document.getElementById('alrtBar').style.display='none'">&#x2715;</span>`;
+  bar.innerHTML=`<span class="alrt-msg" style="display:flex;gap:16px;flex-wrap:wrap;">${msgs.join(' &nbsp;·&nbsp; ')}</span>
+    <span style="font-size:11px;color:var(--wn);cursor:pointer;" onclick="goTab('egr')">Ver egresos →</span>
+    <span class="alrt-cls" onclick="document.getElementById('alrtBar').style.display='none'">&#x2715;</span>`;
 }
 
 // ══ NAVIGATION ════════════════════════════════════
