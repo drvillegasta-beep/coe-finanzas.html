@@ -831,6 +831,68 @@ textarea{resize:vertical;min-height:72px;}
  </div>
 </div>
 
+<!-- Modal: Devolución (proveedor → clínica) -->
+<div class="mov" id="mDev" style="display:none;" onclick="if(event.target===this)CM('mDev')">
+ <div class="mdl">
+  <div class="mhd"><span class="mtit">↩ Registrar Devolución de Proveedor</span><span class="mcls" onclick="CM('mDev')">✕</span></div>
+  <div class="mbdy">
+   <input type="hidden" id="dvFacId"/>
+   <div id="dvInfo" style="background:var(--sf2);padding:12px;border-radius:var(--rs);font-size:12px;margin-bottom:14px;border-left:3px solid var(--in);"></div>
+   <div style="background:var(--id);border:1px solid var(--in);padding:10px 12px;border-radius:var(--rs);font-size:12px;color:var(--in);margin-bottom:14px;">
+     ℹ️ Se creará un INGRESO ligado a la factura original y se reducirá el monto pagado del egreso.
+   </div>
+   <div class="fgrd">
+    <div class="fgrp"><label>Monto devuelto *</label><div class="ipfx"><span>$</span><input type="number" id="dvMnt" step="0.01"/></div></div>
+    <div class="fgrp"><label>Fecha *</label><input type="date" id="dvFec"/></div>
+    <div class="fgrp"><label>Método</label>
+      <select id="dvMet"><option value="transferencia">Transferencia</option><option value="efectivo">Efectivo</option><option value="cheque">Cheque</option><option value="otro">Otro</option></select>
+    </div>
+    <div class="fgrp"><label>Referencia</label><input type="text" id="dvRef" placeholder="No. operación"/></div>
+    <div class="fgrp sp2"><label>Motivo *</label><textarea id="dvMot" placeholder="Ej: Mercancía dañada / cancelación parcial"></textarea></div>
+    <div class="fgrp sp2"><label>📎 Comprobante *</label>
+      <div class="upz"><input type="file" id="dvCmp" accept="image/*,.pdf"/>📷 Subir foto / PDF del comprobante</div>
+      <div class="upv" id="dvCmpV"><span id="dvCmpN"></span></div>
+    </div>
+   </div>
+  </div>
+  <div class="mft">
+    <button class="btn btn-s" onclick="CM('mDev')">Cancelar</button>
+    <button class="btn btn-p" onclick="submitDevolucion()" style="background:var(--in);color:#fff;">Registrar devolución</button>
+  </div>
+ </div>
+</div>
+
+<!-- Modal: Reembolso (clínica → cliente) -->
+<div class="mov" id="mReem" style="display:none;" onclick="if(event.target===this)CM('mReem')">
+ <div class="mdl">
+  <div class="mhd"><span class="mtit">↪ Registrar Reembolso a Cliente/Paciente</span><span class="mcls" onclick="CM('mReem')">✕</span></div>
+  <div class="mbdy">
+   <input type="hidden" id="reFacId"/>
+   <div id="reInfo" style="background:var(--sf2);padding:12px;border-radius:var(--rs);font-size:12px;margin-bottom:14px;border-left:3px solid var(--or);"></div>
+   <div style="background:var(--od);border:1px solid var(--or);padding:10px 12px;border-radius:var(--rs);font-size:12px;color:var(--or);margin-bottom:14px;">
+     ℹ️ Se creará un EGRESO ligado al ingreso original. Esto refleja una salida de dinero hacia el paciente/cliente.
+   </div>
+   <div class="fgrd">
+    <div class="fgrp"><label>Monto a reembolsar *</label><div class="ipfx"><span>$</span><input type="number" id="reMnt" step="0.01"/></div></div>
+    <div class="fgrp"><label>Fecha *</label><input type="date" id="reFec"/></div>
+    <div class="fgrp"><label>Método</label>
+      <select id="reMet"><option value="transferencia">Transferencia</option><option value="efectivo">Efectivo</option><option value="cheque">Cheque</option><option value="otro">Otro</option></select>
+    </div>
+    <div class="fgrp"><label>Referencia</label><input type="text" id="reRef" placeholder="No. operación"/></div>
+    <div class="fgrp sp2"><label>Motivo *</label><textarea id="reMot" placeholder="Ej: Cancelación de cirugía / paciente desistió"></textarea></div>
+    <div class="fgrp sp2"><label>📎 Comprobante</label>
+      <div class="upz"><input type="file" id="reCmp" accept="image/*,.pdf"/>📷 Subir comprobante (opcional)</div>
+      <div class="upv" id="reCmpV"><span id="reCmpN"></span></div>
+    </div>
+   </div>
+  </div>
+  <div class="mft">
+    <button class="btn btn-s" onclick="CM('mReem')">Cancelar</button>
+    <button class="btn btn-p" onclick="submitReembolso()" style="background:var(--or);color:#fff;">Registrar reembolso</button>
+  </div>
+ </div>
+</div>
+
 <script>
 /*
 ═══════════════════════════════════════════════════════════════════
@@ -1333,46 +1395,101 @@ function rFacs(tipo){
 function rFRows(list, tipo){
   if(!list.length) return '<div class="emp"><div class="ic">📭</div><p>Sin facturas</p></div>';
   const min = CFG.cotizacion_monto_minimo||1000;
-  return `<table><thead><tr>
-    <th>Descripción</th><th>Entidad</th><th>Vence</th>
-    <th>Total</th><th>Pagado</th><th>Saldo</th>
-    <th>Estado</th><th>Doc</th><th></th>
-  </tr></thead><tbody>${list.map(f=>{
-    const en = ENT.find(e=>e.id===f.entidad_id);
-    const saldo = (parseFloat(f.monto_total)||0) - (parseFloat(f.monto_pagado)||0);
-    const hoy = new Date(); hoy.setHours(0,0,0,0);
-    const venc = f.fecha_vencimiento && new Date(f.fecha_vencimiento+'T00:00:00') < hoy && f.estado!=='pagado';
-    const reqDoc = f.tipo==='egreso' && (parseFloat(f.monto_total)||0) >= min;
-    const hasDoc = !!f.cotizacion_url;
-    let docBdg='';
-    if(reqDoc){
-      docBdg = hasDoc
-        ? `<a class="docprev" href="${esc(f.cotizacion_url)}" target="_blank">📎 ver</a>`
-        : `<span class="bdg bdg-doc-no">⚠️ Falta</span>`;
-    } else if(hasDoc){
-      docBdg = `<a class="docprev" href="${esc(f.cotizacion_url)}" target="_blank">📎</a>`;
-    } else {
-      docBdg = '—';
-    }
-    return `<tr>
-      <td>
-        <div style="font-weight:600;">${esc(f.descripcion)}</div>
-        ${f.numero_pedido?`<div style="font-size:10px;color:var(--tm);font-family:var(--mo);">PO: ${esc(f.numero_pedido)}</div>`:''}
-        ${f.categoria?`<span class="bdg bdg-cat" style="font-size:10px;margin-top:2px;">${esc(f.categoria)}</span>`:''}
-      </td>
-      <td>${esc(en?.nombre||'—')}</td>
-      <td style="font-family:var(--mo);font-size:12px;${venc?'color:var(--dg);font-weight:700;':''}">${fmtD(f.fecha_vencimiento)}</td>
-      <td class="amt">${$$(f.monto_total)}</td>
-      <td class="amt" style="color:var(--sc);">${$$(f.monto_pagado||0)}</td>
-      <td class="amt" style="color:${saldo>0?'var(--wn)':'var(--sc)'};font-weight:700;">${$$(saldo)}</td>
-      <td>${venc?'<span class="bdg bdg-ven">VENCIDA</span>':'<span class="bdg bdg-pnd">Pendiente</span>'}</td>
-      <td>${docBdg}</td>
-      <td>
-        <button class="btn btn-s btn-sm" onclick="openFac('${f.id}','${tipo}')">Editar</button>
-        ${saldo>0?`<button class="btn btn-p btn-sm" onclick="openAbo('${f.id}')">+ Abono</button>`:''}
-      </td>
-    </tr>`;
-  }).join('')}</tbody></table>`;
+  const isAdmin = cu?.rol==='admin';
+
+  // ═══ AGRUPACIÓN POR ENTIDAD ═══
+  // Agrupar facturas por entidad_id (las sin entidad van a un grupo "—")
+  const groups = {};
+  list.forEach(f=>{
+    const k = f.entidad_id || '__none__';
+    if(!groups[k]) groups[k] = { facs:[], total:0, pagado:0, saldo:0, name:'' };
+    groups[k].facs.push(f);
+    groups[k].total += parseFloat(f.monto_total)||0;
+    groups[k].pagado += parseFloat(f.monto_pagado)||0;
+    groups[k].saldo += (parseFloat(f.monto_total)||0) - (parseFloat(f.monto_pagado)||0);
+  });
+  // Resolver nombres y ordenar por nombre
+  const grpArr = Object.entries(groups).map(([k,g])=>{
+    const en = ENT.find(e=>e.id===k);
+    g.name = en ? en.nombre : '— Sin entidad —';
+    g.entId = k;
+    return g;
+  }).sort((a,b)=>a.name.localeCompare(b.name));
+
+  return `<table>
+    <thead><tr>
+      <th style="width:22px;"></th>
+      <th>Descripción</th><th>Vence</th>
+      <th>Total</th><th>Pagado</th><th>Saldo</th>
+      <th>Estado</th><th>Doc</th><th></th>
+    </tr></thead>
+    <tbody>
+    ${grpArr.map(g=>{
+      const open = GRP_OPEN[tipo+'-'+g.entId] !== false; // default abierto
+      const grpHdr = `<tr class="grp-hdr" onclick="togGrp('${tipo}-${g.entId}')">
+        <td><span class="grp-chev ${open?'open':''}">▶</span></td>
+        <td colspan="2">
+          <div class="grp-name">
+            ${esc(g.name)}
+            <span style="font-size:11px;color:var(--tm);font-weight:500;">(${g.facs.length} factura${g.facs.length>1?'s':''})</span>
+          </div>
+        </td>
+        <td class="amt" style="font-weight:700;">${$$(g.total)}</td>
+        <td class="amt" style="color:var(--sc);font-weight:700;">${$$(g.pagado)}</td>
+        <td class="amt" style="color:${g.saldo>0?'var(--wn)':'var(--sc)'};font-weight:700;">${$$(g.saldo)}</td>
+        <td colspan="3"></td>
+      </tr>`;
+      const rows = open ? g.facs.map(f=>{
+        const saldo = (parseFloat(f.monto_total)||0) - (parseFloat(f.monto_pagado)||0);
+        const hoy = new Date(); hoy.setHours(0,0,0,0);
+        const venc = f.fecha_vencimiento && new Date(f.fecha_vencimiento+'T00:00:00') < hoy && f.estado!=='pagado';
+        const reqDoc = f.tipo==='egreso' && (parseFloat(f.monto_total)||0) >= min;
+        const hasDoc = !!f.cotizacion_url;
+        let docBdg='';
+        if(reqDoc){
+          docBdg = hasDoc
+            ? `<a class="docprev" href="${esc(f.cotizacion_url)}" target="_blank">📎 ver</a>`
+            : `<span class="bdg bdg-doc-no">⚠️ Falta</span>`;
+        } else if(hasDoc){
+          docBdg = `<a class="docprev" href="${esc(f.cotizacion_url)}" target="_blank">📎</a>`;
+        } else { docBdg = '—'; }
+        // Badge de tipo de movimiento
+        let movBdg = '';
+        if(f.tipo_movimiento==='devolucion') movBdg = `<span class="bdg" style="background:var(--id);color:var(--in);font-size:10px;margin-left:4px;">↩ Devolución</span>`;
+        else if(f.tipo_movimiento==='reembolso') movBdg = `<span class="bdg" style="background:var(--od);color:var(--or);font-size:10px;margin-left:4px;">↪ Reembolso</span>`;
+
+        return `<tr class="grp-child" style="${open?'':'display:none;'}">
+          <td></td>
+          <td>
+            <div style="font-weight:600;">${esc(f.descripcion)} ${movBdg}</div>
+            ${f.numero_pedido?`<div style="font-size:10px;color:var(--tm);font-family:var(--mo);">PO: ${esc(f.numero_pedido)}</div>`:''}
+            ${f.categoria?`<span class="bdg bdg-cat" style="font-size:10px;margin-top:2px;">${esc(f.categoria)}</span>`:''}
+          </td>
+          <td style="font-family:var(--mo);font-size:12px;${venc?'color:var(--dg);font-weight:700;':''}">${fmtD(f.fecha_vencimiento)}</td>
+          <td class="amt">${$$(f.monto_total)}</td>
+          <td class="amt" style="color:var(--sc);">${$$(f.monto_pagado||0)}</td>
+          <td class="amt" style="color:${saldo>0?'var(--wn)':'var(--sc)'};font-weight:700;">${$$(saldo)}</td>
+          <td>${venc?'<span class="bdg bdg-ven">VENCIDA</span>':'<span class="bdg bdg-pnd">Pendiente</span>'}</td>
+          <td>${docBdg}</td>
+          <td style="white-space:nowrap;">
+            <button class="btn btn-s btn-sm" onclick="openFac('${f.id}','${tipo}')" title="Editar">✎</button>
+            ${saldo>0?`<button class="btn btn-p btn-sm" onclick="openAbo('${f.id}')" title="Registrar abono">+ Abono</button>`:''}
+            ${tipo==='egreso' && (parseFloat(f.monto_pagado)||0)>0 ? `<button class="btn btn-s btn-sm" onclick="openDevolucion('${f.id}')" title="Devolución del proveedor" style="background:var(--id);border-color:var(--in);color:var(--in);">↩ Dev</button>`:''}
+            ${tipo==='ingreso' && (parseFloat(f.monto_pagado)||0)>0 ? `<button class="btn btn-s btn-sm" onclick="openReembolso('${f.id}')" title="Reembolso al cliente/paciente" style="background:var(--od);border-color:var(--or);color:var(--or);">↪ Reem</button>`:''}
+            ${isAdmin?`<button class="btn btn-d btn-sm" onclick="delFacWithPin('${f.id}')" title="Eliminar (solo admin)">✕</button>`:''}
+          </td>
+        </tr>`;
+      }).join('') : '';
+      return grpHdr + rows;
+    }).join('')}
+    </tbody>
+  </table>`;
+}
+
+// Toggle de grupo
+function togGrp(key){
+  GRP_OPEN[key] = GRP_OPEN[key] === false ? true : false;
+  renderTab();
 }
 
 // ══ FACTURA: ABRIR / GUARDAR ══════════════════════
@@ -2492,7 +2609,7 @@ function rPagos(){
         return `<tr>
           <td style="font-family:var(--mo);font-size:12px;">${fmtD(fp)}</td>
           <td style="font-weight:600;">${esc(en?.nombre||'—')}</td>
-          <td>${esc(f.descripcion)}${f.numero_pedido?'<div style="font-size:10px;color:var(--tm);font-family:var(--mo);">PO: '+esc(f.numero_pedido)+'</div>':''}</td>
+          <td>${esc(f.descripcion)}${f.tipo_movimiento==='devolucion'?' <span class="bdg" style="background:var(--id);color:var(--in);font-size:10px;">↩ Dev</span>':f.tipo_movimiento==='reembolso'?' <span class="bdg" style="background:var(--od);color:var(--or);font-size:10px;">↪ Reem</span>':''}${f.numero_pedido?'<div style="font-size:10px;color:var(--tm);font-family:var(--mo);">PO: '+esc(f.numero_pedido)+'</div>':''}</td>
           <td class="amt">${$$(f.monto_total)}</td>
           <td class="amt" style="color:var(--sc);">${$$(f.monto_pagado)}</td>
           <td><span class="bdg ${f.tipo==='egreso'?'bdg-egr':'bdg-ing'}">${f.tipo==='egreso'?'Egreso':'Ingreso'}</span></td>
@@ -2514,6 +2631,7 @@ function expPagosXls(){
       'Fecha Pago':f.fecha_pago||'','Entidad':en?.nombre||'',
       'Descripción':f.descripcion,'No.Pedido':f.numero_pedido||'',
       'Total':f.monto_total,'Pagado':f.monto_pagado,'Tipo':f.tipo,
+      'Movimiento': f.tipo_movimiento==='devolucion'?'Devolución':f.tipo_movimiento==='reembolso'?'Reembolso':'Normal',
       'CLABE Prov':f.clabe_proveedor||'','Ref CIE':f.referencia_cie||'',
       'Doc cotización':f.cotizacion_url?'Sí':'No',
       'Comprobante pago':f.comprobante_pago_url?'Sí':'No',
@@ -2758,6 +2876,273 @@ async function saveCfgGen(){
   if(min>=0) await saveConfig('cotizacion_monto_minimo', String(min));
   await saveConfig('iva_modo', iva);
   renderTab();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// BORRAR FACTURA (admin only, con PIN)
+// ═══════════════════════════════════════════════════════════════════
+function delFacWithPin(id){
+  const f = FAC.find(x=>x.id===id); if(!f) return;
+  if(cu?.rol !== 'admin'){ toast('Solo el admin puede eliminar','error'); return; }
+  const en = ENT.find(e=>e.id===f.entidad_id);
+  reqPin('Eliminar factura',`Confirma con PIN:\n${esc(f.descripcion)} • ${esc(en?.nombre||'—')} • ${$$(f.monto_total)}`, async ()=>{
+    await delFacExec(id);
+  });
+}
+
+async function delFacExec(id){
+  const f = FAC.find(x=>x.id===id); if(!f) return;
+  const en = ENT.find(e=>e.id===f.entidad_id);
+  // Snapshot completo para auditoría
+  const snapshot = {
+    id: f.id, tipo: f.tipo, descripcion: f.descripcion,
+    entidad: en?.nombre||'—',
+    monto_total: f.monto_total, monto_pagado: f.monto_pagado,
+    estado: f.estado, fecha_vencimiento: f.fecha_vencimiento,
+    fecha_pago: f.fecha_pago, numero_pedido: f.numero_pedido,
+    numero_factura: f.numero_factura, categoria: f.categoria,
+    tipo_movimiento: f.tipo_movimiento||'normal',
+    cotizacion_url: f.cotizacion_url, comprobante_pago_url: f.comprobante_pago_url,
+    notas: f.notas, _deleted_at: new Date().toISOString()
+  };
+  try{
+    if(isDemo){
+      FAC = FAC.filter(x=>x.id!==id);
+      ABO = ABO.filter(a=>a.factura_id!==id);
+    } else {
+      // Borrar abonos asociados primero
+      await sb.from('fin_abonos').delete().eq('factura_id', id);
+      // Borrar la factura
+      const {error} = await sb.from('fin_facturas').delete().eq('id', id);
+      if(error) throw error;
+      // Auditoría con snapshot completo
+      await aLog('fin_facturas', id, 'ELIMINAR',
+        `Eliminó: ${f.descripcion} • ${en?.nombre||'—'} • ${$$(f.monto_total)}`,
+        snapshot);
+      await loadAll();
+    }
+    toast('✓ Factura eliminada (queda registro en auditoría)','success');
+    renderTab();
+  }catch(e){ toast('Error: '+e.message, 'error'); }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// DEVOLUCIÓN (proveedor → clínica) — crea INGRESO ligado a egreso
+// ═══════════════════════════════════════════════════════════════════
+function openDevolucion(facId){
+  const f = FAC.find(x=>x.id===facId); if(!f) return;
+  if(f.tipo !== 'egreso'){ toast('Solo en egresos','error'); return; }
+  const en = ENT.find(e=>e.id===f.entidad_id);
+  const pagado = parseFloat(f.monto_pagado)||0;
+  if(pagado <= 0){ toast('Esta factura aún no tiene pago registrado','warning'); return; }
+
+  document.getElementById('dvFacId').value = facId;
+  document.getElementById('dvInfo').innerHTML =
+    `<strong>Egreso original:</strong> ${esc(f.descripcion)}<br>
+     <strong>Proveedor:</strong> ${esc(en?.nombre||'—')}<br>
+     <strong>Pagado:</strong> <span class="amt" style="color:var(--sc);">${$$(pagado)}</span>`;
+  document.getElementById('dvMnt').value = '';
+  document.getElementById('dvMnt').max = pagado;
+  document.getElementById('dvFec').value = isoD(new Date());
+  document.getElementById('dvMet').value = 'transferencia';
+  document.getElementById('dvRef').value = '';
+  document.getElementById('dvMot').value = '';
+  document.getElementById('dvCmpV').style.display = 'none';
+  const fileInp = document.getElementById('dvCmp'); if(fileInp) fileInp.value = '';
+  SM('mDev');
+}
+
+async function submitDevolucion(){
+  try{
+    const facId = document.getElementById('dvFacId').value;
+    const f = FAC.find(x=>x.id===facId); if(!f){ toast('Factura no encontrada','error'); return; }
+    const mnt = parseFloat(document.getElementById('dvMnt').value);
+    const fec = document.getElementById('dvFec').value;
+    const mot = (document.getElementById('dvMot').value||'').trim();
+    const pagado = parseFloat(f.monto_pagado)||0;
+
+    const miss = [];
+    if(!mnt||mnt<=0) miss.push('Monto');
+    if(!fec) miss.push('Fecha');
+    if(!mot) miss.push('Motivo');
+    if(miss.length){ toast('❌ Falta: '+miss.join(', '),'error'); return; }
+    if(mnt > pagado){ toast(`No puedes devolver más de lo pagado (${$$(pagado)})`,'error'); return; }
+
+    // Subir comprobante (obligatorio)
+    const file = document.getElementById('dvCmp').files[0];
+    if(!file){ toast('❌ El comprobante es obligatorio','error'); return; }
+    const cmpUrl = await uploadFile(file, 'devoluciones/'+facId);
+    if(!cmpUrl){ toast('Error subiendo comprobante','error'); return; }
+
+    const en = ENT.find(e=>e.id===f.entidad_id);
+    const ref = (document.getElementById('dvRef').value||'').trim();
+    const met = document.getElementById('dvMet').value;
+
+    // Crear el INGRESO ligado
+    const newIng = {
+      tipo: 'ingreso',
+      entidad_id: f.entidad_id,
+      descripcion: '↩ Devolución: '+f.descripcion,
+      categoria: f.categoria || 'Devoluciones',
+      monto_total: mnt,
+      monto_pagado: mnt,
+      fecha_vencimiento: fec,
+      fecha_pago: fec,
+      estado: 'pagado',
+      tipo_movimiento: 'devolucion',
+      factura_origen_id: facId,
+      comprobante_pago_url: cmpUrl,
+      notas: 'Motivo: '+mot+(ref?'\nReferencia: '+ref:''),
+      created_by: toUUID(cu?.id),
+    };
+
+    if(isDemo){
+      const newId = 'f'+Date.now();
+      FAC.unshift({id:newId, ...newIng, created_at:new Date().toISOString()});
+      // Reducir monto_pagado del egreso original
+      f.monto_pagado = pagado - mnt;
+      if(f.monto_pagado < parseFloat(f.monto_total)) f.estado = 'pendiente';
+    } else {
+      const {data:nd, error:e1} = await sb.from('fin_facturas').insert(newIng).select().single();
+      if(e1){ toast('Error: '+e1.message,'error'); return; }
+      // Reducir monto_pagado del egreso
+      const nuevoPagado = pagado - mnt;
+      const nuevoEstado = nuevoPagado >= parseFloat(f.monto_total) ? 'pagado' : 'pendiente';
+      const {error:e2} = await sb.from('fin_facturas').update({
+        monto_pagado: nuevoPagado,
+        estado: nuevoEstado,
+        updated_at: new Date().toISOString(),
+        updated_by: toUUID(cu?.id)
+      }).eq('id', facId);
+      if(e2){ toast('Error: '+e2.message,'error'); return; }
+      // Crear abono negativo en fin_abonos para trazabilidad
+      await sb.from('fin_abonos').insert({
+        factura_id: facId,
+        monto: -mnt,
+        fecha_pago: fec,
+        metodo: met,
+        referencia: 'DEV: '+(ref||mot),
+        comprobante_url: cmpUrl,
+        created_by: toUUID(cu?.id)
+      });
+      await aLog('fin_facturas', facId, 'DEVOLUCION',
+        `Devolución de ${$$(mnt)} de ${en?.nombre||'—'}`,
+        { monto: mnt, motivo: mot, ingreso_creado: nd?.id });
+      await loadAll();
+    }
+
+    toast('✓ Devolución registrada · ingreso creado','success');
+    CM('mDev');
+    renderTab();
+  }catch(e){ toast('Error: '+e.message,'error'); }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// REEMBOLSO (clínica → cliente) — crea EGRESO ligado a ingreso
+// ═══════════════════════════════════════════════════════════════════
+function openReembolso(facId){
+  const f = FAC.find(x=>x.id===facId); if(!f) return;
+  if(f.tipo !== 'ingreso'){ toast('Solo en ingresos','error'); return; }
+  const en = ENT.find(e=>e.id===f.entidad_id);
+  const cobrado = parseFloat(f.monto_pagado)||0;
+  if(cobrado <= 0){ toast('Esta factura aún no tiene cobro registrado','warning'); return; }
+
+  document.getElementById('reFacId').value = facId;
+  document.getElementById('reInfo').innerHTML =
+    `<strong>Ingreso original:</strong> ${esc(f.descripcion)}<br>
+     <strong>Cliente:</strong> ${esc(en?.nombre||'—')}<br>
+     <strong>Cobrado:</strong> <span class="amt" style="color:var(--sc);">${$$(cobrado)}</span>`;
+  document.getElementById('reMnt').value = '';
+  document.getElementById('reMnt').max = cobrado;
+  document.getElementById('reFec').value = isoD(new Date());
+  document.getElementById('reMet').value = 'transferencia';
+  document.getElementById('reRef').value = '';
+  document.getElementById('reMot').value = '';
+  document.getElementById('reCmpV').style.display = 'none';
+  const fileInp = document.getElementById('reCmp'); if(fileInp) fileInp.value = '';
+  SM('mReem');
+}
+
+async function submitReembolso(){
+  try{
+    const facId = document.getElementById('reFacId').value;
+    const f = FAC.find(x=>x.id===facId); if(!f){ toast('Factura no encontrada','error'); return; }
+    const mnt = parseFloat(document.getElementById('reMnt').value);
+    const fec = document.getElementById('reFec').value;
+    const mot = (document.getElementById('reMot').value||'').trim();
+    const cobrado = parseFloat(f.monto_pagado)||0;
+
+    const miss = [];
+    if(!mnt||mnt<=0) miss.push('Monto');
+    if(!fec) miss.push('Fecha');
+    if(!mot) miss.push('Motivo');
+    if(miss.length){ toast('❌ Falta: '+miss.join(', '),'error'); return; }
+    if(mnt > cobrado){ toast(`No puedes reembolsar más de lo cobrado (${$$(cobrado)})`,'error'); return; }
+
+    // Subir comprobante (opcional en reembolsos)
+    let cmpUrl = null;
+    const file = document.getElementById('reCmp').files[0];
+    if(file){
+      cmpUrl = await uploadFile(file, 'reembolsos/'+facId);
+    }
+
+    const en = ENT.find(e=>e.id===f.entidad_id);
+    const ref = (document.getElementById('reRef').value||'').trim();
+    const met = document.getElementById('reMet').value;
+
+    // Crear EGRESO ligado
+    const newEgr = {
+      tipo: 'egreso',
+      entidad_id: f.entidad_id,
+      descripcion: '↪ Reembolso: '+f.descripcion,
+      categoria: f.categoria || 'Reembolsos',
+      monto_total: mnt,
+      monto_pagado: mnt,
+      fecha_vencimiento: fec,
+      fecha_pago: fec,
+      estado: 'pagado',
+      tipo_movimiento: 'reembolso',
+      factura_origen_id: facId,
+      comprobante_pago_url: cmpUrl,
+      notas: 'Motivo: '+mot+(ref?'\nReferencia: '+ref:''),
+      created_by: toUUID(cu?.id),
+    };
+
+    if(isDemo){
+      FAC.unshift({id:'f'+Date.now(), ...newEgr, created_at:new Date().toISOString()});
+      f.monto_pagado = cobrado - mnt;
+      if(f.monto_pagado < parseFloat(f.monto_total)) f.estado = 'pendiente';
+    } else {
+      const {data:nd, error:e1} = await sb.from('fin_facturas').insert(newEgr).select().single();
+      if(e1){ toast('Error: '+e1.message,'error'); return; }
+      const nuevoCobrado = cobrado - mnt;
+      const nuevoEstado = nuevoCobrado >= parseFloat(f.monto_total) ? 'pagado' : 'pendiente';
+      const {error:e2} = await sb.from('fin_facturas').update({
+        monto_pagado: nuevoCobrado,
+        estado: nuevoEstado,
+        updated_at: new Date().toISOString(),
+        updated_by: toUUID(cu?.id)
+      }).eq('id', facId);
+      if(e2){ toast('Error: '+e2.message,'error'); return; }
+      await sb.from('fin_abonos').insert({
+        factura_id: facId,
+        monto: -mnt,
+        fecha_pago: fec,
+        metodo: met,
+        referencia: 'REEM: '+(ref||mot),
+        comprobante_url: cmpUrl,
+        created_by: toUUID(cu?.id)
+      });
+      await aLog('fin_facturas', facId, 'REEMBOLSO',
+        `Reembolso de ${$$(mnt)} a ${en?.nombre||'—'}`,
+        { monto: mnt, motivo: mot, egreso_creado: nd?.id });
+      await loadAll();
+    }
+
+    toast('✓ Reembolso registrado · egreso creado','success');
+    CM('mReem');
+    renderTab();
+  }catch(e){ toast('Error: '+e.message,'error'); }
 }
 
 // ══ INIT ══════════════════════════════════════════
