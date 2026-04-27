@@ -2602,10 +2602,12 @@ function rPagos(){
       </div>
       ${lista.length?`<table><thead><tr>
         <th>Fecha Pago</th><th>Entidad</th><th>Descripción</th><th>Total</th><th>Pagado</th>
-        <th>Tipo</th><th>Doc Cot.</th><th>Compr. Pago</th>
+        <th>Tipo</th><th>Doc Cot.</th><th>Compr. Pago</th><th>Acciones</th>
       </tr></thead><tbody>${lista.map(f=>{
         const en = ENT.find(e=>e.id===f.entidad_id);
         const fp = f.fecha_pago||(ABO.filter(a=>a.factura_id===f.id).sort((a,b)=>new Date(b.fecha_pago)-new Date(a.fecha_pago))[0]?.fecha_pago);
+        const isAdmin = cu?.rol==='admin';
+        const isMov = f.tipo_movimiento==='devolucion' || f.tipo_movimiento==='reembolso';
         return `<tr>
           <td style="font-family:var(--mo);font-size:12px;">${fmtD(fp)}</td>
           <td style="font-weight:600;">${esc(en?.nombre||'—')}</td>
@@ -2615,6 +2617,11 @@ function rPagos(){
           <td><span class="bdg ${f.tipo==='egreso'?'bdg-egr':'bdg-ing'}">${f.tipo==='egreso'?'Egreso':'Ingreso'}</span></td>
           <td>${f.cotizacion_url?`<a class="docprev" href="${esc(f.cotizacion_url)}" target="_blank">📎 cot.</a>`:'<span style="color:var(--td);font-size:11px;">—</span>'}</td>
           <td>${f.comprobante_pago_url?`<a class="docprev" href="${esc(f.comprobante_pago_url)}" target="_blank">💳 pago</a>`:'<span style="color:var(--td);font-size:11px;">—</span>'}</td>
+          <td style="white-space:nowrap;">
+            ${f.tipo==='egreso' && !isMov && (parseFloat(f.monto_pagado)||0)>0 ? `<button class="btn btn-sm" onclick="openDevolucion('${f.id}')" title="Registrar devolución del proveedor" style="background:var(--id);border:1px solid var(--in);color:var(--in);">↩ Dev</button>`:''}
+            ${f.tipo==='ingreso' && !isMov && (parseFloat(f.monto_pagado)||0)>0 ? `<button class="btn btn-sm" onclick="openReembolso('${f.id}')" title="Registrar reembolso al cliente/paciente" style="background:var(--od);border:1px solid var(--or);color:var(--or);">↪ Reem</button>`:''}
+            ${isAdmin?`<button class="btn btn-d btn-sm" onclick="delFacWithPin('${f.id}')" title="Eliminar (solo admin)">✕</button>`:''}
+          </td>
         </tr>`;}).join('')}
       </tbody></table>`:'<div class="emp"><p>Sin pagos en este período</p></div>'}
     </div>
