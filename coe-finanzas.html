@@ -1530,6 +1530,32 @@ function openFac(id, tipo){
     cv.style.display='flex';
     cn.innerHTML = `<a href="${esc(f.comprobante_pago_url)}" target="_blank" style="color:var(--in);">💳 Ver comprobante</a>`;
   } else { cv.style.display='none'; }
+  // Mostrar archivo seleccionado al elegir
+  const fDocInp = document.getElementById('fDoc');
+  if(fDocInp){
+    fDocInp.onchange = () => {
+      const file = fDocInp.files[0];
+      if(file){
+        dv.style.display='flex';
+        dn.innerHTML = `📄 <strong>${esc(file.name)}</strong> (${(file.size/1024).toFixed(1)} KB) — se subirá al guardar`;
+        dn.style.color = 'var(--sc)';
+      }
+    };
+  }
+  const fCmpInp = document.getElementById('fCmp');
+  if(fCmpInp){
+    fCmpInp.onchange = () => {
+      const file = fCmpInp.files[0];
+      if(file){
+        cv.style.display='flex';
+        cn.innerHTML = `💳 <strong>${esc(file.name)}</strong> (${(file.size/1024).toFixed(1)} KB) — se subirá al guardar`;
+        cn.style.color = 'var(--sc)';
+      }
+    };
+  }
+  // Reset inputs por si quedaron archivos previos seleccionados
+  if(fDocInp) fDocInp.value = '';
+  if(fCmpInp) fCmpInp.value = '';
   calcPP();
   SM('mFac');
 }
@@ -1551,15 +1577,32 @@ function calcPP(){
 
 async function uploadFile(file, prefix){
   if(isDemo) return '[demo] '+file.name;
+  if(!file){ console.warn('uploadFile: no file'); return null; }
   try{
-    const ext = file.name.split('.').pop();
-    const path = prefix + '/' + Date.now() + '-' + Math.random().toString(36).slice(2,8) + '.' + ext;
-    const {error:ue} = await sb.storage.from(BKT).upload(path, file);
-    if(ue) throw ue;
-    const {data:ud} = sb.storage.from(BKT).getPublicUrl(path);
-    return ud.publicUrl;
+    // Sanitizar nombre: quitar espacios, acentos, caracteres especiales
+    const ext = (file.name.split('.').pop()||'bin').toLowerCase().replace(/[^a-z0-9]/g,'');
+    const safePrefix = String(prefix||'misc').replace(/[^a-zA-Z0-9_\-\/]/g,'_');
+    const ts = Date.now();
+    const rnd = Math.random().toString(36).slice(2,8);
+    const path = safePrefix + '/' + ts + '-' + rnd + '.' + ext;
+    console.log('Uploading:', file.name, '→', path, '(' + (file.size/1024).toFixed(1) + ' KB)');
+    toast('Subiendo archivo...','info');
+    const {data:ud, error:ue} = await sb.storage.from(BKT).upload(path, file, {
+      cacheControl: '3600',
+      upsert: false,
+      contentType: file.type || 'application/octet-stream'
+    });
+    if(ue){
+      console.error('Upload error:', ue);
+      toast('❌ Error al subir: '+ue.message+' · Ver consola','error');
+      return null;
+    }
+    const {data:pd} = sb.storage.from(BKT).getPublicUrl(path);
+    console.log('Upload OK:', pd.publicUrl);
+    return pd.publicUrl;
   }catch(e){
-    toast('Error subiendo archivo: '+e.message,'error');
+    console.error('uploadFile exception:', e);
+    toast('❌ Error subiendo archivo: '+(e.message||e),'error');
     return null;
   }
 }
@@ -1579,13 +1622,24 @@ async function submitFac(){
     // Subir docs si hay
     const docFile = document.getElementById('fDoc').files[0];
     if(docFile){
+      console.log('Tiene archivo de documento:', docFile.name);
       const u = await uploadFile(docFile, 'docs/'+(id||'new'));
       if(u) docUrl = u;
+      else {
+        // Subida falló — no continuar
+        toast('❌ No se pudo subir el documento. Verifica permisos del bucket "comprobantes".','error');
+        return;
+      }
     }
     const cmpFile = document.getElementById('fCmp').files[0];
     if(cmpFile){
+      console.log('Tiene archivo de comprobante:', cmpFile.name);
       const u = await uploadFile(cmpFile, 'comprobantes/'+(id||'new'));
       if(u) cmpUrl = u;
+      else {
+        toast('❌ No se pudo subir el comprobante. Verifica permisos del bucket "comprobantes".','error');
+        return;
+      }
     }
     const pay = {
       tipo, entidad_id:document.getElementById('fEnt').value||null,
