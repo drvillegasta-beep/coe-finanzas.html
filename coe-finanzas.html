@@ -1418,13 +1418,14 @@ function rFacs(tipo){
     <button class="btn btn-s btn-sm" onclick="expandAllGrps('${tipo}',true)" title="Expandir todos">▼ Expandir</button>
     <button class="btn btn-s btn-sm" onclick="expandAllGrps('${tipo}',false)" title="Contraer todos">▶ Contraer</button>
   </div>
-  <div class="tc">${rFRows(list,tipo)}</div>`;
+  <div class="tc">${rFRows(list,tipo,filtSrch)}</div>`;
 }
 
-function rFRows(list, tipo){
+function rFRows(list, tipo, filtSrch){
   if(!list.length) return '<div class="emp"><div class="ic">📭</div><p>Sin facturas</p></div>';
   const min = CFG.cotizacion_monto_minimo||1000;
   const isAdmin = cu?.rol==='admin';
+  filtSrch = filtSrch || ''; // safety
 
   // ═══ AGRUPACIÓN POR ENTIDAD ═══
   // Agrupar facturas por entidad_id (las sin entidad van a un grupo "—")
