@@ -1415,6 +1415,8 @@ function rFacs(tipo){
       <option value="">Doc cotización</option>
       <option value="sin" ${filtDoc==='sin'?'selected':''}>⚠️ Solo sin cotización</option>
     </select>`:''}
+    <button class="btn btn-s btn-sm" onclick="expandAllGrps('${tipo}',true)" title="Expandir todos">▼ Expandir</button>
+    <button class="btn btn-s btn-sm" onclick="expandAllGrps('${tipo}',false)" title="Contraer todos">▶ Contraer</button>
   </div>
   <div class="tc">${rFRows(list,tipo)}</div>`;
 }
@@ -1452,8 +1454,17 @@ function rFRows(list, tipo){
     </tr></thead>
     <tbody>
     ${grpArr.map(g=>{
-      const open = GRP_OPEN[tipo+'-'+g.entId] !== false; // default abierto
-      const grpHdr = `<tr class="grp-hdr" onclick="togGrp('${tipo}-${g.entId}')">
+      const grpKey = tipo+'-'+g.entId;
+      // Lógica de apertura:
+      //  - Si hay búsqueda activa: SIEMPRE abierto (porque ya filtramos antes y solo hay matches)
+      //  - Si el usuario tocó el grupo: respetar su decisión (GRP_OPEN[key] = true/false)
+      //  - Default: CERRADO
+      const hasSearch = !!filtSrch && filtSrch.trim().length > 0;
+      let open;
+      if(hasSearch) open = true;
+      else if(GRP_OPEN[grpKey] !== undefined) open = GRP_OPEN[grpKey];
+      else open = false;
+      const grpHdr = `<tr class="grp-hdr" onclick="togGrp('${grpKey}')">
         <td><span class="grp-chev ${open?'open':''}">▶</span></td>
         <td colspan="2">
           <div class="grp-name">
@@ -1513,9 +1524,22 @@ function rFRows(list, tipo){
   </table>`;
 }
 
-// Toggle de grupo
+// Toggle de grupo (default cerrado: undefined → true → false → true ...)
 function togGrp(key){
-  GRP_OPEN[key] = GRP_OPEN[key] === false ? true : false;
+  // Si nunca se ha tocado: undefined → al click se abre
+  // Si está abierto (true): se cierra
+  // Si está cerrado (false): se abre
+  GRP_OPEN[key] = !GRP_OPEN[key]; // !undefined = true, !true = false, !false = true
+  renderTab();
+}
+
+// Expandir/contraer TODOS los grupos del tipo dado
+function expandAllGrps(tipo, expand){
+  const list = FAC.filter(f=>f.tipo===tipo && f.estado!=='archivado' && f.estado!=='pagado');
+  const entIds = [...new Set(list.map(f=>f.entidad_id || '__none__'))];
+  entIds.forEach(eid=>{
+    GRP_OPEN[tipo+'-'+eid] = expand;
+  });
   renderTab();
 }
 
@@ -2100,6 +2124,7 @@ function rCotMain(){
           <td>${c.doc_url?`<a class="docprev" href="${esc(c.doc_url)}" target="_blank">📎</a>`:'—'}</td>
           <td>
             <button class="btn btn-s btn-sm" onclick="openCot('${c.id}')">Ver</button>
+            ${c.estado!=='cancelado'?`<button class="btn btn-d btn-sm" onclick="archivarCotizacion('${c.id}')" title="Archivar cotización">✕</button>`:''}
           </td>
         </tr>`;
       }).join('')}</tbody></table>` : '<div class="emp"><div class="ic">📋</div><p>Sin cotizaciones</p></div>'}
@@ -3376,6 +3401,36 @@ async function submitAddComprobante(){
     }
     toast('✓ Comprobante guardado','success');
     CM('mAddCmp'); renderTab();
+  }catch(e){ toast('Error: '+e.message,'error'); }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ARCHIVAR COTIZACIÓN DE PROVEEDOR (cualquier usuario logueado)
+// ═══════════════════════════════════════════════════════════════════
+async function archivarCotizacion(id){
+  const c = COTS.find(x=>x.id===id); if(!c) return;
+  const en = ENT.find(e=>e.id===c.entidad_id);
+  const concs = CONCS.filter(x=>x.cotizacion_id===c.id);
+  const total = concs.reduce((s,r)=>s + (r.cantidad*(r.precio_unitario||0)*(1-(r.descuento_pct||0)/100)), 0);
+  if(!confirm(`¿Archivar esta cotización?\n\n#${c.numero||''} · ${en?.nombre||'—'}\nTotal: ${$$(total)}\n\nQueda en estado "cancelada" (siempre recuperable desde el filtro Canceladas).`)) return;
+  try{
+    if(isDemo){
+      c.estado = 'cancelado';
+      c.cancelado_at = new Date().toISOString();
+      c.cancelado_por = cu?.nombre||'—';
+    } else {
+      const {error} = await sb.from('cot_cotizaciones').update({
+        estado: 'cancelado',
+        updated_at: new Date().toISOString()
+      }).eq('id', id);
+      if(error){ toast('Error: '+error.message, 'error'); return; }
+      await aLog('cot_cotizaciones', id, 'ARCHIVAR',
+        `Archivó cotización #${c.numero||''} · ${en?.nombre||'—'} · ${$$(total)}`,
+        { numero: c.numero, entidad: en?.nombre, total, conceptos: concs.length });
+      await loadAll();
+    }
+    toast('✓ Cotización archivada','success');
+    renderTab();
   }catch(e){ toast('Error: '+e.message,'error'); }
 }
 
