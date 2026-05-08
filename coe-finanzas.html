@@ -488,6 +488,8 @@ textarea{resize:vertical;min-height:72px;}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Cotizaciones</div>
     <div class="ni" onclick="goTab('ped')" id="n-ped">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>Pedidos LIO<span class="nbdg" id="nbPed" style="display:none;"></span></div>
+    <div class="ni" onclick="goTab('rec')" id="n-rec">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Recurrentes<span class="nbdg" id="nbRec" style="display:none;"></span></div>
     <div class="ns">Reportes</div>
     <div class="ni" onclick="goTab('pag')" id="n-pag">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>Pagos</div>
@@ -634,6 +636,7 @@ textarea{resize:vertical;min-height:72px;}
         <label><input type="checkbox" id="uPPag"/> Pagos</label>
         <label><input type="checkbox" id="uPCot"/> Cotizaciones</label>
         <label><input type="checkbox" id="uPPed"/> Pedidos LIO</label>
+        <label><input type="checkbox" id="uPRec"/> Recurrentes</label>
         <label><input type="checkbox" id="uPLcat"/> Catálogo LIOs</label>
         <label><input type="checkbox" id="uPAud"/> Auditoría</label>
         <label><input type="checkbox" id="uPCfg"/> Configuración</label>
@@ -650,22 +653,58 @@ textarea{resize:vertical;min-height:72px;}
 
 <!-- Modal: Recurrente -->
 <div class="mov" id="mRec" style="display:none;" onclick="if(event.target===this)CM('mRec')">
- <div class="mdl">
+ <div class="mdl mdl-lg">
   <div class="mhd"><span class="mtit" id="mRecT">Plantilla Recurrente</span><span class="mcls" onclick="CM('mRec')">✕</span></div>
   <div class="mbdy">
    <input type="hidden" id="rId"/>
    <div class="fgrd">
-    <div class="fgrp"><label>Tipo</label><select id="rTip"><option value="egreso">Egreso</option><option value="ingreso">Ingreso</option></select></div>
-    <div class="fgrp"><label>Día del mes</label><input type="number" id="rDia" min="1" max="31"/></div>
-    <div class="fgrp sp2"><label>Descripción *</label><input type="text" id="rDes"/></div>
-    <div class="fgrp"><label>Entidad</label><select id="rEnt"></select></div>
-    <div class="fgrp"><label>Categoría</label><input type="text" id="rCat"/></div>
-    <div class="fgrp sp2"><label>Monto sugerido</label><div class="ipfx"><span>$</span><input type="number" id="rMnt" step="0.01"/></div></div>
+    <div class="fgrp sp2"><label>Descripción del servicio *</label><input type="text" id="rDes" placeholder="Ej: Renta clínica / CFE / Internet Telmex"/></div>
+    <div class="fgrp"><label>Tipo</label><select id="rTip"><option value="egreso">Egreso (pago a proveedor)</option><option value="ingreso">Ingreso</option></select></div>
+    <div class="fgrp"><label>Categoría</label><input type="text" id="rCat" placeholder="Servicios / Renta / Nómina..."/></div>
+    <div class="fgrp"><label>Entidad / Proveedor</label><select id="rEnt"></select></div>
+    <div class="fgrp"><label>Monto típico</label><div class="ipfx"><span>$</span><input type="number" id="rMnt" step="0.01" placeholder="Editable al pagar"/></div></div>
+
+    <div class="fgrp sp2"><label>🔁 Frecuencia *</label>
+      <select id="rFreq" onchange="ajusteCamposFreq()">
+        <option value="mensual">Mensual (mismo día cada mes)</option>
+        <option value="mensual_ultimo">Mensual (último día del mes)</option>
+        <option value="quincenal">Quincenal (dos días al mes)</option>
+        <option value="bimestral">Bimestral (cada 2 meses)</option>
+        <option value="trimestral">Trimestral (cada 3 meses)</option>
+        <option value="anual">Anual (1 vez al año)</option>
+        <option value="semanal">Semanal</option>
+      </select>
+    </div>
+
+    <div class="fgrp" id="rDiaWrap"><label>Día del mes *</label><input type="number" id="rDia" min="1" max="31" placeholder="1-31"/></div>
+    <div class="fgrp" id="rDia2Wrap" style="display:none;"><label>Segundo día del mes</label><input type="number" id="rDia2" min="1" max="31" placeholder="Ej: 30"/></div>
+    <div class="fgrp" id="rDiaSemWrap" style="display:none;"><label>Día de la semana *</label>
+      <select id="rDiaSem">
+        <option value="1">Lunes</option><option value="2">Martes</option><option value="3">Miércoles</option>
+        <option value="4">Jueves</option><option value="5">Viernes</option><option value="6">Sábado</option><option value="0">Domingo</option>
+      </select>
+    </div>
+    <div class="fgrp" id="rMesWrap" style="display:none;"><label>Mes *</label>
+      <select id="rMes">
+        <option value="1">Enero</option><option value="2">Febrero</option><option value="3">Marzo</option><option value="4">Abril</option>
+        <option value="5">Mayo</option><option value="6">Junio</option><option value="7">Julio</option><option value="8">Agosto</option>
+        <option value="9">Septiembre</option><option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option>
+      </select>
+    </div>
+
+    <div class="fgrp"><label>Días de alerta antes</label><input type="number" id="rAlert" min="0" max="30" value="3"/>
+      <div class="fhint">Avisa N días antes del vencimiento</div>
+    </div>
+    <div class="fgrp"><label>Pausar hasta (opcional)</label><input type="date" id="rPausa"/>
+      <div class="fhint">Para vacaciones u otros eventos</div>
+    </div>
+    <div class="fgrp sp2"><label>Notas</label><textarea id="rNot" placeholder="Detalles del servicio, contacto del proveedor..."></textarea></div>
    </div>
   </div>
   <div class="mft">
     <button class="btn btn-s" onclick="CM('mRec')">Cancelar</button>
-    <button class="btn btn-p" onclick="submitRec()">Guardar</button>
+    <button class="btn btn-d" id="rDelBtn" onclick="delRec()" style="display:none;">Eliminar</button>
+    <button class="btn btn-p" onclick="submitRec()">Guardar plantilla</button>
   </div>
  </div>
 </div>
@@ -920,6 +959,43 @@ textarea{resize:vertical;min-height:72px;}
  </div>
 </div>
 
+<!-- Modal: Marcar pago recurrente -->
+<div class="mov" id="mPagRec" style="display:none;" onclick="if(event.target===this)CM('mPagRec')">
+ <div class="mdl">
+  <div class="mhd"><span class="mtit">✓ Registrar Pago Recurrente</span><span class="mcls" onclick="CM('mPagRec')">✕</span></div>
+  <div class="mbdy">
+   <input type="hidden" id="prRecId"/>
+   <input type="hidden" id="prPeriodo"/>
+   <div id="prInfo" style="background:var(--sf2);padding:12px;border-radius:var(--rs);font-size:12px;margin-bottom:14px;border-left:3px solid var(--pr);"></div>
+   <div class="fgrd">
+    <div class="fgrp"><label>Monto real pagado *</label><div class="ipfx"><span>$</span><input type="number" id="prMnt" step="0.01"/></div>
+      <div class="fhint" id="prMntHint"></div>
+    </div>
+    <div class="fgrp"><label>Fecha de pago *</label><input type="date" id="prFec"/></div>
+    <div class="fgrp"><label>Método</label>
+      <select id="prMet">
+        <option value="transferencia">Transferencia</option>
+        <option value="efectivo">Efectivo</option>
+        <option value="tarjeta">Tarjeta</option>
+        <option value="cheque">Cheque</option>
+        <option value="domiciliado">Domiciliado / Cargo automático</option>
+      </select>
+    </div>
+    <div class="fgrp"><label>Referencia</label><input type="text" id="prRef" placeholder="No. operación / folio"/></div>
+    <div class="fgrp sp2"><label>📷 Comprobante de pago *</label>
+      <div class="upz"><input type="file" id="prCmp" accept="image/*,.pdf"/>📷 Subir foto del recibo / comprobante</div>
+      <div class="upv" id="prCmpV" style="display:none;"><span id="prCmpN"></span></div>
+    </div>
+    <div class="fgrp sp2"><label>Notas</label><textarea id="prNot" placeholder="Opcional"></textarea></div>
+   </div>
+  </div>
+  <div class="mft">
+    <button class="btn btn-s" onclick="CM('mPagRec')">Cancelar</button>
+    <button class="btn btn-p" onclick="submitPagoRec()">✓ Registrar pago</button>
+  </div>
+ </div>
+</div>
+
 <script>
 /*
 ═══════════════════════════════════════════════════════════════════
@@ -1145,6 +1221,7 @@ async function loadAll(){
     LIOCAT=lc.data||[]; PEDS=pd.data||[]; PEDLOG=plog.data||[];
     console.log('Loaded — FAC:',FAC.length,'PEDS:',PEDS.length,'LIOCAT:',LIOCAT.length);
     updPedBadge();
+    updRecBadge();
   } catch(err){ toast('Error cargando: '+err.message,'error'); }
 }
 
@@ -1203,7 +1280,12 @@ function chkAlerts(){
     return new Date(p.fecha_entrega_estimada+'T00:00:00') < hoy;
   });
 
-  const total = venc.length+soloMesAnt.length+sinCot.length+pedRet.length;
+  // Recurrentes vencidos/próximos
+  const recItems = (typeof buildRecOcurrencias === 'function') ? buildRecOcurrencias(7) : [];
+  const recVenc = recItems.filter(i=>i.estado==='vencido').length;
+  const recProx = recItems.filter(i=>i.estado==='proximo').length;
+
+  const total = venc.length+soloMesAnt.length+sinCot.length+pedRet.length+recVenc+recProx;
   if(!total){ bar.style.display='none'; return; }
 
   const msgs=[];
@@ -1211,6 +1293,12 @@ function chkAlerts(){
   if(soloMesAnt.length) msgs.push(`📅 <strong>${soloMesAnt.length} de meses anteriores</strong>`);
   if(sinCot.length) msgs.push(`📎 <strong>${sinCot.length} sin cotización</strong>`);
   if(pedRet.length) msgs.push(`🔴 <strong>${pedRet.length} pedido${pedRet.length>1?'s':''} retrasado${pedRet.length>1?'s':''}</strong>`);
+  if(recVenc||recProx){
+    const parts=[];
+    if(recVenc) parts.push(recVenc+' vencido'+(recVenc>1?'s':''));
+    if(recProx) parts.push(recProx+' próximo'+(recProx>1?'s':''));
+    msgs.push(`🔁 <strong onclick="goTab('rec')" style="cursor:pointer;text-decoration:underline;">${parts.join(' / ')} recurrente${(recVenc+recProx)>1?'s':''}</strong>`);
+  }
 
   bar.style.display='flex';
   bar.innerHTML=`<span class="alrt-msg" style="display:flex;gap:16px;flex-wrap:wrap;">${msgs.join(' &middot; ')}</span>
@@ -1221,7 +1309,7 @@ function chkAlerts(){
 function goTab(t){
   clearSel(); closeSb();
   if(cu?.rol!=='admin' && cu?.permisos){
-    const map={egr:'egr',ing:'ing',cal:'cal',aud:'aud',cfg:'cfg',cot:'cot',pag:'pag',ped:'ped',lcat:'lcat'};
+    const map={egr:'egr',ing:'ing',cal:'cal',aud:'aud',cfg:'cfg',cot:'cot',pag:'pag',ped:'ped',rec:'rec',lcat:'lcat'};
     const key=map[t];
     if(key && cu.permisos[key]===false){ toast('Sin acceso','error'); return; }
   }
@@ -1239,6 +1327,7 @@ function renderTab(){
   else if(tab==='cal') mc.innerHTML=rCal();
   else if(tab==='cot') mc.innerHTML=rCotMain();
   else if(tab==='ped') mc.innerHTML=rPedMain();
+  else if(tab==='rec') mc.innerHTML=rRecMain();
   else if(tab==='pag') mc.innerHTML=rPagos();
   else if(tab==='aud') mc.innerHTML=rAud();
   else if(tab==='lcat') mc.innerHTML=rLcatMain();
@@ -1254,6 +1343,7 @@ function updSidebar(){
   show('n-cal', isAdmin||perms.cal!==false);
   show('n-cot', isAdmin||perms.cot!==false);
   show('n-ped', isAdmin||perms.ped!==false);
+  show('n-rec', isAdmin||perms.rec!==false);
   show('n-pag', isAdmin||perms.pag!==false);
   show('n-aud', isAdmin||perms.aud===true);
   show('n-lcat', isAdmin||perms.lcat===true);
@@ -1353,6 +1443,28 @@ function rDash(){
         <div class="dmta">Egresos ≥ ${$$(CFG.cotizacion_monto_minimo)} sin doc</div>
       </div>
     </div>
+    ${(()=>{
+      const recItems = (typeof buildRecOcurrencias==='function') ? buildRecOcurrencias(7) : [];
+      const recVenc = recItems.filter(i=>i.estado==='vencido');
+      const recProx = recItems.filter(i=>i.estado==='proximo');
+      if(!recVenc.length && !recProx.length) return '';
+      const total = [...recVenc,...recProx].reduce((s,i)=>s+(parseFloat(i.rec.monto_sugerido)||0),0);
+      return `<div class="dc tap" onclick="goTab('rec')" style="margin-bottom:16px;border-color:${recVenc.length?'var(--dg)':'var(--wn)'};">
+        <div class="dlbl" style="color:${recVenc.length?'var(--dg)':'var(--wn)'};">🔁 Pagos recurrentes pendientes</div>
+        <div style="display:flex;align-items:baseline;gap:14px;margin-top:6px;flex-wrap:wrap;">
+          <span style="font-size:1.6rem;font-weight:800;color:${recVenc.length?'var(--dg)':'var(--wn)'};">${recVenc.length+recProx.length}</span>
+          <span class="amt" style="font-size:1.1rem;font-weight:700;">${$$(total)}</span>
+          <span style="font-size:11px;color:var(--tm);">${recVenc.length?recVenc.length+' vencidos':''}${recVenc.length&&recProx.length?' · ':''}${recProx.length?recProx.length+' próximos':''}</span>
+        </div>
+        <div style="margin-top:8px;">${[...recVenc,...recProx].slice(0,3).map(i=>{
+          const en = ENT.find(e=>e.id===i.rec.entidad_id);
+          const lbl = i.estado==='vencido' ? `Hace ${Math.abs(i.diasDiff)}d` : (i.diasDiff===0?'HOY':`En ${i.diasDiff}d`);
+          return `<div style="display:flex;justify-content:space-between;padding:5px 0;border-top:1px solid var(--br);font-size:12px;">
+            <span>${esc(i.rec.descripcion)}${en?' · '+esc(en.nombre):''}</span>
+            <span style="color:${i.estado==='vencido'?'var(--dg)':'var(--wn)'};font-weight:700;">${lbl}</span></div>`;
+        }).join('')}</div>
+      </div>`;
+    })()}
     ${venc.length?`<div class="dc" style="margin-bottom:16px;border-color:var(--dg);">
       <div class="dlbl" style="color:var(--dg);">⚠️ Vencidas hoy</div>
       <div style="margin-top:10px;">${venc.slice(0,5).map(f=>{
@@ -1935,6 +2047,7 @@ function openUsr(id){
   document.getElementById('uPPag').checked = p.pag!==false;
   document.getElementById('uPCot').checked = p.cot!==false;
   document.getElementById('uPPed').checked = p.ped!==false;
+  document.getElementById('uPRec').checked = p.rec!==false;
   document.getElementById('uPLcat').checked = p.lcat===true;
   document.getElementById('uPAud').checked = p.aud===true;
   document.getElementById('uPCfg').checked = p.cfg===true;
@@ -1958,6 +2071,7 @@ async function submitUsr(){
     pag:document.getElementById('uPPag').checked,
     cot:document.getElementById('uPCot').checked,
     ped:document.getElementById('uPPed').checked,
+    rec:document.getElementById('uPRec').checked,
     lcat:document.getElementById('uPLcat').checked,
     aud:document.getElementById('uPAud').checked,
     cfg:document.getElementById('uPCfg').checked,
@@ -1994,6 +2108,15 @@ async function delUsr(id, nom){
 }
 
 // ══ RECURRENTES ══════════════════════════════════
+// ══ RECURRENTES — Plantilla CRUD ═════════════════════════════════
+function ajusteCamposFreq(){
+  const f = document.getElementById('rFreq').value;
+  document.getElementById('rDiaWrap').style.display = ['mensual','quincenal','bimestral','trimestral','anual'].includes(f) ? 'flex' : 'none';
+  document.getElementById('rDia2Wrap').style.display = f === 'quincenal' ? 'flex' : 'none';
+  document.getElementById('rDiaSemWrap').style.display = f === 'semanal' ? 'flex' : 'none';
+  document.getElementById('rMesWrap').style.display = f === 'anual' ? 'flex' : 'none';
+}
+
 function openRec(id){
   const r = id ? REC.find(x=>x.id===id) : null;
   document.getElementById('rId').value = r?.id||'';
@@ -2001,34 +2124,399 @@ function openRec(id){
   document.getElementById('rDes').value = r?.descripcion||'';
   document.getElementById('rCat').value = r?.categoria||'';
   document.getElementById('rDia').value = r?.dia_vencimiento||1;
+  document.getElementById('rDia2').value = r?.dia_vencimiento_2||'';
+  document.getElementById('rDiaSem').value = r?.dia_vencimiento ?? 1;
+  document.getElementById('rMes').value = r?.mes_vencimiento||1;
   document.getElementById('rMnt').value = r?.monto_sugerido||'';
+  document.getElementById('rFreq').value = r?.frecuencia||'mensual';
+  document.getElementById('rAlert').value = r?.dias_alerta ?? 3;
+  document.getElementById('rPausa').value = r?.pausado_hasta||'';
+  document.getElementById('rNot').value = r?.notas||'';
+  document.getElementById('rDelBtn').style.display = id ? 'inline-flex' : 'none';
   const eSel = document.getElementById('rEnt');
-  eSel.innerHTML = '<option value="">— Entidad —</option>'+ENT.map(e=>`<option value="${e.id}" ${r?.entidad_id===e.id?'selected':''}>${esc(e.nombre)}</option>`).join('');
+  eSel.innerHTML = '<option value="">— Sin entidad —</option>'+ENT.map(e=>`<option value="${e.id}" ${r?.entidad_id===e.id?'selected':''}>${esc(e.nombre)}</option>`).join('');
+  document.getElementById('mRecT').textContent = r ? 'Editar plantilla' : 'Nueva plantilla recurrente';
+  ajusteCamposFreq();
   SM('mRec');
 }
+
 async function submitRec(){
   const id = document.getElementById('rId').value;
   const des = (document.getElementById('rDes').value||'').trim();
   if(!des){ toast('Descripción requerida','error'); return; }
+  const freq = document.getElementById('rFreq').value;
+  let dia = parseInt(document.getElementById('rDia').value)||1;
+  let dia2 = parseInt(document.getElementById('rDia2').value)||null;
+  let mes = parseInt(document.getElementById('rMes').value)||null;
+  if(freq==='semanal') dia = parseInt(document.getElementById('rDiaSem').value);
+  if(freq==='mensual_ultimo') dia = 31; // marker
   const pay = {
     tipo:document.getElementById('rTip').value,
     entidad_id:document.getElementById('rEnt').value||null,
-    descripcion:des, categoria:document.getElementById('rCat').value||null,
-    dia_vencimiento:parseInt(document.getElementById('rDia').value)||1,
+    descripcion:des,
+    categoria:document.getElementById('rCat').value||null,
+    frecuencia:freq,
+    dia_vencimiento:dia,
+    dia_vencimiento_2:freq==='quincenal'?dia2:null,
+    mes_vencimiento:freq==='anual'?mes:null,
     monto_sugerido:parseFloat(document.getElementById('rMnt').value)||null,
+    dias_alerta:parseInt(document.getElementById('rAlert').value)||3,
+    pausado_hasta:document.getElementById('rPausa').value||null,
+    notas:document.getElementById('rNot').value||null,
     activo:true,
   };
   if(isDemo){
     if(id){ const i=REC.findIndex(r=>r.id===id); if(i>=0) REC[i]={...REC[i],...pay}; }
     else REC.unshift({id:'r'+Date.now(),...pay});
   } else {
-    if(id){ await sb.from('fin_recurrentes').update(pay).eq('id',id); }
-    else { await sb.from('fin_recurrentes').insert(pay); }
+    if(id){ const {error}=await sb.from('fin_recurrentes').update(pay).eq('id',id); if(error){toast('Error: '+error.message,'error');return;} }
+    else { const {error}=await sb.from('fin_recurrentes').insert(pay); if(error){toast('Error: '+error.message,'error');return;} }
     await loadAll();
   }
   toast('✓ Plantilla guardada','success');
   CM('mRec'); renderTab();
 }
+
+async function delRec(){
+  const id = document.getElementById('rId').value;
+  if(!id) return;
+  const r = REC.find(x=>x.id===id);
+  if(!confirm(`¿Eliminar plantilla "${r?.descripcion}"?\n\nLos pagos ya registrados de esta plantilla NO se afectan.`)) return;
+  if(isDemo){ REC = REC.filter(x=>x.id!==id); }
+  else {
+    await sb.from('fin_recurrentes').update({activo:false}).eq('id',id);
+    await loadAll();
+  }
+  toast('✓ Plantilla eliminada','success');
+  CM('mRec'); renderTab();
+}
+
+// ══ RECURRENTES — Cálculo de ocurrencias ═════════════════════════
+// Genera las próximas N ocurrencias de una plantilla a partir de hoy
+function calcOcurrencias(rec, diasFuturo){
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const limite = new Date(hoy.getTime() + diasFuturo*86400000);
+  const ocurrencias = [];
+  // Mirar hasta 60 días hacia atrás también, para detectar pagos vencidos
+  const inicio = new Date(hoy.getTime() - 60*86400000);
+  const f = rec.frecuencia||'mensual';
+  if(f==='mensual' || f==='mensual_ultimo'){
+    let cursor = new Date(inicio.getFullYear(), inicio.getMonth(), 1);
+    while(cursor <= limite){
+      let d;
+      if(f==='mensual_ultimo'){
+        d = new Date(cursor.getFullYear(), cursor.getMonth()+1, 0); // último día del mes
+      } else {
+        const dim = new Date(cursor.getFullYear(), cursor.getMonth()+1, 0).getDate();
+        const dia = Math.min(rec.dia_vencimiento||1, dim);
+        d = new Date(cursor.getFullYear(), cursor.getMonth(), dia);
+      }
+      if(d>=inicio && d<=limite) ocurrencias.push(d);
+      cursor = new Date(cursor.getFullYear(), cursor.getMonth()+1, 1);
+    }
+  } else if(f==='quincenal'){
+    let cursor = new Date(inicio.getFullYear(), inicio.getMonth(), 1);
+    while(cursor <= limite){
+      const dim = new Date(cursor.getFullYear(), cursor.getMonth()+1, 0).getDate();
+      const d1 = new Date(cursor.getFullYear(), cursor.getMonth(), Math.min(rec.dia_vencimiento||1, dim));
+      const d2 = rec.dia_vencimiento_2 ? new Date(cursor.getFullYear(), cursor.getMonth(), Math.min(rec.dia_vencimiento_2, dim)) : null;
+      if(d1>=inicio && d1<=limite) ocurrencias.push(d1);
+      if(d2 && d2>=inicio && d2<=limite) ocurrencias.push(d2);
+      cursor = new Date(cursor.getFullYear(), cursor.getMonth()+1, 1);
+    }
+  } else if(f==='bimestral' || f==='trimestral'){
+    const step = f==='bimestral' ? 2 : 3;
+    let cursor = new Date(inicio.getFullYear(), inicio.getMonth() - (inicio.getMonth() % step), 1);
+    while(cursor <= limite){
+      const dim = new Date(cursor.getFullYear(), cursor.getMonth()+1, 0).getDate();
+      const d = new Date(cursor.getFullYear(), cursor.getMonth(), Math.min(rec.dia_vencimiento||1, dim));
+      if(d>=inicio && d<=limite) ocurrencias.push(d);
+      cursor = new Date(cursor.getFullYear(), cursor.getMonth()+step, 1);
+    }
+  } else if(f==='anual'){
+    const mes = (rec.mes_vencimiento||1)-1;
+    for(let y=inicio.getFullYear()-1; y<=limite.getFullYear()+1; y++){
+      const dim = new Date(y, mes+1, 0).getDate();
+      const d = new Date(y, mes, Math.min(rec.dia_vencimiento||1, dim));
+      if(d>=inicio && d<=limite) ocurrencias.push(d);
+    }
+  } else if(f==='semanal'){
+    const targetDow = rec.dia_vencimiento||1; // 0=dom, 1=lun, etc.
+    let d = new Date(inicio);
+    while(d.getDay()!==targetDow) d.setDate(d.getDate()+1);
+    while(d<=limite){
+      ocurrencias.push(new Date(d));
+      d.setDate(d.getDate()+7);
+    }
+  }
+  return ocurrencias.sort((a,b)=>a-b);
+}
+
+// ¿Está pagada esta ocurrencia? Busca factura con recurrente_id + recurrente_periodo
+function isOcurrenciaPagada(rec, fecha){
+  const periodo = isoD(fecha);
+  return FAC.find(f=> f.recurrente_id===rec.id && f.recurrente_periodo===periodo);
+}
+
+// Genera la lista de "próximos pagos" del mes/N días
+function buildRecOcurrencias(diasFuturo){
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const items = [];
+  REC.filter(r=>r.activo).forEach(r=>{
+    // Skip si está pausada hasta fecha futura
+    if(r.pausado_hasta && new Date(r.pausado_hasta+'T00:00:00')>=hoy) return;
+    const ocs = calcOcurrencias(r, diasFuturo);
+    ocs.forEach(d=>{
+      const pagada = isOcurrenciaPagada(r, d);
+      const diff = Math.floor((d - hoy)/86400000);
+      let estado;
+      if(pagada) estado='pagado';
+      else if(diff<0) estado='vencido';
+      else if(diff <= (r.dias_alerta||3)) estado='proximo';
+      else estado='futuro';
+      items.push({rec:r, fecha:d, estado, diasDiff:diff, factura:pagada});
+    });
+  });
+  return items.sort((a,b)=>a.fecha - b.fecha);
+}
+
+// ══ RECURRENTES — Pestaña principal ══════════════════════════════
+let _recView = 'mes'; // 'mes' | 'plantillas'
+
+function rRecMain(){
+  return `<div class="ph">
+    <div><div class="ptit">🔁 Pagos Recurrentes</div><div class="psub">Servicios y pagos fijos · Recordatorios + comprobantes</div></div>
+    <div style="display:flex;gap:8px;">
+      <div class="view-toggle">
+        <button class="vt-btn ${_recView==='mes'?'act':''}" onclick="_recView='mes';renderTab();">📅 Este mes</button>
+        <button class="vt-btn ${_recView==='plantillas'?'act':''}" onclick="_recView='plantillas';renderTab();">⚙️ Plantillas</button>
+      </div>
+      <button class="btn btn-p btn-sm" onclick="openRec()">+ Nueva plantilla</button>
+    </div>
+  </div>
+  <div style="padding:24px;">
+    ${_recView==='mes' ? rRecMes() : rRecPlantillas()}
+  </div>`;
+}
+
+function rRecMes(){
+  const items = buildRecOcurrencias(45); // próximos 45 días
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const venc = items.filter(i=>i.estado==='vencido');
+  const prox = items.filter(i=>i.estado==='proximo');
+  const fut = items.filter(i=>i.estado==='futuro');
+  const pag = items.filter(i=>i.estado==='pagado');
+
+  const totalPendiente = [...venc,...prox,...fut].reduce((s,i)=>s+(parseFloat(i.rec.monto_sugerido)||0),0);
+  const totalVencido = venc.reduce((s,i)=>s+(parseFloat(i.rec.monto_sugerido)||0),0);
+
+  return `
+    <div class="dg4" style="margin-bottom:20px;">
+      <div class="dc" style="${venc.length?'border-color:var(--dg);':''}">
+        <div class="dlbl">⚠️ Vencidos</div>
+        <div class="dval" style="color:${venc.length?'var(--dg)':'var(--sc)'};">${venc.length}</div>
+        <div class="dmta">${venc.length?$$(totalVencido):'Al día'}</div>
+      </div>
+      <div class="dc" style="${prox.length?'border-color:var(--wn);':''}">
+        <div class="dlbl">📅 Próximos (≤3 días)</div>
+        <div class="dval" style="color:${prox.length?'var(--wn)':'var(--tm)'};">${prox.length}</div>
+        <div class="dmta">${$$(prox.reduce((s,i)=>s+(parseFloat(i.rec.monto_sugerido)||0),0))}</div>
+      </div>
+      <div class="dc">
+        <div class="dlbl">📌 Por venir (45 días)</div>
+        <div class="dval">${fut.length}</div>
+        <div class="dmta">${$$(fut.reduce((s,i)=>s+(parseFloat(i.rec.monto_sugerido)||0),0))}</div>
+      </div>
+      <div class="dc">
+        <div class="dlbl">✓ Pagados (45 días)</div>
+        <div class="dval" style="color:var(--sc);">${pag.length}</div>
+        <div class="dmta">${$$(pag.reduce((s,i)=>s+(parseFloat(i.factura?.monto_pagado||i.rec.monto_sugerido)||0),0))}</div>
+      </div>
+    </div>
+
+    ${!items.length ? '<div class="emp"><div class="ic">🔁</div><p>No hay plantillas activas</p><p style="font-size:12px;color:var(--tm);margin-top:6px;">Crea tu primera plantilla con "+ Nueva plantilla"</p></div>' : `
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      ${items.map(i=>rRecCard(i)).join('')}
+    </div>`}
+  `;
+}
+
+function rRecCard(item){
+  const r = item.rec;
+  const en = ENT.find(e=>e.id===r.entidad_id);
+  const periodo = isoD(item.fecha);
+  const fmt = item.fecha.toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'});
+  const colors = {vencido:'var(--dg)',proximo:'var(--wn)',futuro:'var(--tm)',pagado:'var(--sc)'};
+  const labels = {vencido:'⚠️ VENCIDO',proximo:'📅 PRÓXIMO',futuro:'📌 PENDIENTE',pagado:'✓ PAGADO'};
+  let diasMsg = '';
+  if(item.estado==='vencido') diasMsg = `Hace ${Math.abs(item.diasDiff)} día${Math.abs(item.diasDiff)>1?'s':''}`;
+  else if(item.estado==='proximo') diasMsg = item.diasDiff===0?'HOY':`En ${item.diasDiff} día${item.diasDiff>1?'s':''}`;
+  else if(item.estado==='futuro') diasMsg = `En ${item.diasDiff} días`;
+  else diasMsg = item.factura?.fecha_pago ? 'Pagado el '+fmtD(item.factura.fecha_pago) : '';
+  const monto = item.factura?.monto_pagado || r.monto_sugerido;
+
+  return `<div style="background:var(--sf);border:1px solid var(--br);border-left:4px solid ${colors[item.estado]};border-radius:var(--rd);padding:14px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+    <div style="flex:1;min-width:200px;">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span style="background:${colors[item.estado]}22;color:${colors[item.estado]};padding:2px 10px;border-radius:14px;font-size:0.7rem;font-weight:800;">${labels[item.estado]}</span>
+        <span style="font-weight:700;font-size:14px;">${esc(r.descripcion)}</span>
+        ${en?`<span style="color:var(--tm);font-size:12px;">· ${esc(en.nombre)}</span>`:''}
+      </div>
+      <div style="font-size:11px;color:var(--tm);margin-top:4px;font-family:var(--mo);">${fmt} · ${esc(diasMsg)}</div>
+    </div>
+    <div style="text-align:right;min-width:120px;">
+      <div class="amt" style="font-size:16px;font-weight:700;color:${colors[item.estado]};">${$$(monto||0)}</div>
+      ${r.monto_sugerido && item.factura && parseFloat(item.factura.monto_pagado)!==parseFloat(r.monto_sugerido) ? `<div style="font-size:10px;color:var(--tm);">sugerido: ${$$(r.monto_sugerido)}</div>`:''}
+    </div>
+    <div style="display:flex;gap:6px;">
+      ${item.estado==='pagado'
+        ? `<button class="btn btn-s btn-sm" onclick="verFacturaRec('${item.factura?.id}')">📎 Ver pago</button>`
+        : `<button class="btn btn-p btn-sm" onclick="abrirPagoRec('${r.id}','${periodo}')">✓ Marcar pagado</button>`}
+      <button class="btn btn-s btn-sm" onclick="openRec('${r.id}')" title="Editar plantilla">✎</button>
+    </div>
+  </div>`;
+}
+
+function rRecPlantillas(){
+  const list = REC.filter(r=>r.activo);
+  if(!list.length) return '<div class="emp"><div class="ic">🔁</div><p>Sin plantillas</p></div>';
+  return `<table><thead><tr>
+    <th>Servicio</th><th>Frecuencia</th><th>Día</th><th>Monto típico</th><th>Entidad</th><th>Alerta</th><th>Estado</th><th></th>
+  </tr></thead><tbody>${list.map(r=>{
+    const en = ENT.find(e=>e.id===r.entidad_id);
+    const hoy = new Date(); hoy.setHours(0,0,0,0);
+    const pausada = r.pausado_hasta && new Date(r.pausado_hasta+'T00:00:00')>=hoy;
+    const freqLbl = {mensual:'Mensual',mensual_ultimo:'Mensual (último día)',quincenal:'Quincenal',semanal:'Semanal',bimestral:'Bimestral',trimestral:'Trimestral',anual:'Anual'};
+    const diaLbl = (()=>{
+      if(r.frecuencia==='semanal'){
+        const dias=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+        return dias[r.dia_vencimiento||1];
+      }
+      if(r.frecuencia==='mensual_ultimo') return 'Último';
+      if(r.frecuencia==='quincenal') return r.dia_vencimiento+' y '+r.dia_vencimiento_2;
+      if(r.frecuencia==='anual'){
+        const meses=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+        return r.dia_vencimiento+' '+(meses[(r.mes_vencimiento||1)-1]||'');
+      }
+      return 'Día '+r.dia_vencimiento;
+    })();
+    return `<tr>
+      <td><strong>${esc(r.descripcion)}</strong>${r.categoria?'<div style="font-size:10px;color:var(--tm);">'+esc(r.categoria)+'</div>':''}</td>
+      <td>${freqLbl[r.frecuencia]||r.frecuencia}</td>
+      <td>${diaLbl}</td>
+      <td class="amt">${r.monto_sugerido?$$(r.monto_sugerido):'—'}</td>
+      <td>${esc(en?.nombre||'—')}</td>
+      <td>${r.dias_alerta||3}d antes</td>
+      <td>${pausada?'<span class="bdg" style="background:var(--wd);color:var(--wn);">Pausada</span>':'<span class="bdg bdg-apr">Activa</span>'}</td>
+      <td><button class="btn btn-s btn-sm" onclick="openRec('${r.id}')">Editar</button></td>
+    </tr>`;
+  }).join('')}</tbody></table>`;
+}
+
+// ══ RECURRENTES — Marcar pagado ═══════════════════════════════════
+function abrirPagoRec(recId, periodo){
+  const r = REC.find(x=>x.id===recId); if(!r) return;
+  const en = ENT.find(e=>e.id===r.entidad_id);
+  document.getElementById('prRecId').value = recId;
+  document.getElementById('prPeriodo').value = periodo;
+  document.getElementById('prInfo').innerHTML =
+    `<strong>${esc(r.descripcion)}</strong> ${en?'· '+esc(en.nombre):''}<br>
+     <span style="color:var(--tm);font-size:11px;">Vencimiento: ${fmtD(periodo)}</span>`;
+  document.getElementById('prMnt').value = r.monto_sugerido||'';
+  document.getElementById('prMntHint').textContent = r.monto_sugerido ? `Sugerido: ${$$(r.monto_sugerido)} (puedes ajustarlo)` : '';
+  document.getElementById('prFec').value = isoD(new Date());
+  document.getElementById('prMet').value = 'transferencia';
+  document.getElementById('prRef').value = '';
+  document.getElementById('prNot').value = '';
+  document.getElementById('prCmpV').style.display = 'none';
+  const inp = document.getElementById('prCmp'); if(inp) inp.value='';
+  if(inp){
+    inp.onchange = ()=>{
+      const f = inp.files[0];
+      if(f){
+        const v = document.getElementById('prCmpV');
+        const n = document.getElementById('prCmpN');
+        v.style.display='flex';
+        n.innerHTML=`📎 <strong>${esc(f.name)}</strong> (${(f.size/1024).toFixed(1)} KB)`;
+        n.style.color='var(--sc)';
+      }
+    };
+  }
+  SM('mPagRec');
+}
+
+async function submitPagoRec(){
+  try{
+    const recId = document.getElementById('prRecId').value;
+    const periodo = document.getElementById('prPeriodo').value;
+    const r = REC.find(x=>x.id===recId); if(!r){ toast('Plantilla no encontrada','error'); return; }
+    const mnt = parseFloat(document.getElementById('prMnt').value);
+    const fec = document.getElementById('prFec').value;
+    if(!mnt||mnt<=0){ toast('Monto inválido','error'); return; }
+    if(!fec){ toast('Fecha requerida','error'); return; }
+    const file = document.getElementById('prCmp').files[0];
+    if(!file){ toast('❌ El comprobante es obligatorio','error'); return; }
+    const cmpUrl = await uploadFile(file, 'recurrentes/'+recId);
+    if(!cmpUrl){ toast('❌ No se pudo subir comprobante','error'); return; }
+
+    const factura = {
+      tipo: r.tipo||'egreso',
+      entidad_id: r.entidad_id||null,
+      descripcion: r.descripcion + ' — ' + fmtD(periodo),
+      categoria: r.categoria||null,
+      monto_total: mnt,
+      monto_pagado: mnt,
+      fecha_vencimiento: periodo,
+      fecha_pago: fec,
+      estado: 'pagado',
+      comprobante_pago_url: cmpUrl,
+      recurrente_id: recId,
+      recurrente_periodo: periodo,
+      tipo_movimiento: 'normal',
+      notas: (document.getElementById('prNot').value||null),
+      created_by: toUUID(cu?.id),
+    };
+    if(isDemo){
+      FAC.unshift({id:'f'+Date.now(), ...factura, created_at:new Date().toISOString()});
+    } else {
+      const {data:nd, error} = await sb.from('fin_facturas').insert(factura).select().single();
+      if(error){ toast('Error: '+error.message,'error'); return; }
+      // Abono opcional para trazabilidad
+      await sb.from('fin_abonos').insert({
+        factura_id: nd.id,
+        monto: mnt,
+        fecha_pago: fec,
+        metodo: document.getElementById('prMet').value,
+        referencia: (document.getElementById('prRef').value||null),
+        comprobante_url: cmpUrl,
+        created_by: toUUID(cu?.id)
+      }).then(()=>{}).catch(e=>console.warn('abono:',e));
+      await aLog('fin_facturas', nd.id, 'PAGO_RECURRENTE',
+        `Pago recurrente: ${r.descripcion} — ${fmtD(periodo)}`,
+        { recurrente_id: recId, periodo, monto: mnt });
+      await loadAll();
+    }
+    toast('✓ Pago registrado','success');
+    CM('mPagRec'); renderTab();
+  }catch(e){ toast('Error: '+e.message,'error'); }
+}
+
+function verFacturaRec(facId){
+  if(!facId) return;
+  const f = FAC.find(x=>x.id===facId);
+  if(f?.comprobante_pago_url) window.open(f.comprobante_pago_url, '_blank');
+}
+
+// Badge de pendientes en sidebar
+function updRecBadge(){
+  const nb = document.getElementById('nbRec'); if(!nb) return;
+  const items = buildRecOcurrencias(7); // próximos 7 días + vencidos
+  const n = items.filter(i=>i.estado==='vencido' || i.estado==='proximo').length;
+  if(n>0){ nb.style.display='block'; nb.textContent=n; }
+  else nb.style.display='none';
+}
+
+
 
 // ══ CALENDARIO ════════════════════════════════════
 function rCal(){
