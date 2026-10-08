@@ -1,0 +1,7 @@
+-- COE Finanzas v3 · Accesos simplificados (APLICADO en Supabase el 08/10/2026)
+-- Migraciones aplicadas: fin_v3_accesos_simples, fin_v3_cambiar_acceso.
+-- Entrada solo con usuario y contraseña (fin_login). El PIN solo firma movimientos.
+-- Acceso provisional: fin__regenerar (interna) marca debe_cambiar; el primer ingreso exige
+-- nueva contraseña y PIN (fin_cambiar_provisional). Cambio voluntario: fin_cambiar_acceso.
+-- Dirección General: fin_admin_acceso(regenerar | baja | alta). fin_primer_acceso deshabilitada.
+-- La bitácora ya no guarda password_hash ni pin_hash.

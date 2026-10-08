@@ -525,24 +525,10 @@ input[type=email],input[type=tel]{background:var(--sf2);border:1px solid var(--b
     <img src="assets/coe-logo.png" class="lgn-logo" alt="Centro Ocular Especializado">
     <div class="ltit">Finanzas</div>
     <div class="lsub">Centro Ocular Especializado</div>
-    <div class="lgn-tabs">
-      <button class="btn btn-s" id="lgTabIn" onclick="lgTab('in')">Entrar</button>
-      <button class="btn btn-s" id="lgTabFirst" onclick="lgTab('first')">Primer acceso</button>
-    </div>
-    <div id="lgIn">
-      <div class="fld"><label>Usuario <span style="text-transform:none;font-weight:500">(o tu nombre si aún no tienes contraseña)</span></label><input type="text" id="lgU" autocomplete="username" autocapitalize="none"></div>
-      <div class="fld"><label>Contraseña <span style="text-transform:none;font-weight:500">(o tu PIN)</span></label><input type="password" id="lgP" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"></div>
-      <button class="btn btn-p" style="width:100%;justify-content:center;padding:12px" onclick="doLogin()">Entrar</button>
-      <div class="mini" style="text-align:center;margin-top:12px">La sesión queda abierta en este equipo hasta que salgas. Cada movimiento se firma con tu PIN.</div>
-    </div>
-    <div id="lgFirst" style="display:none;">
-      <div class="mini" style="margin-bottom:12px">Usa tu nombre y el PIN que ya tenías para crear tu usuario y contraseña.</div>
-      <div class="fld"><label>Nombre registrado</label><input type="text" id="faN" placeholder="Ej. Antonio"></div>
-      <div class="fld"><label>PIN actual</label><input type="password" id="faPin" inputmode="numeric" maxlength="4"></div>
-      <div class="fld"><label>Nuevo usuario</label><input type="text" id="faU" autocapitalize="none"></div>
-      <div class="fld"><label>Nueva contraseña (mínimo 6)</label><input type="password" id="faP"></div>
-      <button class="btn btn-p" style="width:100%;justify-content:center;padding:12px" onclick="doFirst()">Crear acceso</button>
-    </div>
+    <div class="fld"><label>Usuario</label><input type="text" id="lgU" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false"></div>
+    <div class="fld"><label>Contraseña</label><input type="password" id="lgP" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="btn btn-p" style="width:100%;justify-content:center;padding:12px" onclick="doLogin()">Entrar</button>
+    <div class="mini" style="text-align:center;margin-top:12px">¿No tienes acceso u olvidaste tu contraseña? Pídelo a Dirección General.</div>
     <div class="perr" id="lgErr"></div>
   </div>
 </div>
@@ -558,8 +544,8 @@ input[type=email],input[type=tel]{background:var(--sf2);border:1px solid var(--b
     <span class="tsp"></span>
     <button class="bell" onclick="goTab('alr')" title="Alertas">🔔<b id="bellN" style="display:none"></b></button>
     <div class="tusr">
-      <div class="tav" id="tav" style="cursor:pointer" onclick="miAcceso(false)" title="Mi acceso">A</div>
-      <span id="tnom" style="cursor:pointer" onclick="miAcceso(false)" title="Mi acceso">Usuario</span>
+      <div class="tav" id="tav" style="cursor:pointer" onclick="miAcceso()" title="Mi acceso">A</div>
+      <span id="tnom" style="cursor:pointer" onclick="miAcceso()" title="Mi acceso">Usuario</span>
       <span class="tout" onclick="logout()">Salir</span>
     </div>
   </div>
@@ -728,7 +714,7 @@ const ERR = {
   estado: 'El estado actual no permite esta acción', no_autorizado: 'El pedido aún no está autorizado', sede: 'Pedido de otra sede',
   evidencia: 'Sube la evidencia de la tarea', nombre: 'Falta el nombre', tabla: 'Operación no permitida',
   credenciales: 'Usuario o contraseña incorrectos', password_corta: 'La contraseña debe tener al menos 6 caracteres',
-  usuario_ocupado: 'Ese usuario ya existe', nota: 'Escribe la observación', pin_nuevo: 'El PIN inicial debe tener 4 dígitos'
+  usuario_ocupado: 'Ese usuario ya existe', nota: 'Escribe la observación', pin_nuevo: 'El PIN debe tener 4 dígitos', password_igual: 'Usa una contraseña distinta', propio: 'Tu propio acceso se cambia en Mi acceso'
 };
 
 // Ejecuta una RPC firmada. Si pide firma del Director, la solicita y reintenta.
@@ -773,63 +759,65 @@ async function subirArchivo(file, carpeta) {
   return { url: data.publicUrl, sha: hash, nombre: file.name };
 }
 
-// ══ ACCESO ═════════════════════════════════════
-let LOGIN_LEGACY = false;
-function lgTab(t) {
-  document.getElementById('lgIn').style.display = t === 'in' ? 'block' : 'none';
-  document.getElementById('lgFirst').style.display = t === 'first' ? 'block' : 'none';
-  document.getElementById('lgTabIn').className = 'btn ' + (t === 'in' ? 'btn-p' : 'btn-s');
-  document.getElementById('lgTabFirst').className = 'btn ' + (t === 'first' ? 'btn-p' : 'btn-s');
-  document.getElementById('lgErr').textContent = '';
-}
+// ══ ACCESO: usuario y contraseña. El PIN solo firma movimientos. ══
 async function doLogin() {
   const u = document.getElementById('lgU').value.trim(), p = document.getElementById('lgP').value;
   const err = document.getElementById('lgErr');
   if (!u || !p) { err.textContent = 'Escribe usuario y contraseña'; return; }
   err.textContent = 'Verificando…';
   const { data, error } = await sb.rpc('fin_login', { p_usuario: u, p_password: p });
-  if (error) {
-    // Aún no se corre el SQL de la Fase 1b: entrada temporal con nombre + PIN
-    if (/fin_login/.test(error.message)) { err.textContent = ''; return loginLegacy(u, p); }
-    err.textContent = error.message; return;
-  }
-  if (!data?.ok) { err.textContent = data?.error === 'pin' ? 'El nombre existe, pero el PIN no coincide' : (ERR[data?.error] || 'No se pudo entrar'); return; }
+  if (error) { err.textContent = 'Sin conexión, intenta de nuevo'; return; }
+  if (!data?.ok) { err.textContent = data?.error === 'bloqueado' ? 'Usuario bloqueado 5 minutos por intentos fallidos' : 'Usuario o contraseña incorrectos'; return; }
+  err.textContent = '';
+  if (data.debe_cambiar) return cambioObligatorio(u, p, data);
   iniciarSesion(data);
-  if (data.primer_acceso) setTimeout(() => crearAcceso(u, p), 800);
 }
-function crearAcceso(nombre, pin) { window._ca = { pin }; miAcceso(true); }
-function miAcceso(primera) {
-  modal(primera ? 'Crea tu usuario y contraseña' : 'Mi acceso', `${primera ? '<div class="okbox">Entraste con tu nombre y PIN. Crea tu usuario y contraseña; el PIN sigue siendo tu firma.</div>' : ''}
-    <div class="fld"><label>Usuario</label><input type="text" id="caU" autocapitalize="none" value="${esc(cu.usuario && cu.usuario !== cu.nombre ? cu.usuario : String(cu.nombre).toLowerCase().split(' ')[0])}"></div>
-    <div class="fld"><label>Nueva contraseña (mínimo 6)${primera ? '' : ' · vacío = no cambiar'}</label><input type="password" id="caP" autocomplete="new-password"></div>
-    <div class="fld"><label>Nuevo PIN de firma (opcional)</label><input type="password" id="caPin" maxlength="4" inputmode="numeric"></div>`,
-    `<button class="btn btn-s" onclick="CM('mGen')">${primera ? 'Después' : 'Cancelar'}</button><button class="btn btn-p" onclick="guardarAcceso(${primera ? 'true' : 'false'})">Guardar</button>`, 'sm');
+// Primer ingreso con acceso provisional: se cambia contraseña y PIN antes de entrar
+function cambioObligatorio(usuario, passActual, d) {
+  document.getElementById('loginScreen').style.display = 'none';
+  modal('Bienvenido(a), ' + d.nombre, `<div class="warnbox">Estás usando un acceso provisional. Crea tu contraseña y tu PIN personales para continuar.</div>
+    <div class="kv" style="margin-bottom:14px"><b>Tu usuario</b><div><b>${esc(d.usuario)}</b></div></div>
+    <div class="fld"><label>Nueva contraseña (mínimo 6, para entrar)</label><input type="password" id="coP1" autocomplete="new-password"></div>
+    <div class="fld"><label>Repite la contraseña</label><input type="password" id="coP2" autocomplete="new-password"></div>
+    <div class="fld"><label>Nuevo PIN de 4 dígitos (para firmar movimientos)</label><input type="password" id="coN1" maxlength="4" inputmode="numeric"></div>
+    <div class="fld"><label>Repite el PIN</label><input type="password" id="coN2" maxlength="4" inputmode="numeric"></div>`,
+    `<button class="btn btn-s" onclick="location.reload()">Salir</button><button class="btn btn-p" id="coGo">Guardar y entrar</button>`, 'sm');
+  document.querySelector('#mGen .mcls').style.display = 'none';
+  document.getElementById('mGen').onclick = null;
+  document.getElementById('coGo').onclick = async () => {
+    if (coP1.value.length < 6) return toast('La contraseña debe tener al menos 6 caracteres', 'warning');
+    if (coP1.value !== coP2.value) return toast('Las contraseñas no coinciden', 'warning');
+    if (coP1.value === passActual) return toast('Usa una contraseña distinta a la provisional', 'warning');
+    if (!/^\d{4}$/.test(coN1.value)) return toast('El PIN debe tener 4 dígitos', 'warning');
+    if (coN1.value !== coN2.value) return toast('Los PIN no coinciden', 'warning');
+    const { data, error } = await sb.rpc('fin_cambiar_provisional', { p_usuario: usuario, p_password_actual: passActual, p_password_nueva: coP1.value, p_pin_nuevo: coN1.value });
+    if (error || !data?.ok) return toast(error?.message || ERR[data?.error] || 'No se pudo', 'error');
+    document.querySelector('#mGen .mcls').style.display = '';
+    document.getElementById('mGen').onclick = function (e) { if (e.target === this) CM('mGen'); };
+    CM('mGen'); toast('Listo. Recuerda: contraseña para entrar, PIN para firmar.', 'success');
+    iniciarSesion({ ...d, debe_cambiar: false });
+  };
 }
-async function guardarAcceso(primera) {
-  if (primera && caP.value.length < 6) { toast('La contraseña debe tener al menos 6 caracteres', 'warning'); return; }
-  let pin = primera && window._ca?.pin;
-  if (!pin) { try { pin = await askPin('Tu PIN actual', 'Para confirmar el cambio'); } catch { return; } }
-  const { data, error } = await sb.rpc('fin_mi_acceso', { p_usuario: cu.id, p_pin: pin, p_login: caU.value.trim(), p_password: caP.value, p_pin_nuevo: caPin.value.trim() });
-  if (error || !data?.ok) { toast(error?.message || ERR[data?.error] || 'No se pudo', 'error'); return; }
-  CM('mGen'); window._ca = null;
-  cu.usuario = caU.value.trim().toLowerCase(); LOGIN_LEGACY = false;
-  try { localStorage.setItem(SESSION_KEY, JSON.stringify(cu)); } catch { }
-  toast('Acceso guardado. Entra con tu usuario y contraseña la próxima vez.', 'success');
-  await cargarUsuarios(); renderTab();
+// Cambio voluntario de contraseña y PIN
+function miAcceso() {
+  modal('Mi acceso', `<div class="kv" style="margin-bottom:14px"><b>Usuario</b><div><b>${esc(cu.usuario || '')}</b></div></div>
+    <div class="fld"><label>Contraseña actual</label><input type="password" id="maA" autocomplete="current-password"></div>
+    <div class="fld"><label>Nueva contraseña (vacío = no cambiar)</label><input type="password" id="maP" autocomplete="new-password"></div>
+    <div class="fld"><label>Nuevo PIN de firma (vacío = no cambiar)</label><input type="password" id="maN" maxlength="4" inputmode="numeric"></div>`,
+    `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="guardarMiAcceso()">Guardar</button>`, 'sm');
 }
-async function doFirst() {
-  const err = document.getElementById('lgErr');
-  const a = { p_nombre: faN.value.trim(), p_pin: faPin.value.trim(), p_usuario: faU.value.trim(), p_password: faP.value };
-  if (!a.p_nombre || !a.p_pin || !a.p_usuario) { err.textContent = 'Completa todos los campos'; return; }
-  const { data, error } = await sb.rpc('fin_primer_acceso', a);
-  if (error) { err.textContent = /fin_primer_acceso/.test(error.message) ? 'Falta correr el SQL de la Fase 1b en Supabase' : error.message; return; }
-  if (!data?.ok) { err.textContent = (data?.error === 'pin' ? 'Nombre o PIN no coinciden' : ERR[data?.error] || 'No se pudo'); return; }
-  toast('Acceso creado. Ya puedes entrar con tu usuario.', 'success');
-  document.getElementById('lgU').value = a.p_usuario; lgTab('in');
+async function guardarMiAcceso() {
+  if (!maP.value && !maN.value) return toast('No hay cambios', 'warning');
+  if (maP.value && maP.value.length < 6) return toast('La contraseña debe tener al menos 6 caracteres', 'warning');
+  if (maN.value && !/^\d{4}$/.test(maN.value)) return toast('El PIN debe tener 4 dígitos', 'warning');
+  const { data, error } = await sb.rpc('fin_cambiar_acceso', { p_usuario: cu.usuario, p_password_actual: maA.value, p_password_nueva: maP.value, p_pin_nuevo: maN.value });
+  if (error) return toast(error.message, 'error');
+  if (!data?.ok) return toast(data?.error === 'credenciales' ? 'Contraseña actual incorrecta' : ERR[data?.error] || 'No se pudo', 'error');
+  CM('mGen'); toast('Acceso actualizado', 'success');
 }
 function iniciarSesion(d) {
   cu = { id: d.id, nombre: d.nombre, rol: d.rol, sede: d.sede || null, usuario: d.usuario, email: d.email, permisos: d.permisos || {} };
-  try { localStorage.setItem(SESSION_KEY, JSON.stringify({ ...cu, legacy: LOGIN_LEGACY })); } catch { }
+  try { localStorage.setItem(SESSION_KEY, JSON.stringify(cu)); } catch { }
   entrarApp();
 }
 function logout() {
@@ -843,7 +831,7 @@ async function boot() {
   const n = new Date(); calY = n.getFullYear(); calM = n.getMonth();
   try {
     sb = window.supabase.createClient(SB_URL, SB_KEY, { realtime: { params: { eventsPerSecond: 5 } } });
-    const { data, error } = await sb.from('fin_usuarios').select('id,nombre,rol,sede,activo,email,usuario,permisos').order('nombre');
+    const { data, error } = await sb.from('fin_usuarios').select('id,nombre,rol,sede,activo,email,usuario,permisos,debe_cambiar').order('nombre');
     if (error && /usuario/.test(error.message)) {
       const r = await sb.from('fin_usuarios').select('id,nombre,rol,sede,activo,email').eq('activo', true).order('nombre');
       USR = r.data || [];
@@ -857,13 +845,11 @@ async function boot() {
   try { s = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch { }
   if (s && USR.find(u => u.id === s.id)) {
     const u = USR.find(x => x.id === s.id);
-    if (u.activo === false) { try { localStorage.removeItem(SESSION_KEY); } catch { } location.reload(); return; }
+    if (u.activo === false || u.debe_cambiar) { try { localStorage.removeItem(SESSION_KEY); } catch { } document.getElementById('loginScreen').style.display = 'flex'; return; }
     cu = { ...s, rol: u.rol, sede: u.sede || null, nombre: u.nombre, permisos: u.permisos || {} };
-    LOGIN_LEGACY = !!s.legacy;
     entrarApp();
   } else {
     document.getElementById('loginScreen').style.display = 'flex';
-    lgTab('in');
   }
 }
 async function entrarApp() {
@@ -911,7 +897,7 @@ async function cargarTodo(silencioso) {
     q('fin_cierres_jornada', x => x.order('fecha', { ascending: false }).limit(400)),
   ]);
   [ENT, FAC, ABO, REC, PED, TAR, DOCS, RS, CIE, SUC] = r;
-  if (silencioso !== 'sinusr') { await cargarUsuarios(); const yo = USR.find(u => u.id === cu.id); if (yo) { cu.permisos = yo.permisos || {}; cu.rol = yo.rol; cu.sede = yo.sede || null; aplicarPermisosMenu(); } }
+  if (silencioso !== 'sinusr') { await cargarUsuarios(); const yo = USR.find(u => u.id === cu.id); if (!yo || yo.activo === false || yo.debe_cambiar) { try { localStorage.removeItem(SESSION_KEY); } catch { } alert('Tu acceso fue cambiado por Dirección General. Entra de nuevo.'); location.reload(); return; } if (yo) { cu.permisos = yo.permisos || {}; cu.rol = yo.rol; cu.sede = yo.sede || null; aplicarPermisosMenu(); } }
   CORR = r[11]; AVA = r[12]; CJ = r[13];
   r[10].forEach(c => { CFG[c.clave] = c.valor; });
   if (!RS.length) RS = [{ id: null, nombre: 'José Antonio Villegas Ávila', rfc: 'VIAA870425115' }];
@@ -1074,9 +1060,6 @@ function renderTab() {
   const y = window.scrollY;
   let aviso = '';
   if (FALTA_SQL.length && esAdmin()) aviso = `<div class="warnbox" style="margin:0 0 16px">Falta correr en Supabase el archivo <b>sql/v3_fase1b.sql</b> (tablas: ${FALTA_SQL.join(', ')}). Mientras tanto, esas secciones aparecen vacías.</div>`;
-  const yo = USR.find(u => u.id === cu.id);
-  if (yo && !yo.usuario) aviso += `<div class="warnbox" style="margin:0 0 16px;display:flex;gap:10px;align-items:center;justify-content:space-between">Aún no tienes usuario y contraseña propios.<button class="btn btn-w btn-sm" onclick="miAcceso(true)">Crearlos ahora</button></div>`;
-  if (LOGIN_LEGACY) aviso += `<div class="warnbox" style="margin:0 0 16px">Entraste en modo temporal con nombre y PIN. Al correr el SQL, crea tu usuario y contraseña en "Primer acceso".</div>`;
   el.innerHTML = aviso + TABS[tab]();
   window.scrollTo(0, y);
 }
@@ -1660,7 +1643,7 @@ function rCfg() {
   return `<div class="ph"><div><div class="ptit">Configuración</div><div class="psub">Usuarios, razón social y parámetros</div></div></div>
   <div class="pad"><div class="cfgg">
     <div class="cfg-section"><h3>Usuarios</h3><div class="body">
-      <table><tbody>${USR.filter(u => u.activo !== false || VIEW.verInact).map(u => `<tr style="${u.activo === false ? 'opacity:.45' : ''}"><td><b>${esc(u.nombre)}</b><div class="mini">${esc(u.usuario ? '@' + u.usuario : 'sin usuario · usar Primer acceso')}${u.activo === false ? ' · inactivo' : ''}</div></td><td>${esc(ROLES[u.rol] || u.rol)}${u.permisos && Object.keys(u.permisos).length ? '<div class="mini">permisos ajustados</div>' : ''}</td><td class="mini">${esc(u.sede || 'Todas')}</td><td><button class="btn btn-s btn-sm" onclick="editarUsr('${u.id}')">Editar</button></td></tr>`).join('')}</tbody></table>
+      <table><tbody>${USR.filter(u => u.activo !== false || VIEW.verInact).map(u => `<tr style="${u.activo === false ? 'opacity:.45' : ''}"><td><b>${esc(u.nombre)}</b><div class="mini">${esc(u.usuario ? '@' + u.usuario : 'sin acceso')}${u.debe_cambiar ? ' · provisional sin usar' : ''}${u.activo === false ? ' · dado de baja' : ''}</div></td><td>${esc(ROLES[u.rol] || u.rol)}${u.permisos && Object.keys(u.permisos).length ? '<div class="mini">permisos ajustados</div>' : ''}</td><td class="mini">${esc(u.sede || 'Todas')}</td><td><div class="rowact"><button class="btn btn-s btn-sm" onclick="editarUsr('${u.id}')">Editar</button>${u.id === cu.id ? `<button class="btn btn-s btn-sm" onclick="miAcceso()">Mi acceso</button>` : u.activo === false ? `<button class="btn btn-s btn-sm" onclick="accesoUsuario('${u.id}','alta')">Reactivar</button>` : `<button class="btn btn-w btn-sm" onclick="accesoUsuario('${u.id}','regenerar')">Regenerar acceso</button><button class="btn btn-d btn-sm" onclick="accesoUsuario('${u.id}','baja')">Baja</button>`}</div></td></tr>`).join('')}</tbody></table>
       <button class="btn btn-p btn-sm" style="margin-top:10px" onclick="editarUsr()">+ Usuario</button><button class="btn btn-s btn-sm" style="margin-top:10px;margin-left:6px" onclick="VIEW.verInact=!VIEW.verInact;renderTab()">${VIEW.verInact ? 'Ocultar' : 'Ver'} registros antiguos (${USR.filter(u => u.activo === false).length})</button></div></div>
     <div class="cfg-section"><h3>Perfiles</h3><div class="body"><table><thead><tr><th>Módulo</th>${['admin','direccion','contadora','administracion','solicitante'].map(r=>`<th>${ROLES[r].split(' ')[0]}</th>`).join('')}</tr></thead><tbody>${MODS.map(([m,l])=>`<tr><td>${l}</td>${['admin','direccion','contadora','administracion','solicitante'].map(r=>`<td class="mini">${NIV[nivelRol(r,m)]}</td>`).join('')}</tr>`).join('')}</tbody></table><div class="mini" style="margin-top:8px">Valores por perfil. En cada usuario puedes ajustar módulo por módulo.</div></div></div>
     <div class="cfg-section"><h3>Razón social</h3><div class="body">${RS.map(r => `<div><b>${esc(r.nombre)}</b> · RFC ${esc(r.rfc)}</div>`).join('')}<div class="mini" style="margin-top:8px">Por ahora se trabaja con una sola razón social.</div></div></div>
@@ -1719,9 +1702,7 @@ function editarUsr(id) {
     <div class="fgrp"><label>Perfil</label><select id="usR" onchange="_eu.rol=this.value;document.getElementById('usMx').innerHTML=_euMx()">${Object.entries(ROLES).filter(([k]) => k !== 'usuario').map(([k, l]) => `<option value="${k}" ${u.rol === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
     <div class="fgrp"><label>Sede</label><select id="usS"><option value="">Todas</option><option ${u.sede === 'Tacámbaro' ? 'selected' : ''}>Tacámbaro</option><option ${u.sede === 'Morelia' ? 'selected' : ''}>Morelia</option></select></div>
     <div class="fgrp"><label>Correo para alertas</label><input type="email" id="usE" value="${esc(u.email || '')}"></div>
-    <div class="fgrp"><label>${id ? 'Nuevo PIN (opcional)' : 'PIN inicial (4 dígitos)'}</label><input type="password" id="usP" maxlength="4" inputmode="numeric"></div>
-    ${id ? `<div class="fgrp sp2"><label style="text-transform:none;font-size:13px;color:var(--tx)"><input type="checkbox" id="usRst"> Restablecer usuario y contraseña (vuelve a "Primer acceso")</label></div>
-    <div class="fgrp sp2"><label style="text-transform:none;font-size:13px;color:var(--tx)"><input type="checkbox" id="usAct" ${u.activo !== false ? 'checked' : ''}> Activo</label></div>` : ''}
+    ${id ? '' : '<div class="fgrp sp2"><div class="mini">Al guardar se genera su usuario, contraseña y PIN provisionales. Al entrar por primera vez los cambia.</div></div>'}
     </div>
     <h4 style="margin:16px 0 6px">Permisos</h4><div class="mini" style="margin-bottom:8px">Ver = consulta · Operar = registra y firma · Autorizar = aprueba pedidos y, en pagos, ejecuta. La base de datos valida cada firma con estos niveles.</div>
     <table><tbody id="usMx">${matriz()}</tbody></table>`,
@@ -1729,17 +1710,31 @@ function editarUsr(id) {
   window._euMx = matriz;
 }
 async function guardarUsr(id) {
-  const d = { id, nombre: usN.value.trim(), rol: usR.value, sede: usS.value, email: usE.value, pin: usP.value, permisos: _eu.permisos };
-  if (id) { d.reset_password = document.getElementById('usRst').checked; d.activo = document.getElementById('usAct').checked; }
+  const d = { id, nombre: usN.value.trim(), rol: usR.value, sede: usS.value, email: usE.value, permisos: _eu.permisos };
   if (!d.nombre) { toast('Falta el nombre', 'warning'); return; }
-  if (!id && !/^\d{4}$/.test(d.pin)) { toast('El PIN inicial debe tener 4 dígitos', 'warning'); return; }
   const r = await rpcFirmado('fin_guardar_usuario', { p_datos: d }, { titulo: 'Firma del Director General', sub: 'Guardar usuario y permisos' });
   if (!r) return;
   CM('mGen'); toast('Usuario guardado', 'success');
   await cargarUsuarios(); renderTab();
+  if (r.nuevo) mostrarCredenciales(r);
+}
+async function accesoUsuario(id, accion) {
+  const u = USR.find(x => x.id === id);
+  const t = { regenerar: 'Regenerar contraseña y PIN', baja: 'Dar de baja', alta: 'Reactivar' }[accion];
+  if (accion === 'baja' && !confirm(`¿Dar de baja a ${u.nombre}? Ya no podrá entrar. Su historial se conserva.`)) return;
+  const r = await rpcFirmado('fin_admin_acceso', { p_target: id, p_accion: accion }, { titulo: t, sub: u.nombre });
+  if (!r) return;
+  await cargarUsuarios(); renderTab();
+  if (r.password) mostrarCredenciales(r); else toast(accion === 'baja' ? 'Usuario dado de baja' : 'Hecho', 'success');
+}
+function mostrarCredenciales(r) {
+  window._cred = r;
+  modal('Acceso provisional · ' + r.nombre, `<div class="okbox">Entrégalo a la persona. Al entrar por primera vez se le pedirá cambiar contraseña y PIN. Esta es la única vez que se muestra.</div>
+    <div class="kv" style="font-size:16px"><b>Liga</b><div class="mini">${esc(location.href.split('#')[0].split('?')[0])}</div><b>Usuario</b><div><b class="amt">${esc(r.usuario)}</b></div><b>Contraseña</b><div><b class="amt">${esc(r.password)}</b></div><b>PIN de firma</b><div><b class="amt">${esc(r.pin)}</b></div></div>`,
+    `<button class="btn btn-s" onclick="imprimir('Acceso a COE Finanzas', '<div class=&quot;kv&quot; style=&quot;font-size:15px&quot;><b>Nombre</b><div>'+esc(_cred.nombre)+'</div><b>Liga</b><div>'+esc(location.href.split('#')[0].split('?')[0])+'</div><b>Usuario</b><div><b>'+esc(_cred.usuario)+'</b></div><b>Contraseña provisional</b><div><b>'+esc(_cred.password)+'</b></div><b>PIN provisional</b><div><b>'+esc(_cred.pin)+'</b></div></div><div class=&quot;p&quot;>Al entrar por primera vez el sistema te pedirá crear tu contraseña (para entrar) y tu PIN (para firmar movimientos). No compartas tu PIN.</div>')">🖨 Imprimir</button><button class="btn btn-p" onclick="CM('mGen')">Listo</button>`, 'sm');
 }
 async function cargarUsuarios() {
-  const { data, error } = await sb.from('fin_usuarios').select('id,nombre,rol,sede,activo,email,usuario,permisos').order('nombre');
+  const { data, error } = await sb.from('fin_usuarios').select('id,nombre,rol,sede,activo,email,usuario,permisos,debe_cambiar').order('nombre');
   if (!error) USR = data || [];
 }
 
