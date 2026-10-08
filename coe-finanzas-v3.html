@@ -1205,7 +1205,7 @@ async function confirmarPago(id, extra = {}) {
   const r = await rpcFirmado('fin_pagar', {
     p_factura: id, p_monto: monto, p_fecha: document.getElementById('pgF').value || null,
     p_metodo: document.getElementById('pgMet').value, p_referencia: document.getElementById('pgR').value, p_comprobante_url: up.url, p_sha256: up.sha
-  }, { titulo: f.tipo === 'egreso' ? 'Firmar pago' : 'Firmar cobro', sub: `${nomEnt(f.entidad_id)} · ${$$(monto)}`, conDirector: true });
+  }, { titulo: f.tipo === 'egreso' ? 'Firmar pago' : 'Firmar cobro', sub: `${nomEnt(f.entidad_id)} · ${$$(monto)}`, });
   if (!r) return;
   CM('mGen');
   toast(r.liquidada ? 'Cuenta liquidada' : 'Abono registrado', 'success');
@@ -1275,7 +1275,7 @@ function xls(rows, nombre) {
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Datos'); XLSX.writeFile(wb, nombre + '.xlsx');
 }
 
-const puedePagar = f => f.tipo === 'egreso' ? puede('pagos', 3) : puede('cxc');
+const puedePagar = f => f.tipo === 'egreso' ? puede('cxp') : puede('cxc');
 async function proponerUna(id) {
   const fecha = prompt('Fecha propuesta de pago (AAAA-MM-DD):', isoD(new Date()));
   if (!fecha) return;
@@ -1551,7 +1551,7 @@ function rRec() {
     const L = buildRecOcurrencias(35).filter(o => o.diasDiff <= 35 && (o.estado !== 'pagado' || o.diasDiff >= -31));
     const sem = { pagado: 'v', vencido: 'r', proximo: 'a', futuro: 'g' }, txt = { pagado: 'Pagado', vencido: 'Vencido', proximo: 'Por vencer', futuro: 'Programado' };
     window._recOc = L;
-    body = L.length ? `<table><thead><tr><th>Estatus</th><th>Fecha</th><th>Pago</th><th>Proveedor</th><th>Frecuencia</th><th></th></tr></thead><tbody>${L.map((o, i) => `<tr><td><span class="sem ${sem[o.estado]}"></span><span class="mini">${txt[o.estado]}</span></td><td>${fmtD(isoD(o.fecha))}</td><td><b>${esc(o.rec.descripcion)}</b><div class="mini">${esc(o.rec.categoria || '')}</div></td><td>${esc(nomEnt(o.rec.entidad_id))}</td><td class="mini">${FREC[o.rec.frecuencia] || ''}</td><td>${o.estado === 'pagado' ? `<button class="btn btn-s btn-sm" onclick="verCuenta('${o.factura.id}')">Ver</button>` : (puede('pagos', 3) ? `<button class="btn btn-p btn-sm" onclick="pagarRecurrente(${i})">Pagar</button>` : '')}</td></tr>`).join('')}</tbody></table>` : '<div class="emp">Sin pagos recurrentes próximos</div>';
+    body = L.length ? `<table><thead><tr><th>Estatus</th><th>Fecha</th><th>Pago</th><th>Proveedor</th><th>Frecuencia</th><th></th></tr></thead><tbody>${L.map((o, i) => `<tr><td><span class="sem ${sem[o.estado]}"></span><span class="mini">${txt[o.estado]}</span></td><td>${fmtD(isoD(o.fecha))}</td><td><b>${esc(o.rec.descripcion)}</b><div class="mini">${esc(o.rec.categoria || '')}</div></td><td>${esc(nomEnt(o.rec.entidad_id))}</td><td class="mini">${FREC[o.rec.frecuencia] || ''}</td><td>${o.estado === 'pagado' ? `<button class="btn btn-s btn-sm" onclick="verCuenta('${o.factura.id}')">Ver</button>` : (puede('cxp') ? `<button class="btn btn-p btn-sm" onclick="pagarRecurrente(${i})">Pagar</button>` : '')}</td></tr>`).join('')}</tbody></table>` : '<div class="emp">Sin pagos recurrentes próximos</div>';
   } else {
     body = `<table><thead><tr><th>Plantilla</th><th>Proveedor</th><th>Frecuencia</th><th>Día</th><th>Aviso</th><th></th></tr></thead><tbody>${REC.map(r => `<tr><td><b>${esc(r.descripcion)}</b><div class="mini">${esc(r.categoria || '')}</div></td><td>${esc(nomEnt(r.entidad_id))}</td><td>${FREC[r.frecuencia] || r.frecuencia}</td><td>${r.dia_vencimiento || ''}${r.dia_vencimiento_2 ? ' y ' + r.dia_vencimiento_2 : ''}${r.mes_vencimiento ? ' / mes ' + r.mes_vencimiento : ''}</td><td>${r.dias_alerta || 3} días antes</td><td>${puede('recurrentes') ? `<button class="btn btn-s btn-sm" onclick="editarRec('${r.id}')">Editar</button>` : ''}</td></tr>`).join('')}</tbody></table>`;
   }
@@ -1578,7 +1578,6 @@ async function confirmarRecurrente(i) {
   if (monto <= 0) { toast('Escribe el monto', 'warning'); return; }
   let pin; try { pin = await askPin('Firmar pago recurrente', `${r.descripcion} · ${$$(monto)}`); } catch { return; }
   let pinDir = null;
-  if (monto > limiteFirma() && !esAdmin()) { try { pinDir = await askPin('Firma del Director General', 'Movimiento mayor'); } catch { return; } }
   let up; try { up = await subirArchivo(file, 'recurrentes'); } catch (e) { toast(e.message, 'error'); return; }
   let fid = o.factura?.id;
   if (!fid) {
@@ -2593,15 +2592,8 @@ function upPintarProps() {
 // ── Ejecución con una sola firma ─────────────────
 async function upAplicar() {
   // Solo la Dirección General ejecuta pagos: cualquier pago de otro usuario lleva su segunda firma
-  const necDir = !esAdmin() && UP.props.some(P => {
-    const o = P.multi ? null : P.opciones[P.sel];
-    if (P.pago || (P.multi && P.pago)) return true;
-    if (o && ['pagar', 'sin_factura', 'nc_abono', 'nc_cobro'].includes(o.k)) return true;
-    return o && o.k === 'nueva' && (P.c?.total || 0) > limiteFirma();
-  });
   let pin, pinDir = null;
   try { pin = await askPin('Firmar y aplicar', `${UP.props.length} movimiento(s)`); } catch { return; }
-  if (necDir) { try { pinDir = await askPin('Firma del Director General', 'Segunda firma: pagos y movimientos mayores a ' + $$(limiteFirma())); } catch { return; } }
   const go = document.getElementById('upGo'); go.disabled = true; go.textContent = 'Aplicando…';
   const cache = new Map();
   const subir = async (it, carpeta) => { if (!it) return null; if (!cache.has(it.id)) cache.set(it.id, await subirArchivo(it.file, carpeta)); return cache.get(it.id); };

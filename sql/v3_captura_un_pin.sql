@@ -1,0 +1,3 @@
+-- Migración aplicada 08/10/2026: fin_v3_captura_un_pin
+-- fin_crear_cxp y fin_pagar ya no piden PIN del Director: basta el PIN de quien captura (permiso cxp/cxc nivel 2).
+-- La segunda firma queda solo para autorizar pedidos mayores al límite (fin_pedido_autorizar).
