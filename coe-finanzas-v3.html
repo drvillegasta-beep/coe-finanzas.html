@@ -518,8 +518,8 @@ input[type=email],input[type=tel]{background:var(--sf2);border:1px solid var(--b
       <button class="btn btn-s" id="lgTabFirst" onclick="lgTab('first')">Primer acceso</button>
     </div>
     <div id="lgIn">
-      <div class="fld"><label>Usuario</label><input type="text" id="lgU" autocomplete="username" autocapitalize="none"></div>
-      <div class="fld"><label>Contraseña</label><input type="password" id="lgP" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"></div>
+      <div class="fld"><label>Usuario <span style="text-transform:none;font-weight:500">(o tu nombre si aún no tienes contraseña)</span></label><input type="text" id="lgU" autocomplete="username" autocapitalize="none"></div>
+      <div class="fld"><label>Contraseña <span style="text-transform:none;font-weight:500">(o tu PIN)</span></label><input type="password" id="lgP" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"></div>
       <button class="btn btn-p" style="width:100%;justify-content:center;padding:12px" onclick="doLogin()">Entrar</button>
       <div class="mini" style="text-align:center;margin-top:12px">La sesión queda abierta en este equipo hasta que salgas. Cada movimiento se firma con tu PIN.</div>
     </div>
@@ -781,8 +781,22 @@ async function doLogin() {
     if (/fin_login/.test(error.message)) { err.textContent = ''; return loginLegacy(u, p); }
     err.textContent = error.message; return;
   }
-  if (!data?.ok) { err.textContent = ERR[data?.error] || 'No se pudo entrar'; return; }
+  if (!data?.ok) { err.textContent = data?.error === 'pin' ? 'El nombre existe, pero el PIN no coincide' : (ERR[data?.error] || 'No se pudo entrar'); return; }
   iniciarSesion(data);
+  if (data.primer_acceso) setTimeout(() => crearAcceso(u, p), 800);
+}
+function crearAcceso(nombre, pin) {
+  modal('Crea tu usuario y contraseña', `<div class="okbox">Entraste con tu nombre y PIN. Crea ahora tu usuario y contraseña; el PIN seguirá siendo tu firma.</div>
+    <div class="fld"><label>Usuario</label><input type="text" id="caU" autocapitalize="none" value="${esc(String(nombre).toLowerCase().split(' ')[0])}"></div>
+    <div class="fld"><label>Contraseña (mínimo 6)</label><input type="password" id="caP"></div>`,
+    `<button class="btn btn-s" onclick="CM('mGen')">Después</button><button class="btn btn-p" onclick="guardarAcceso()">Guardar</button>`, 'sm');
+  window._ca = { nombre, pin };
+}
+async function guardarAcceso() {
+  const { data, error } = await sb.rpc('fin_primer_acceso', { p_nombre: _ca.nombre, p_pin: _ca.pin, p_usuario: caU.value.trim(), p_password: caP.value });
+  if (error || !data?.ok) { toast(error?.message || ERR[data?.error] || 'No se pudo', 'error'); return; }
+  CM('mGen'); toast('Listo. La próxima vez entra con tu usuario y contraseña.', 'success');
+  cu.usuario = caU.value.trim().toLowerCase(); try { localStorage.setItem(SESSION_KEY, JSON.stringify(cu)); } catch { }
 }
 async function loginLegacy(nombre, pin) {
   const usr = USR.find(x => x.nombre.toLowerCase() === nombre.toLowerCase());
@@ -799,7 +813,7 @@ async function doFirst() {
   if (!a.p_nombre || !a.p_pin || !a.p_usuario) { err.textContent = 'Completa todos los campos'; return; }
   const { data, error } = await sb.rpc('fin_primer_acceso', a);
   if (error) { err.textContent = /fin_primer_acceso/.test(error.message) ? 'Falta correr el SQL de la Fase 1b en Supabase' : error.message; return; }
-  if (!data?.ok) { err.textContent = ERR[data?.error] || 'No se pudo'; return; }
+  if (!data?.ok) { err.textContent = (data?.error === 'pin' ? 'Nombre o PIN no coinciden' : ERR[data?.error] || 'No se pudo'); return; }
   toast('Acceso creado. Ya puedes entrar con tu usuario.', 'success');
   document.getElementById('lgU').value = a.p_usuario; lgTab('in');
 }
