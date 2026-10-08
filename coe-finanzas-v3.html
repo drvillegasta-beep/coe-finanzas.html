@@ -546,8 +546,8 @@ input[type=email],input[type=tel]{background:var(--sf2);border:1px solid var(--b
     <span class="tsp"></span>
     <button class="bell" onclick="goTab('alr')" title="Alertas">🔔<b id="bellN" style="display:none"></b></button>
     <div class="tusr">
-      <div class="tav" id="tav">A</div>
-      <span id="tnom">Usuario</span>
+      <div class="tav" id="tav" style="cursor:pointer" onclick="miAcceso(false)" title="Mi acceso">A</div>
+      <span id="tnom" style="cursor:pointer" onclick="miAcceso(false)" title="Mi acceso">Usuario</span>
       <span class="tout" onclick="logout()">Salir</span>
     </div>
   </div>
@@ -785,27 +785,25 @@ async function doLogin() {
   iniciarSesion(data);
   if (data.primer_acceso) setTimeout(() => crearAcceso(u, p), 800);
 }
-function crearAcceso(nombre, pin) {
-  modal('Crea tu usuario y contraseña', `<div class="okbox">Entraste con tu nombre y PIN. Crea ahora tu usuario y contraseña; el PIN seguirá siendo tu firma.</div>
-    <div class="fld"><label>Usuario</label><input type="text" id="caU" autocapitalize="none" value="${esc(String(nombre).toLowerCase().split(' ')[0])}"></div>
-    <div class="fld"><label>Contraseña (mínimo 6)</label><input type="password" id="caP"></div>`,
-    `<button class="btn btn-s" onclick="CM('mGen')">Después</button><button class="btn btn-p" onclick="guardarAcceso()">Guardar</button>`, 'sm');
-  window._ca = { nombre, pin };
+function crearAcceso(nombre, pin) { window._ca = { pin }; miAcceso(true); }
+function miAcceso(primera) {
+  modal(primera ? 'Crea tu usuario y contraseña' : 'Mi acceso', `${primera ? '<div class="okbox">Entraste con tu nombre y PIN. Crea tu usuario y contraseña; el PIN sigue siendo tu firma.</div>' : ''}
+    <div class="fld"><label>Usuario</label><input type="text" id="caU" autocapitalize="none" value="${esc(cu.usuario && cu.usuario !== cu.nombre ? cu.usuario : String(cu.nombre).toLowerCase().split(' ')[0])}"></div>
+    <div class="fld"><label>Nueva contraseña (mínimo 6)${primera ? '' : ' · vacío = no cambiar'}</label><input type="password" id="caP" autocomplete="new-password"></div>
+    <div class="fld"><label>Nuevo PIN de firma (opcional)</label><input type="password" id="caPin" maxlength="4" inputmode="numeric"></div>`,
+    `<button class="btn btn-s" onclick="CM('mGen')">${primera ? 'Después' : 'Cancelar'}</button><button class="btn btn-p" onclick="guardarAcceso(${primera ? 'true' : 'false'})">Guardar</button>`, 'sm');
 }
-async function guardarAcceso() {
-  const { data, error } = await sb.rpc('fin_primer_acceso', { p_nombre: _ca.nombre, p_pin: _ca.pin, p_usuario: caU.value.trim(), p_password: caP.value });
+async function guardarAcceso(primera) {
+  if (primera && caP.value.length < 6) { toast('La contraseña debe tener al menos 6 caracteres', 'warning'); return; }
+  let pin = primera && window._ca?.pin;
+  if (!pin) { try { pin = await askPin('Tu PIN actual', 'Para confirmar el cambio'); } catch { return; } }
+  const { data, error } = await sb.rpc('fin_mi_acceso', { p_usuario: cu.id, p_pin: pin, p_login: caU.value.trim(), p_password: caP.value, p_pin_nuevo: caPin.value.trim() });
   if (error || !data?.ok) { toast(error?.message || ERR[data?.error] || 'No se pudo', 'error'); return; }
-  CM('mGen'); toast('Listo. La próxima vez entra con tu usuario y contraseña.', 'success');
-  cu.usuario = caU.value.trim().toLowerCase(); try { localStorage.setItem(SESSION_KEY, JSON.stringify(cu)); } catch { }
-}
-async function loginLegacy(nombre, pin) {
-  const usr = USR.find(x => x.nombre.toLowerCase() === nombre.toLowerCase());
-  const err = document.getElementById('lgErr');
-  if (!usr) { err.textContent = 'Modo temporal: escribe tu nombre registrado como usuario y tu PIN como contraseña'; return; }
-  const { data } = await sb.rpc('fin_verificar_pin', { p_usuario: usr.id, p_pin: pin });
-  if (!data?.ok) { err.textContent = ERR[data?.error] || 'PIN incorrecto'; return; }
-  LOGIN_LEGACY = true;
-  iniciarSesion({ ...data, usuario: usr.nombre });
+  CM('mGen'); window._ca = null;
+  cu.usuario = caU.value.trim().toLowerCase(); LOGIN_LEGACY = false;
+  try { localStorage.setItem(SESSION_KEY, JSON.stringify(cu)); } catch { }
+  toast('Acceso guardado. Entra con tu usuario y contraseña la próxima vez.', 'success');
+  await cargarUsuarios(); renderTab();
 }
 async function doFirst() {
   const err = document.getElementById('lgErr');
@@ -1048,6 +1046,8 @@ function renderTab() {
   const y = window.scrollY;
   let aviso = '';
   if (FALTA_SQL.length && esAdmin()) aviso = `<div class="warnbox" style="margin:0 0 16px">Falta correr en Supabase el archivo <b>sql/v3_fase1b.sql</b> (tablas: ${FALTA_SQL.join(', ')}). Mientras tanto, esas secciones aparecen vacías.</div>`;
+  const yo = USR.find(u => u.id === cu.id);
+  if (yo && !yo.usuario) aviso += `<div class="warnbox" style="margin:0 0 16px;display:flex;gap:10px;align-items:center;justify-content:space-between">Aún no tienes usuario y contraseña propios.<button class="btn btn-w btn-sm" onclick="miAcceso(true)">Crearlos ahora</button></div>`;
   if (LOGIN_LEGACY) aviso += `<div class="warnbox" style="margin:0 0 16px">Entraste en modo temporal con nombre y PIN. Al correr el SQL, crea tu usuario y contraseña en "Primer acceso".</div>`;
   el.innerHTML = aviso + TABS[tab]();
   window.scrollTo(0, y);
@@ -1709,8 +1709,8 @@ function rCfg() {
   return `<div class="ph"><div><div class="ptit">Configuración</div><div class="psub">Usuarios, razón social y parámetros</div></div></div>
   <div class="pad"><div class="cfgg">
     <div class="cfg-section"><h3>Usuarios</h3><div class="body">
-      <table><tbody>${USR.map(u => `<tr style="${u.activo === false ? 'opacity:.45' : ''}"><td><b>${esc(u.nombre)}</b><div class="mini">${esc(u.usuario ? '@' + u.usuario : 'sin usuario · usar Primer acceso')}${u.activo === false ? ' · inactivo' : ''}</div></td><td>${esc(ROLES[u.rol] || u.rol)}${u.permisos && Object.keys(u.permisos).length ? '<div class="mini">permisos ajustados</div>' : ''}</td><td class="mini">${esc(u.sede || 'Todas')}</td><td><button class="btn btn-s btn-sm" onclick="editarUsr('${u.id}')">Editar</button></td></tr>`).join('')}</tbody></table>
-      <button class="btn btn-p btn-sm" style="margin-top:10px" onclick="editarUsr()">+ Usuario</button></div></div>
+      <table><tbody>${USR.filter(u => u.activo !== false || VIEW.verInact).map(u => `<tr style="${u.activo === false ? 'opacity:.45' : ''}"><td><b>${esc(u.nombre)}</b><div class="mini">${esc(u.usuario ? '@' + u.usuario : 'sin usuario · usar Primer acceso')}${u.activo === false ? ' · inactivo' : ''}</div></td><td>${esc(ROLES[u.rol] || u.rol)}${u.permisos && Object.keys(u.permisos).length ? '<div class="mini">permisos ajustados</div>' : ''}</td><td class="mini">${esc(u.sede || 'Todas')}</td><td><button class="btn btn-s btn-sm" onclick="editarUsr('${u.id}')">Editar</button></td></tr>`).join('')}</tbody></table>
+      <button class="btn btn-p btn-sm" style="margin-top:10px" onclick="editarUsr()">+ Usuario</button><button class="btn btn-s btn-sm" style="margin-top:10px;margin-left:6px" onclick="VIEW.verInact=!VIEW.verInact;renderTab()">${VIEW.verInact ? 'Ocultar' : 'Ver'} registros antiguos (${USR.filter(u => u.activo === false).length})</button></div></div>
     <div class="cfg-section"><h3>Perfiles</h3><div class="body"><table><thead><tr><th>Módulo</th>${['admin','direccion','contadora','administracion','solicitante'].map(r=>`<th>${ROLES[r].split(' ')[0]}</th>`).join('')}</tr></thead><tbody>${MODS.map(([m,l])=>`<tr><td>${l}</td>${['admin','direccion','contadora','administracion','solicitante'].map(r=>`<td class="mini">${NIV[nivelRol(r,m)]}</td>`).join('')}</tr>`).join('')}</tbody></table><div class="mini" style="margin-top:8px">Valores por perfil. En cada usuario puedes ajustar módulo por módulo.</div></div></div>
     <div class="cfg-section"><h3>Razón social</h3><div class="body">${RS.map(r => `<div><b>${esc(r.nombre)}</b> · RFC ${esc(r.rfc)}</div>`).join('')}<div class="mini" style="margin-top:8px">Por ahora se trabaja con una sola razón social.</div></div></div>
     <div class="cfg-section"><h3>Parámetros</h3><div class="body">
