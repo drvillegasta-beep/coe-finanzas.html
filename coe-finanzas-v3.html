@@ -466,7 +466,7 @@ textarea{resize:vertical;min-height:72px;}
 .opt.sel{border-color:var(--pr);background:var(--pd);}
 .opt input{margin-top:3px;accent-color:var(--pr);}
 .kv{display:grid;grid-template-columns:150px 1fr;gap:6px 14px;font-size:13px;}
-.kv b{color:var(--tm);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;padding-top:2px;}
+.kv>b{color:var(--tm);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;padding-top:2px;}
 .lgn-tabs{display:flex;gap:6px;margin-bottom:18px;}
 .lgn-tabs button{flex:1;}
 .lgn-logo{display:block;margin:0 auto 10px;height:70px;filter:invert(1) brightness(1.15);}
@@ -496,6 +496,18 @@ input[type=email],input[type=tel]{background:var(--sf2);border:1px solid var(--b
   .tlogo{height:24px;}
   #tnom{display:none;}
 }
+
+.pri{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:800;letter-spacing:.3px;white-space:nowrap;}
+.pri.r{background:var(--dd);color:var(--dg);border:1px solid var(--dg);}
+.pri.a{background:var(--wd);color:var(--wn);border:1px solid var(--wn);}
+.pri.g{background:var(--sf3);color:var(--tm);border:1px solid var(--br2);}
+.atr{display:inline-block;padding:3px 8px;border-radius:6px;font-family:var(--mo);font-size:11px;font-weight:700;white-space:nowrap;}
+.atr.a{background:var(--wd);color:var(--wn);}
+.atr.o{background:var(--od);color:var(--or);}
+.atr.r{background:var(--dd);color:var(--dg);}
+.atr.cron{background:var(--dg);color:#fff;animation:pulse 2.5s infinite;}
+.opt.optp{text-transform:none;letter-spacing:0;font-size:13px;font-weight:500;color:var(--tx);}
+.opt.optp .mini{font-size:12px;}
 </style>
 </head>
 <body>
@@ -567,9 +579,9 @@ input[type=email],input[type=tel]{background:var(--sf2);border:1px solid var(--b
     <div class="ni" id="n-prov" onclick="goTab('prov')">☰ Proveedores</div>
     <div class="ns">Control</div>
     <div class="ni" id="n-fps" onclick="goTab('fps')">⧉ Facturas por solicitar<span class="nbdg" id="nb-fps" style="display:none"></span></div>
-    <div class="ni" id="n-tar" onclick="goTab('tar')">✓ Tareas<span class="nbdg" id="nb-tar" style="display:none"></span></div>
+    <div class="ni" id="n-tar" onclick="goTab('tar')">✓ Pendientes<span class="nbdg" id="nb-tar" style="display:none"></span></div>
     <div class="ni" id="n-rec" onclick="goTab('rec')">↻ Recurrentes<span class="nbdg" id="nb-rec" style="display:none"></span></div>
-    <div class="ni" id="n-rep" onclick="goTab('rep')">▥ Reportes</div>
+    <div class="ni" id="n-rep" onclick="goTab('rep')">▥ Desempeño</div>
     <div class="ni" id="n-aud" onclick="goTab('aud')">⌕ Auditoría</div>
     <div class="ns">Admin</div>
     <div class="ni" id="n-cfg" onclick="goTab('cfg')">⚙ Configuración</div>
@@ -895,10 +907,12 @@ async function cargarTodo(silencioso) {
     q('con_sucursales'),
     q('fin_config'),
     q('fin_correos', x => x.order('enviado_at', { ascending: false }).limit(200)),
+    q('fin_tareas_avances', x => x.order('created_at', { ascending: false }).limit(3000)),
+    q('fin_cierres_jornada', x => x.order('fecha', { ascending: false }).limit(400)),
   ]);
   [ENT, FAC, ABO, REC, PED, TAR, DOCS, RS, CIE, SUC] = r;
   if (silencioso !== 'sinusr') { await cargarUsuarios(); const yo = USR.find(u => u.id === cu.id); if (yo) { cu.permisos = yo.permisos || {}; cu.rol = yo.rol; cu.sede = yo.sede || null; aplicarPermisosMenu(); } }
-  CORR = r[11];
+  CORR = r[11]; AVA = r[12]; CJ = r[13];
   r[10].forEach(c => { CFG[c.clave] = c.valor; });
   if (!RS.length) RS = [{ id: null, nombre: 'José Antonio Villegas Ávila', rfc: 'VIAA870425115' }];
   lastSync = new Date();
@@ -917,7 +931,7 @@ let canal = null;
 function suscribir() {
   if (canal) sb.removeChannel(canal);
   canal = sb.channel('coe-finanzas-v3');
-  ['fin_facturas', 'fin_abonos', 'fin_pedidos', 'fin_tareas', 'fin_documentos', 'fin_entidades', 'fin_recurrentes', 'con_cierres_dia', 'fin_correos']
+  ['fin_facturas', 'fin_abonos', 'fin_pedidos', 'fin_tareas', 'fin_documentos', 'fin_entidades', 'fin_recurrentes', 'con_cierres_dia', 'fin_correos', 'fin_tareas_avances', 'fin_cierres_jornada']
     .forEach(t => canal.on('postgres_changes', { event: '*', schema: 'public', table: t }, p => onCambio(t, p)));
   canal.subscribe(st => {
     rtState = st === 'SUBSCRIBED' ? 'on' : (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT' || st === 'CLOSED') ? 'off' : 'wait';
@@ -932,7 +946,8 @@ function onCambio(tabla, p) {
     fin_abonos: p.eventType === 'INSERT' ? `Nuevo pago registrado ${$$(n.monto)}` : 'Pago actualizado',
     fin_facturas: p.eventType === 'INSERT' ? `Nueva cuenta: ${n.descripcion || ''} ${$$(n.monto_total)}` : 'Cuenta actualizada',
     fin_pedidos: p.eventType === 'INSERT' ? `Nuevo pedido ${n.folio || ''}${n.urgente ? ' URGENTE' : ''}` : `Pedido ${n.folio || ''}: ${n.estado || ''}`,
-    fin_tareas: n.estado === 'cumplida' ? `Tarea cumplida: ${n.titulo || ''}` : null,
+    fin_tareas: p.eventType === 'INSERT' && n.responsable_id === cu.id ? `Nuevo pendiente para ti: ${n.titulo || ''}` : n.estado === 'cumplida' ? `Pendiente cumplido: ${n.titulo || ''}` : null,
+    fin_cierres_jornada: p.eventType === 'INSERT' ? `${nomUsr(n.usuario_id)} cerró su día` : null,
     con_cierres_dia: 'Llegó un cierre de caja de Conciliación',
   }[tabla];
   if (msg) { toast(msg, 'info'); notificar(msg); }
@@ -961,6 +976,13 @@ async function tick() {
   pintarLive();
   // Respaldo: si el tiempo real se cae, refresca cada 2 minutos
   if (rtState !== 'on' && lastSync && Date.now() - lastSync > 120000) await cargarTodo(true), renderTab();
+  // Recordatorio de cierre del día
+  const [ch, cm] = String(CFG.hora_cierre || '18:30').split(':').map(Number), ah = new Date();
+  let rc = null; try { rc = localStorage.getItem('coe_fin_recordar_cierre'); } catch { }
+  if (puede('tareas') && !esAdmin() && !yaCerre() && rc !== isoD(ah) && ah.getDay() !== 0 && (ah.getHours() > ch || (ah.getHours() === ch && ah.getMinutes() >= cm))) {
+    try { localStorage.setItem('coe_fin_recordar_cierre', isoD(ah)); } catch { }
+    notificar('Es hora de cerrar tu día'); modal('Cierre del día', '<div class="warnbox">Antes de irte, registra tus avances y cierra tu día. Dirección recibe el reporte.</div>', `<button class="btn btn-s" onclick="CM('mGen')">Más tarde</button><button class="btn btn-p" onclick="CM('mGen');cerrarDia()">Cerrar mi día</button>`, 'sm');
+  }
   // Resumen diario en pantalla a la hora configurada
   const ahora = new Date(), [hh, mm] = String(CFG.hora_alertas || '09:00').split(':').map(Number);
   const clave = isoD(ahora);
@@ -1003,11 +1025,17 @@ function calcAlertas() {
   PED.filter(p => p.estado === 'autorizado' && enMiSede(p)).forEach(p => A.push({ n: 'i', t: `Pedido autorizado sin enviar ${p.folio}`, m: `${nomEnt(p.entidad_id)} · enviar al proveedor`, go: () => verPedido(p.id) }));
   const fps = vivas().filter(f => f.factura_pendiente);
   fps.forEach(f => { const d = diasA(f.factura_limite); if (d !== null && d <= 5) A.push({ n: d < 0 ? 'r' : 'a', t: `${d < 0 ? 'Factura no conseguida' : 'Factura por solicitar'}: ${nomEnt(f.entidad_id)}`, m: `${f.descripcion} · límite ${fmtD(f.factura_limite)}`, go: () => goTab('fps') }); });
-  TAR.filter(t => t.estado !== 'cumplida').forEach(t => { const d = diasA(t.fecha_limite); if (d < 0) A.push({ n: 'r', t: `Tarea no cumplida: ${t.titulo}`, m: `Venció ${fmtD(t.fecha_limite)} · ${t.entregable || ''}`, go: () => goTab('tar') }); else if (d <= 1) A.push({ n: 'a', t: `Tarea ${d === 0 ? 'para hoy' : 'para mañana'}: ${t.titulo}`, m: t.entregable || '', go: () => goTab('tar') }); });
+  TAR.filter(t => abiertaT(t) && (esMia(t) || (veEquipo() && t.prioridad === 'critico'))).forEach(t => {
+    const d = diasA(t.fecha_limite), P = PRI[t.prioridad] || PRI.moderado, quien = esMia(t) ? '' : ' · ' + respNom(respKey(t));
+    if (d < 0) A.push({ n: P.c === 'r' ? 'r' : P.c === 'a' ? 'a' : 'i', t: `Pendiente ${P.t.toLowerCase()} vencido hace ${-d} d: ${t.titulo}`, m: `Atraso real ${atraso(t)} d${quien} · ${t.ultimo_avance || 'sin avance'}`, go: () => verPendiente(t.id) });
+    else if (d <= 1 && t.prioridad !== 'no_critico') A.push({ n: 'a', t: `Pendiente ${P.t.toLowerCase()} ${d === 0 ? 'para hoy' : 'para mañana'}: ${t.titulo}`, m: (t.entregable || '') + quien, go: () => verPendiente(t.id) });
+    else if (t.prioridad === 'critico' && sinSeguimiento(t) >= 2) A.push({ n: 'a', t: `Pendiente crítico sin seguimiento ${sinSeguimiento(t)} d: ${t.titulo}`, m: respNom(respKey(t)), go: () => verPendiente(t.id) });
+  });
+  if (veEquipo()) equipoResp().filter(k => !String(k).startsWith('rol:') && k !== cu.id).forEach(k => { const h = new Date(); if (h.getHours() >= 20 && !yaCerre(k)) A.push({ n: 'i', t: `${nomUsr(k)} no ha cerrado su día`, m: 'Cierre del día pendiente', go: () => reporteDia() }); });
   buildRecOcurrencias(aviso).filter(o => o.estado === 'vencido' || o.estado === 'proximo').forEach(o => A.push({ n: o.estado === 'vencido' ? 'r' : 'a', t: `Recurrente ${o.estado === 'vencido' ? 'vencido' : 'por vencer'}: ${o.rec.descripcion}`, m: `${nomEnt(o.rec.entidad_id)} · ${fmtD(isoD(o.fecha))}`, go: () => goTab('rec') }));
   if (cu.rol === 'contadora' || esAdmin()) vivas().filter(f => f.revision === 'observado').forEach(f => A.push({ n: 'a', t: `Observación pendiente: ${nomEnt(f.entidad_id)}`, m: f.revision_nota || f.descripcion, go: () => verCuenta(f.id) }));
   const orden = { r: 0, a: 1, i: 2, v: 3 };
-  const modDe = a => /^Pago|^Vence/.test(a.t) ? 'cxp' : /^Cobro/.test(a.t) ? 'cxc' : /edido/.test(a.t) ? 'pedidos' : /^Factura/.test(a.t) ? 'fps' : /^Tarea/.test(a.t) ? 'tareas' : /^Recurrente/.test(a.t) ? 'recurrentes' : 'revision';
+  const modDe = a => /^Pago|^Vence/.test(a.t) ? 'cxp' : /^Cobro/.test(a.t) ? 'cxc' : /edido/.test(a.t) ? 'pedidos' : /^Factura/.test(a.t) ? 'fps' : /^Pendiente|cerrado su día/.test(a.t) ? 'tareas' : /^Recurrente/.test(a.t) ? 'recurrentes' : 'revision';
   A.splice(0, A.length, ...A.filter(a => niv(modDe(a)) >= 1));
   ALR = A.sort((a, b) => orden[a.n] - orden[b.n]);
   const urg = ALR.filter(a => a.n === 'r').length;
@@ -1018,7 +1046,7 @@ function calcAlertas() {
   bdg('nb-cxc', abiertas('ingreso').filter(f => semaforo(f) === 'r').length);
   bdg('nb-ped', PED.filter(p => p.estado === 'solicitado' && enMiSede(p)).length);
   bdg('nb-fps', fps.length);
-  bdg('nb-tar', TAR.filter(t => t.estado !== 'cumplida' && diasA(t.fecha_limite) < 0).length);
+  bdg('nb-tar', TAR.filter(t => esMia(t) && vencidaT(t) && t.prioridad !== 'no_critico').length);
   bdg('nb-rec', buildRecOcurrencias(aviso).filter(o => o.estado === 'vencido').length);
   document.title = (urg ? `(${urg}) ` : '') + 'COE Finanzas';
 }
@@ -1498,41 +1526,6 @@ function rFps() {
       : '<div class="emp"><div class="ic">✓</div><p>Lista en cero. No hay facturas por solicitar.</p></div>'}</div></div>`;
 }
 
-// ══ TAREAS ═════════════════════════════════════
-function rTareas() {
-  const mes = isoD(new Date()).slice(0, 7);
-  let L = TAR;
-  if (VIEW.tarF === 'mes') L = TAR.filter(t => String(t.fecha_limite).startsWith(mes) || (t.estado !== 'cumplida' && diasA(t.fecha_limite) < 0));
-  else if (VIEW.tarF === 'pend') L = TAR.filter(t => t.estado !== 'cumplida');
-  const est = t => t.estado === 'cumplida' ? (t.cumplida_at && String(t.cumplida_at).slice(0, 10) > t.fecha_limite ? ['a', 'Cumplida tarde'] : ['v', 'Cumplida']) : diasA(t.fecha_limite) < 0 ? ['r', 'No cumplida'] : diasA(t.fecha_limite) <= 2 ? ['a', 'Próxima'] : ['g', 'Pendiente'];
-  const chips = [['mes', 'Este mes'], ['pend', 'Pendientes'], ['todas', 'Todas']].map(([k, l]) => `<span class="chip ${VIEW.tarF === k ? 'act' : ''}" onclick="VIEW.tarF='${k}';renderTab()">${l}</span>`).join('');
-  return `<div class="ph"><div><div class="ptit">Tareas de la contadora</div><div class="psub">Cronograma con fecha límite · se cumple subiendo la evidencia y firmando con PIN</div></div>
-    <div style="display:flex;gap:8px"><button class="btn btn-s btn-sm" onclick="generarTareas()">Generar mes siguiente</button></div></div>
-  <div class="pad"><div class="tc"><div class="ttb"><div class="chips">${chips}</div></div>${L.length ? `<table><thead><tr><th>Estatus</th><th>Fecha límite</th><th>Tarea</th><th>Entregable</th><th>Cumplió</th><th></th></tr></thead><tbody>
-  ${L.map(t => { const [s, tx] = est(t); return `<tr><td><span class="sem ${s}"></span><span class="mini">${tx}</span></td><td>${fmtD(t.fecha_limite)}</td><td><b>${esc(t.titulo)}</b><div class="mini">${esc(t.descripcion || '')}</div></td><td class="mini">${esc(t.entregable || '')}</td><td class="mini">${t.cumplida_por ? esc(nomUsr(t.cumplida_por)) + '<br>' + fmtDT(t.cumplida_at) : '—'}</td><td>${t.estado === 'cumplida' ? (t.evidencia_url ? `<a class="docprev" href="${esc(t.evidencia_url)}" target="_blank">Evidencia</a>` : '') : (puede('tareas') ? `<button class="btn btn-p btn-sm" onclick="cumplirTarea('${t.id}')">Cumplir</button>` : '')}</td></tr>`; }).join('')}</tbody></table>`
-      : `<div class="emp"><div class="ic">✓</div><p>${FALTA_SQL.includes('fin_tareas') ? 'Falta correr el SQL de la Fase 1b para cargar el cronograma.' : 'Sin tareas en este filtro'}</p></div>`}</div></div>`;
-}
-async function generarTareas() {
-  const sig = new Date(); sig.setMonth(sig.getMonth() + 1);
-  const { data, error } = await sb.rpc('fin_generar_tareas', { p_mes: isoD(sig) });
-  if (error) { toast(error.message, 'error'); return; }
-  toast(`${data || 0} tareas nuevas`, 'success'); await cargarTodo();
-}
-function cumplirTarea(id) {
-  const t = TAR.find(x => x.id === id);
-  window._pgFile = null;
-  modal('Cumplir: ' + t.titulo, `<div class="mini" style="margin-bottom:10px">Entregable: <b>${esc(t.entregable || '')}</b></div>
-    <div class="drop"><input type="file" onchange="_pgFile=this.files[0];document.getElementById('tfN').textContent=this.files[0]?.name||''"><div class="big">⬆</div><div>Sube la evidencia</div><div class="mini" id="tfN"></div></div>
-    <div class="fld" style="margin-top:12px"><label>Nota</label><input type="text" id="tfNota"></div>`,
-    `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="confirmarTarea('${id}')">Firmar</button>`, 'sm');
-}
-async function confirmarTarea(id) {
-  if (!_pgFile) { toast('Sube la evidencia', 'warning'); return; }
-  let up; try { up = await subirArchivo(_pgFile, 'tareas'); } catch (e) { toast(e.message, 'error'); return; }
-  const r = await rpcFirmado('fin_tarea_cumplir', { p_tarea: id, p_evidencia: up.url, p_nota: tfNota.value }, { titulo: 'Firmar tarea cumplida' });
-  if (r) { CM('mGen'); toast('Tarea cumplida', 'success'); await cargarTodo(); }
-}
-
 // ══ RECURRENTES (lógica de la v2) ══════════════
 function calcOcurrencias(rec, diasFuturo) {
   const hoy = hoyD(), limite = new Date(hoy.getTime() + diasFuturo * 86400000), inicio = new Date(hoy.getTime() - 60 * 86400000), oc = [];
@@ -1639,48 +1632,6 @@ async function guardarRec(id, desactivar) {
   CM('mGen'); toast('Plantilla guardada', 'success'); await cargarTodo();
 }
 
-// ══ REPORTES DE CUMPLIMIENTO ═══════════════════
-function rangoPer(per) {
-  const h = hoyD(); let ini;
-  if (per === 'semanal') { ini = new Date(h); ini.setDate(h.getDate() - ((h.getDay() + 6) % 7)); }
-  else if (per === 'quincenal') ini = new Date(h.getFullYear(), h.getMonth(), h.getDate() <= 15 ? 1 : 16);
-  else ini = new Date(h.getFullYear(), h.getMonth(), 1);
-  return [isoD(ini), isoD(h)];
-}
-function datosCumplimiento(per) {
-  const [a, b] = rangoPer(per), en = d => d && String(d).slice(0, 10) >= a && String(d).slice(0, 10) <= b;
-  const tar = TAR.filter(t => en(t.fecha_limite) || (t.estado !== 'cumplida' && t.fecha_limite < a));
-  const aTiempo = tar.filter(t => t.estado === 'cumplida' && String(t.cumplida_at).slice(0, 10) <= t.fecha_limite);
-  const tarde = tar.filter(t => t.estado === 'cumplida' && String(t.cumplida_at).slice(0, 10) > t.fecha_limite);
-  const noCump = tar.filter(t => t.estado !== 'cumplida' && t.fecha_limite <= b && diasA(t.fecha_limite) < 0);
-  const fpsV = vivas().filter(f => f.factura_pendiente && diasA(f.factura_limite) < 0);
-  const cxpV = abiertas('egreso').filter(f => semaforo(f) === 'r');
-  const sinComp = ABO.filter(a2 => !a2.anulado && en(a2.fecha_pago) && !a2.comprobante_url);
-  const sinRev = vivas().filter(f => en(String(f.created_at)) && !f.revision);
-  const pag = ABO.filter(x => !x.anulado && en(x.fecha_pago));
-  return { a, b, tar, aTiempo, tarde, noCump, fpsV, cxpV, sinComp, sinRev, pag };
-}
-function rRep() {
-  const per = VIEW.repPer, d = datosCumplimiento(per);
-  const pct = d.tar.length ? Math.round(d.aTiempo.length / d.tar.length * 100) : 100;
-  const chips = [['semanal', 'Semanal'], ['quincenal', 'Quincenal'], ['mensual', 'Mensual']].map(([k, l]) => `<span class="chip ${per === k ? 'act' : ''}" onclick="VIEW.repPer='${k}';renderTab()">${l}</span>`).join('');
-  const lst = (arr, f) => arr.length ? arr.map(f).join('') : '<div class="mini">Ninguna</div>';
-  return `<div class="ph"><div><div class="ptit">Reporte de cumplimiento</div><div class="psub">Del ${fmtD(d.a)} al ${fmtD(d.b)} · qué se cumplió y qué no</div></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><div class="chips">${chips}</div><button class="btn btn-p btn-sm" onclick="imprimirCumplimiento('${per}')">🖨 Imprimir (1 página)</button></div></div>
-  <div class="pad"><div class="dg">
-    ${kpi('Cumplimiento a tiempo', pct + '%', `${d.aTiempo.length} de ${d.tar.length} tareas`, pct >= 90 ? 'var(--sc)' : pct >= 70 ? 'var(--wn)' : 'var(--dg)')}
-    ${kpi('No cumplidas', String(d.noCump.length), 'tareas vencidas sin evidencia', d.noCump.length ? 'var(--dg)' : '')}
-    ${kpi('Facturas no conseguidas', String(d.fpsV.length), 'pasado el límite', d.fpsV.length ? 'var(--dg)' : '')}
-    ${kpi('Pagos vencidos', String(d.cxpV.length), $$(d.cxpV.reduce((s, f) => s + saldo(f), 0)), d.cxpV.length ? 'var(--dg)' : '')}
-  </div>
-  <div class="cfgg">
-    <div class="cfg-section"><h3>No cumplido</h3><div class="body">${lst(d.noCump, t => `<div class="aitem r"><div><div class="at">${esc(t.titulo)}</div><div class="am">Límite ${fmtD(t.fecha_limite)}</div></div></div>`)}</div></div>
-    <div class="cfg-section"><h3>Cumplido</h3><div class="body">${lst([...d.aTiempo, ...d.tarde], t => `<div class="aitem ${d.tarde.includes(t) ? '' : 'v'}"><div><div class="at">${esc(t.titulo)}</div><div class="am">${d.tarde.includes(t) ? 'Tarde · ' : ''}${esc(nomUsr(t.cumplida_por))} · ${fmtDT(t.cumplida_at)}</div></div></div>`)}</div></div>
-    <div class="cfg-section"><h3>Facturas por solicitar vencidas</h3><div class="body">${lst(d.fpsV, f => `<div class="aitem r" onclick="verCuenta('${f.id}')"><div><div class="at">${esc(nomEnt(f.entidad_id))}</div><div class="am">${esc(f.descripcion)} · ${$$(f.monto_total)}</div></div></div>`)}</div></div>
-    <div class="cfg-section"><h3>Movimientos del periodo sin revisar</h3><div class="body">${lst(d.sinRev.slice(0, 15), f => `<div class="aitem" onclick="verCuenta('${f.id}')"><div><div class="at">${esc(nomEnt(f.entidad_id))}</div><div class="am">${esc(f.descripcion)} · ${$$(f.monto_total)}</div></div></div>`)}</div></div>
-  </div></div>`;
-}
-
 // ══ AUDITORÍA ══════════════════════════════════
 let LOGC = null;
 function rAud() {
@@ -1725,15 +1676,15 @@ function rCfg() {
 const MODS = [
   ['tablero', 'Tablero'], ['cxp', 'Por pagar y facturas'], ['cxc', 'Por cobrar'], ['ingreso', 'Ingreso diario'],
   ['pagos', 'Ejecutar pagos'], ['pedidos', 'Pedidos'], ['proveedores', 'Proveedores'], ['fps', 'Facturas por solicitar'],
-  ['tareas', 'Tareas'], ['recurrentes', 'Recurrentes'], ['revision', 'Revisión contable'], ['reportes', 'Reportes'],
+  ['tareas', 'Pendientes'], ['recurrentes', 'Recurrentes'], ['revision', 'Revisión contable'], ['reportes', 'Reportes'],
   ['auditoria', 'Auditoría'], ['config', 'Configuración']
 ];
 const NIV = ['Sin acceso', 'Ver', 'Operar', 'Autorizar'];
 function nivelRol(rol, m) {
   if (rol === 'admin') return 3;
-  if (rol === 'direccion') return m === 'pedidos' ? 3 : m === 'revision' ? 2 : m === 'config' ? 0 : 1;
+  if (rol === 'direccion') return m === 'pedidos' || m === 'tareas' ? 3 : m === 'revision' ? 2 : m === 'config' ? 0 : 1;
   if (rol === 'contadora') return ['pagos', 'ingreso', 'reportes', 'auditoria', 'tablero'].includes(m) ? 1 : m === 'config' ? 0 : 2;
-  if (rol === 'administracion') return m === 'pedidos' ? 3 : ['cxp', 'fps'].includes(m) ? 2 : m === 'proveedores' ? 1 : ['auditoria', 'config', 'pagos'].includes(m) ? 0 : 1;
+  if (rol === 'administracion') return m === 'pedidos' ? 3 : ['cxp', 'fps', 'tareas'].includes(m) ? 2 : m === 'proveedores' ? 1 : ['auditoria', 'config', 'pagos'].includes(m) ? 0 : 1;
   if (rol === 'solicitante') return m === 'pedidos' ? 2 : m === 'tablero' ? 1 : 0;
   return 1;
 }
@@ -1843,7 +1794,8 @@ function dashDirector(sel) {
       ${caja('Compromisos de pago · próximas 4 semanas', sem.map(s => `<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:12px"><span>${s.lbl}</span><b class="amt">${$$(s.cx)}</b></div>
         <div class="prog" style="height:9px"><div style="width:${Math.round(s.cx / maxB * 100)}%;background:${s.cx > s.ing && s.ing ? 'var(--dg)' : 'var(--wn)'}"></div></div>
         ${s.ing ? `<div class="prog" style="height:5px;margin-top:3px"><div style="width:${Math.round(s.ing / maxB * 100)}%;background:var(--sc)"></div></div>` : ''}${s.rc ? `<div class="mini">+ ${s.rc} recurrente(s) sin monto</div>` : ''}</div>`).join('') + `<div class="mini"><span class="cal-dot" style="background:var(--wn)"></span> por pagar <span class="cal-dot" style="background:var(--sc)"></span> ingreso estimado de cajas (promedio del mes × 6 días)</div>`)}
-      ${caja('Cumplimiento de la contadora · mes', `<div class="dval" style="color:${pct >= 90 ? 'var(--sc)' : pct >= 70 ? 'var(--wn)' : 'var(--dg)'}">${pct}%</div><div class="mini" style="margin-bottom:10px">${d.aTiempo.length} a tiempo · ${d.tarde.length} tarde · ${d.noCump.length} no cumplidas · ${d.fpsV.length} facturas no conseguidas</div>` + lista(d.noCump.slice(0, 5), t => `<div class="aitem r" onclick="goTab('tar')"><div><div class="at">${esc(t.titulo)}</div><div class="am">Venció ${fmtD(t.fecha_limite)}</div></div></div>`, 'Sin incumplimientos'), `<button class="btn btn-s btn-sm" onclick="goTab('rep')">Reporte</button>`)}
+      ${caja('Equipo hoy', (() => { const F = equipoResp().map(k => filaEquipo(k, hoyISO())); return F.length ? `<table><thead><tr><th>Responsable</th><th style="text-align:right">Venc.</th><th style="text-align:right">Críticos</th><th style="text-align:right">Atraso</th><th>Día</th></tr></thead><tbody>${F.map(f => `<tr style="cursor:pointer" onclick="VIEW.pAmb='equipo';VIEW.pResp='${f.k}';goTab('tar')"><td>${esc(f.nombre)}</td><td style="text-align:right">${f.vencidos}</td><td style="text-align:right;${f.criticos ? 'color:var(--dg);font-weight:800' : ''}">${f.criticos}</td><td style="text-align:right">${f.prom} d</td><td>${f.esDir ? '' : f.cierre ? '<span class="bdg bdg-apr">cerrado</span>' : '<span class="bdg bdg-pnd">abierto</span>'}</td></tr>`).join('')}</tbody></table>` : '<div class="mini">Sin pendientes asignados</div>'; })() + `<div class="mini" style="margin-top:10px">Cumplimiento a tiempo del mes: <b style="color:${pct >= 90 ? 'var(--sc)' : pct >= 70 ? 'var(--wn)' : 'var(--dg)'}">${pct}%</b> · ${d.noCump.length} no cumplidos</div>`, `<div style="display:flex;gap:6px"><button class="btn btn-s btn-sm" onclick="reporteDia()">Reporte del día</button><button class="btn btn-s btn-sm" onclick="goTab('rep')">Desempeño</button></div>`)}
+      ${caja('Críticos vencidos del equipo', lista(TAR.filter(t => vencidaT(t) && t.prioridad === 'critico').sort(ordenPend).slice(0, 6), t => `<div class="aitem r" onclick="verPendiente('${t.id}')"><div><div class="at">${esc(t.titulo)}</div><div class="am">${esc(respNom(respKey(t)))} · atraso ${atraso(t)} d · ${esc(t.ultimo_avance || 'sin avance')}</div></div></div>`, 'Sin críticos vencidos'), puede('tareas') ? `<button class="btn btn-s btn-sm" onclick="nuevoPendiente()">+ Asignar</button>` : '')}
       ${caja('Mayores saldos por proveedor', topProv.length ? `<table><tbody>${topProv.map(([e, s]) => `<tr><td>${esc(nomEnt(e))}</td><td class="amt" style="text-align:right">${$$(s)}</td></tr>`).join('')}</tbody></table>` : '<div class="mini">Sin saldos</div>')}
       ${caja('Caja y observaciones', `<div class="kv"><b>Último cierre</b><div>${ult ? fmtD(ult.fecha) + ' · ' + $$(ult.corte_total) + (Math.abs(num(ult.diferencia)) > 0.5 ? ' · <span style="color:var(--dg)">diferencia ' + $$(ult.diferencia) + '</span>' : '') : 'Sin cierres aún'}</div><b>Ingreso de cajas (mes)</b><div>${$$(cajaMes.reduce((s, c) => s + num(c.corte_total), 0))}</div><b>Observaciones abiertas</b><div>${obs.length}</div></div>` + lista(obs.slice(0, 4), f => `<div class="aitem" onclick="verCuenta('${f.id}')"><div><div class="at">${esc(nomEnt(f.entidad_id))}</div><div class="am">${esc(f.revision_nota || '')}</div></div></div>`, 'Sin observaciones'))}
     </div></div>`;
@@ -1852,7 +1804,8 @@ function dashDirector(sel) {
 // ── Contadora ──
 function dashContadora(sel) {
   const hoy = isoD(new Date()), finMes = isoD(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0));
-  const tarV = TAR.filter(t => t.estado !== 'cumplida' && t.fecha_limite < hoy), tarH = TAR.filter(t => t.estado !== 'cumplida' && t.fecha_limite >= hoy && diasA(t.fecha_limite) <= 7);
+  const misP = TAR.filter(t => esMia(t) && abiertaT(t)).sort(ordenPend);
+  const tarV = misP.filter(vencidaT), tarH = misP.filter(t => !vencidaT(t) && diasA(t.fecha_limite) <= 7);
   const fps = vivas().filter(f => f.factura_pendiente);
   const hace60 = isoD(new Date(Date.now() - 60 * 86400000));
   const sinRev = vivas().filter(f => !f.revision && String(f.created_at || '').slice(0, 10) >= hace60);
@@ -1863,15 +1816,15 @@ function dashContadora(sel) {
   const cobV = abiertas('ingreso').filter(f => semaforo(f) === 'r');
   const d = datosCumplimiento('mensual'), pct = d.tar.length ? Math.round(d.aTiempo.length / d.tar.length * 100) : 100;
   window._pp = new Set();
-  return cabDash('Mi día · Contadora', `faltan ${diasA(finMes)} días para fin de mes`, sel + (puede('cxp') ? `<button class="btn btn-p btn-sm" onclick="openUpload()">⬆ Subir documento</button>` : '')) + `<div class="pad">
+  return cabDash('Mi día · Contadora', `faltan ${diasA(finMes)} días para fin de mes`, sel + botonCierre() + (puede('cxp') ? `<button class="btn btn-p btn-sm" onclick="openUpload()">⬆ Subir documento</button>` : '')) + `<div class="pad">
     <div class="dg">
-      ${kpi('Tareas vencidas', String(tarV.length), `${tarH.length} en los próximos 7 días`, tarV.length ? 'var(--dg)' : 'var(--sc)', "goTab('tar')")}
+      ${kpi('Pendientes vencidos', String(tarV.length), `${tarV.filter(t => t.prioridad === 'critico').length} críticos · ${tarH.length} próximos 7 días`, tarV.length ? 'var(--dg)' : 'var(--sc)', "goTab('tar')")}
       ${kpi('Facturas por solicitar', String(fps.length), `límite ${fmtD(finMes)}`, fps.length ? 'var(--wn)' : 'var(--sc)', "goTab('fps')")}
       ${kpi('Por revisar', String(sinRev.length), 'movimientos de 60 días sin revisión', sinRev.length ? 'var(--wn)' : '')}
       ${kpi('Mi cumplimiento', pct + '%', `${d.aTiempo.length} de ${d.tar.length} a tiempo este mes`, pct >= 90 ? 'var(--sc)' : 'var(--wn)', "goTab('rep')")}
     </div>
     <div class="cfgg">
-      ${caja('Mis tareas', lista([...tarV, ...tarH], t => `<div class="aitem ${t.fecha_limite < hoy ? 'r' : 'a'}"><div style="flex:1"><div class="at">${esc(t.titulo)}</div><div class="am">${t.fecha_limite < hoy ? 'Venció' : 'Vence'} ${fmtD(t.fecha_limite)} · ${esc(t.entregable || '')}</div></div>${puede('tareas') ? `<button class="btn btn-p btn-sm" onclick="cumplirTarea('${t.id}')">Cumplir</button>` : ''}</div>`, 'Tareas al día'))}
+      ${cajaMisPendientes()}
       ${caja(`Armar propuesta de pagos (${porProp.length})`, porProp.length ? `<div class="mini" style="margin-bottom:8px">Vencen en los próximos 10 días. Marca las que propones pagar y la fecha; el Director las ve en su tablero.</div>
         ${porProp.map(f => `<label class="opt"><input type="checkbox" onchange="this.checked?_pp.add('${f.id}'):_pp.delete('${f.id}')"><span style="flex:1"><b>${esc(nomEnt(f.entidad_id))}</b> · ${$$(saldo(f))}<br><span class="mini">${esc(f.descripcion)} · vence ${fmtD(f.fecha_vencimiento)} ${docsDe(f)}</span></span></label>`).join('')}
         <div style="display:flex;gap:8px;margin-top:10px;align-items:center"><input type="date" id="ppF" value="${hoy}" style="max-width:170px"><button class="btn btn-p btn-sm" onclick="proponer()">Firmar propuesta</button></div>` : '<div class="mini">✓ Nada por vencer sin proponer</div>')}
@@ -1906,7 +1859,7 @@ function dashSede(sel) {
   const deSede = r => (DASH_VER && esAdmin()) ? r.sede === 'Morelia' : enMiSede(r);
   const pAut = PED.filter(p => deSede(p) && p.estado === 'solicitado'), pTr = PED.filter(p => deSede(p) && ['autorizado', 'enviado'].includes(p.estado)), pRec = PED.filter(p => deSede(p) && p.estado === 'recibido');
   const cxp = abiertas('egreso').filter(deSede), fps = vivas().filter(f => f.factura_pendiente && deSede(f));
-  return cabDash('Tablero de Administración · ' + esc(sede), 'pedidos, cuentas y facturas de la sede', sel + (puede('pedidos') ? `<button class="btn btn-p btn-sm" onclick="nuevoPedido()">+ Pedido</button>` : '')) + `<div class="pad">
+  return cabDash('Tablero de Administración · ' + esc(sede), 'pedidos, cuentas y facturas de la sede', sel + botonCierre() + (puede('pedidos') ? `<button class="btn btn-p btn-sm" onclick="nuevoPedido()">+ Pedido</button>` : '')) + `<div class="pad">
     <div class="dg">
       ${kpi('Por autorizar', String(pAut.length), `${pAut.filter(p => p.urgente).length} urgentes`, pAut.length ? 'var(--wn)' : '', "goTab('ped')")}
       ${kpi('En tránsito', String(pTr.length), 'autorizados o enviados', '', "goTab('ped')")}
@@ -1914,6 +1867,7 @@ function dashSede(sel) {
       ${kpi('Facturas por solicitar', String(fps.length), 'de la sede', fps.length ? 'var(--wn)' : '', "goTab('fps')")}
     </div>
     <div class="cfgg">
+      ${cajaMisPendientes()}
       ${caja('Pedidos por autorizar', lista(pAut, p => `<div class="aitem ${p.urgente ? 'r' : 'i'}" onclick="verPedido('${p.id}')"><div style="flex:1"><div class="at">${p.urgente ? 'URGENTE · ' : ''}${esc(p.folio)} · ${$$(p.monto_estimado)}</div><div class="am">${esc(p.area)} · ${esc(p.descripcion)}${p.monto_estimado > limiteFirma() ? ' · requiere firma del Director' : ''}</div></div></div>`))}
       ${caja('Pedidos en tránsito', lista(pTr, p => `<div class="aitem" onclick="verPedido('${p.id}')"><div><div class="at">${esc(p.folio)} · ${esc(nomEnt(p.entidad_id))}</div><div class="am">${PED_EST[p.estado][0]} · ${esc(p.descripcion)}${p.fecha_requerida ? ' · requerido ' + fmtD(p.fecha_requerida) : ''}</div></div></div>`))}
       ${caja('Recibidos sin factura', lista(pRec, p => `<div class="aitem a" onclick="verPedido('${p.id}')"><div><div class="at">${esc(p.folio)} · ${esc(nomEnt(p.entidad_id))}</div><div class="am">Recibido ${fmtDT(p.recibido_at)} · sube el XML y PDF</div></div></div>`))}
@@ -1925,6 +1879,375 @@ function dashSede(sel) {
 function dashSolicitante(sel) {
   const mios = PED.filter(p => p.solicitado_por === cu.id || (esAdmin() && DASH_VER));
   return cabDash('Mis pedidos', 'solicita y da seguimiento', sel + `<button class="btn btn-p btn-sm" onclick="nuevoPedido()">+ Nuevo pedido</button>`) + `<div class="pad"><div class="tc">${mios.length ? `<table><thead><tr><th>Folio</th><th>Descripción</th><th>Estado</th><th>Solicitado</th><th>Requerido</th></tr></thead><tbody>${mios.map(p => `<tr style="cursor:pointer" onclick="verPedido('${p.id}')"><td><b>${esc(p.folio)}</b>${p.urgente ? ' <span class="bdg bdg-rt-r">URGENTE</span>' : ''}</td><td>${esc(p.descripcion)}</td><td><span class="bdg ${PED_EST[p.estado]?.[1] || ''}">${PED_EST[p.estado]?.[0] || esc(p.estado)}</span>${p.rechazo_motivo ? `<div class="mini">${esc(p.rechazo_motivo)}</div>` : ''}</td><td class="mini">${fmtDT(p.solicitado_at)}</td><td>${fmtD(p.fecha_requerida)}</td></tr>`).join('')}</tbody></table>` : '<div class="emp"><div class="ic">⬡</div><p>Aún no tienes pedidos</p></div>'}</div></div>`;
+}
+
+function botonCierre() {
+  if (!puede('tareas') || esAdmin()) return '';
+  const c = yaCerre();
+  return c ? `<span class="bdg bdg-apr">Día cerrado ${fmtDT(c.created_at).slice(-5)}</span>` : `<button class="btn btn-w btn-sm" onclick="cerrarDia()">Cerrar mi día</button>`;
+}
+function cajaMisPendientes() {
+  const mis = TAR.filter(t => esMia(t) && abiertaT(t)).sort(ordenPend);
+  return caja(`Mis pendientes (${mis.length})`, lista(mis.slice(0, 8), t => `<div class="aitem ${vencidaT(t) ? (t.prioridad === 'critico' ? 'r' : 'a') : ''}" onclick="verPendiente('${t.id}')"><div style="flex:1"><div class="at">${priBdg(t.prioridad)} ${esc(t.titulo)}</div><div class="am">${vencidaT(t) ? 'Venció' : 'Vence'} ${fmtD(t.fecha_limite)} ${atraso(t) ? '· atraso ' + atraso(t) + ' d ' : ''}· ${estBdg(t.estado)}</div></div>${puede('tareas') ? `<button class="btn btn-s btn-sm" onclick="event.stopPropagation();avancePendiente('${t.id}')">Avance</button>` : ''}</div>`, 'Sin pendientes abiertos'),
+    `<div style="display:flex;gap:6px">${puede('tareas') ? `<button class="btn btn-s btn-sm" onclick="nuevoPendiente()">+</button>` : ''}<button class="btn btn-s btn-sm" onclick="VIEW.pAmb='mios';goTab('tar')">Ver todos</button></div>`);
+}
+
+// ══ PENDIENTES: prioridad, seguimiento, retrasos y cierre del día ══
+const PRI = {
+  critico: { t: 'Crítico', c: 'r', w: 0, d: 'Afecta dinero, obligaciones fiscales o legales, o detiene la operación. Se atiende hoy.', plazo: 0 },
+  moderado: { t: 'Moderado', c: 'a', w: 1, d: 'Importante y con fecha, pero no detiene la operación.', plazo: 3 },
+  no_critico: { t: 'No crítico', c: 'g', w: 2, d: 'Mejora o trámite sin consecuencia inmediata.', plazo: 7 },
+};
+const EST_T = { pendiente: ['Pendiente', 'bdg-pnd'], en_proceso: ['En proceso', 'bdg-pro'], bloqueado: ['Bloqueado', 'bdg-ven'], cumplida: ['Cumplida', 'bdg-apr'], cancelada: ['Cancelada', 'bdg-arc'] };
+const CATS_PEND = ['Contable', 'Fiscal', 'Proveedores', 'Cobranza', 'Compras', 'Bancos', 'Administrativo', 'Personal', 'Mantenimiento', 'Cronograma contable', 'Otro'];
+let AVA = [], CJ = [];
+const abiertaT = t => !['cumplida', 'cancelada'].includes(t.estado);
+const fOrig = t => t.fecha_limite_original || t.fecha_limite;
+const diasEntre = (a, b) => Math.round((new Date(String(b).slice(0, 10) + 'T00:00:00') - new Date(String(a).slice(0, 10) + 'T00:00:00')) / 86400000);
+// Atraso real: contra la fecha original, aunque se haya reprogramado
+function atraso(t) {
+  if (t.estado === 'cancelada') return 0;
+  if (t.estado === 'cumplida') return Math.max(0, diasEntre(fOrig(t), t.cumplida_at || fOrig(t)));
+  return Math.max(0, -diasA(fOrig(t)));
+}
+const vencidaT = t => abiertaT(t) && diasA(t.fecha_limite) < 0;
+const sinSeguimiento = t => abiertaT(t) ? Math.floor((Date.now() - new Date(t.ultimo_avance_at || t.created_at || Date.now())) / 86400000) : 0;
+const respKey = t => t.responsable_id || 'rol:' + (t.responsable_rol || 'contadora');
+function respNom(k) {
+  if (!k) return '—';
+  if (!String(k).startsWith('rol:')) return nomUsr(k);
+  const rol = k.slice(4), us = USR.filter(u => u.activo !== false && u.rol === rol);
+  return us.length === 1 ? us[0].nombre : (ROLES[rol] || rol);
+}
+const esMia = t => t.responsable_id === cu.id || (!t.responsable_id && t.responsable_rol === cu.rol);
+const veEquipo = () => niv('tareas') >= 3 || ['admin', 'direccion'].includes(cu.rol);
+function ordenPend(a, b) {
+  const k = t => [abiertaT(t) ? 0 : 1, vencidaT(t) ? 0 : 1, (PRI[t.prioridad] || PRI.moderado).w, -atraso(t), String(t.fecha_limite)];
+  const x = k(a), y = k(b);
+  for (let i = 0; i < x.length; i++) { if (x[i] < y[i]) return -1; if (x[i] > y[i]) return 1; }
+  return 0;
+}
+const priBdg = p => { const P = PRI[p] || PRI.moderado; return `<span class="pri ${P.c}">${P.t}</span>`; };
+const estBdg = e => `<span class="bdg ${(EST_T[e] || ['', ''])[1]}">${(EST_T[e] || [e])[0]}</span>`;
+function atrasoBdg(t) {
+  const d = atraso(t);
+  if (!d) return '<span class="mini">—</span>';
+  const cls = d > 30 ? 'cron' : d > 7 ? 'r' : d > 2 ? 'o' : 'a';
+  return `<span class="atr ${cls}" title="Contra la fecha original ${fmtD(fOrig(t))}">${d} d${d > 30 ? ' · crónico' : ''}</span>`;
+}
+const hoyISO = () => isoD(new Date());
+const yaCerre = (uid = cu.id, f = hoyISO()) => CJ.find(c => c.usuario_id === uid && c.fecha === f);
+
+// ── Lista ──
+VIEW.pAmb = 'mios'; VIEW.pEst = 'abiertos'; VIEW.pPri = ''; VIEW.pResp = ''; VIEW.pQ = '';
+function rTareas() {
+  if (!veEquipo()) VIEW.pAmb = 'mios';
+  let L = TAR.slice();
+  if (VIEW.pAmb === 'mios') L = L.filter(esMia);
+  else if (VIEW.pResp) L = L.filter(t => respKey(t) === VIEW.pResp);
+  const base = L;
+  if (VIEW.pEst === 'abiertos') L = L.filter(abiertaT);
+  else if (VIEW.pEst === 'vencidos') L = L.filter(vencidaT);
+  else if (VIEW.pEst === 'bloqueado') L = L.filter(t => t.estado === 'bloqueado');
+  else if (VIEW.pEst === 'cumplida') L = L.filter(t => t.estado === 'cumplida').sort((a, b) => String(b.cumplida_at).localeCompare(String(a.cumplida_at))).slice(0, 150);
+  if (VIEW.pPri) L = L.filter(t => t.prioridad === VIEW.pPri);
+  const qq = normTx(VIEW.pQ); if (qq) L = L.filter(t => normTx(t.titulo + ' ' + (t.descripcion || '') + ' ' + (t.categoria || '') + ' ' + respNom(respKey(t))).includes(qq));
+  if (VIEW.pEst !== 'cumplida') L.sort(ordenPend);
+  const ab = base.filter(abiertaT), ven = base.filter(vencidaT), crit = ven.filter(t => t.prioridad === 'critico');
+  const conAtr = base.filter(t => atraso(t) > 0 && abiertaT(t)), prom = conAtr.length ? Math.round(conAtr.reduce((s, t) => s + atraso(t), 0) / conAtr.length) : 0;
+  const cumpHoy = base.filter(t => t.estado === 'cumplida' && String(t.cumplida_at || '').slice(0, 10) === hoyISO());
+  const chip = (v, k, l) => `<span class="chip ${VIEW[v] === k ? 'act' : ''}" onclick="VIEW.${v}='${k}';renderTab()">${l}</span>`;
+  const resps = [...new Set(TAR.map(respKey))];
+  return `<div class="ph"><div><div class="ptit">Pendientes</div><div class="psub">Ordenados por prioridad y atraso · el atraso se mide contra la fecha original, aunque se reprograme</div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${puede('tareas') ? `<button class="btn btn-p btn-sm" onclick="nuevoPendiente()">+ Nuevo pendiente</button>` : ''}
+    ${puede('tareas') && !esAdmin() ? (yaCerre() ? `<span class="bdg bdg-apr" style="align-self:center">Día cerrado ${fmtDT(yaCerre().created_at).slice(-5)}</span>` : `<button class="btn btn-w btn-sm" onclick="cerrarDia()">Cerrar mi día</button>`) : ''}
+    ${veEquipo() ? `<button class="btn btn-s btn-sm" onclick="reporteDia()">Reporte del día</button>` : ''}</div></div>
+  <div class="pad">
+    <div class="dg">
+      ${kpi('Críticos vencidos', String(crit.length), crit.length ? 'atender hoy' : 'ninguno', crit.length ? 'var(--dg)' : 'var(--sc)', "VIEW.pEst='vencidos';VIEW.pPri='critico';renderTab()")}
+      ${kpi('Vencidos', String(ven.length), `de ${ab.length} abiertos`, ven.length ? 'var(--wn)' : '', "VIEW.pEst='vencidos';VIEW.pPri='';renderTab()")}
+      ${kpi('Atraso promedio', prom + ' días', `${conAtr.length} con atraso`, prom > 7 ? 'var(--dg)' : prom > 2 ? 'var(--wn)' : '')}
+      ${kpi('Cumplidos hoy', String(cumpHoy.length), base.filter(t => t.estado === 'bloqueado').length + ' bloqueados', '', "VIEW.pEst='cumplida';renderTab()")}
+    </div>
+    <div class="tc"><div class="ttb" style="gap:10px">
+      ${veEquipo() ? `<div class="chips">${chip('pAmb', 'mios', 'Mis pendientes')}${chip('pAmb', 'equipo', 'Equipo')}</div>` : ''}
+      ${VIEW.pAmb === 'equipo' ? `<select class="fsel" onchange="VIEW.pResp=this.value;renderTab()"><option value="">Todos los responsables</option>${resps.map(k => `<option value="${k}" ${VIEW.pResp === k ? 'selected' : ''}>${esc(respNom(k))}</option>`).join('')}</select>` : ''}
+      <div class="chips">${chip('pEst', 'abiertos', 'Abiertos')}${chip('pEst', 'vencidos', 'Vencidos')}${chip('pEst', 'bloqueado', 'Bloqueados')}${chip('pEst', 'cumplida', 'Cumplidos')}${chip('pEst', 'todos', 'Todos')}</div>
+      <div class="chips">${chip('pPri', '', 'Toda prioridad')}${chip('pPri', 'critico', '● Crítico')}${chip('pPri', 'moderado', '● Moderado')}${chip('pPri', 'no_critico', '● No crítico')}</div>
+      <input class="sbox" placeholder="Buscar" value="${esc(VIEW.pQ)}" onchange="VIEW.pQ=this.value;renderTab()" style="max-width:220px">
+    </div>
+    ${L.length ? `<table><thead><tr><th>Prioridad</th><th>Pendiente</th>${VIEW.pAmb === 'equipo' ? '<th>Responsable</th>' : ''}<th>Vence</th><th>Atraso</th><th>Estatus</th><th>Último avance</th><th></th></tr></thead><tbody>
+    ${L.map(t => { const ss = sinSeguimiento(t), dv = diasA(t.fecha_limite); return `<tr style="cursor:pointer" onclick="verPendiente('${t.id}')">
+      <td>${priBdg(t.prioridad)}</td>
+      <td><b>${esc(t.titulo)}</b><div class="mini">${esc(t.categoria || '')}${t.reprogramaciones ? ` · reprogramado ${t.reprogramaciones}×` : ''}${t.origen === 'cronograma' ? ' · cronograma' : ''}</div></td>
+      ${VIEW.pAmb === 'equipo' ? `<td>${esc(respNom(respKey(t)))}</td>` : ''}
+      <td>${fmtD(t.fecha_limite)}${abiertaT(t) ? `<div class="mini" style="${dv < 0 ? 'color:var(--dg)' : ''}">${dv < 0 ? 'venció hace ' + -dv + ' d' : dv === 0 ? 'hoy' : 'en ' + dv + ' d'}</div>` : ''}</td>
+      <td>${atrasoBdg(t)}</td>
+      <td>${estBdg(t.estado)}</td>
+      <td class="mini">${t.ultimo_avance ? esc(String(t.ultimo_avance).slice(0, 60)) + '<br>' : ''}${t.ultimo_avance_at ? fmtDT(t.ultimo_avance_at) : ''}${abiertaT(t) && ss >= 3 ? `<div style="color:var(--or)">sin seguimiento ${ss} d</div>` : ''}</td>
+      <td onclick="event.stopPropagation()">${abiertaT(t) && puede('tareas') ? `<div class="rowact"><button class="btn btn-s btn-sm" onclick="avancePendiente('${t.id}')">Avance</button><button class="btn btn-p btn-sm" onclick="cumplirTarea('${t.id}')">Cumplir</button></div>` : ''}</td></tr>`; }).join('')}</tbody></table>`
+      : `<div class="emp"><div class="ic">✓</div><p>Sin pendientes en este filtro</p></div>`}</div></div>`;
+}
+
+// ── Detalle con bitácora ──
+function verPendiente(id) {
+  const t = TAR.find(x => x.id === id); if (!t) return;
+  const av = AVA.filter(a => a.tarea_id === id).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+  const linea = a => {
+    const txt = { creacion: 'Creado', avance: 'Avance', estado: `Estatus: ${(EST_T[a.estado_ant] || [a.estado_ant || '—'])[0]} → ${(EST_T[a.estado_nuevo] || [a.estado_nuevo])[0]}`, reprogramacion: `Reprogramado: ${fmtD(a.fecha_ant)} → ${fmtD(a.fecha_nueva)}`, cumplida: 'Cumplido', prioridad: 'Prioridad' }[a.tipo] || a.tipo;
+    const cls = a.tipo === 'cumplida' ? 'done' : a.tipo === 'reprogramacion' ? 'warn' : a.estado_nuevo === 'bloqueado' ? 'fail' : 'act';
+    return `<div class="tl-row ${cls}"><div class="tl-lbl">${esc(txt)}</div><div class="tl-meta">${fmtDT(a.created_at)} · ${esc(nomUsr(a.usuario_id))}${a.nota ? ' — ' + esc(a.nota) : ''}${a.evidencia_url ? ` · <a href="${esc(a.evidencia_url)}" target="_blank" style="color:var(--pr)">evidencia</a>` : ''}</div></div>`;
+  };
+  const b = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">${priBdg(t.prioridad)} ${estBdg(t.estado)} ${atrasoBdg(t)}</div>
+  <div class="kv">
+    <b>Pendiente</b><div><b>${esc(t.titulo)}</b>${t.descripcion ? `<div class="mini">${esc(t.descripcion)}</div>` : ''}</div>
+    <b>Responsable</b><div>${esc(respNom(respKey(t)))}${t.creada_por && t.creada_por !== t.responsable_id ? ` <span class="mini">· asignó ${esc(nomUsr(t.creada_por))}</span>` : ''}</div>
+    <b>Categoría</b><div>${esc(t.categoria || '—')}${t.sede ? ' · ' + esc(t.sede) : ''}</div>
+    <b>Entregable</b><div>${esc(t.entregable || '—')}</div>
+    <b>Fechas</b><div>Vence ${fmtD(t.fecha_limite)}${t.fecha_limite_original && t.fecha_limite_original !== t.fecha_limite ? ` · original ${fmtD(t.fecha_limite_original)} · ${t.reprogramaciones || 0} reprogramación(es)` : ''}${t.cumplida_at ? ' · cumplido ' + fmtDT(t.cumplida_at) : ''}</div>
+    ${t.evidencia_url ? `<b>Evidencia</b><div><a class="docprev" href="${esc(t.evidencia_url)}" target="_blank">Ver</a></div>` : ''}
+  </div>
+  <h4 style="margin:18px 0 4px">Seguimiento</h4>
+  ${av.length ? `<div class="tl-vert">${av.map(linea).join('')}</div>` : '<div class="mini">Sin movimientos registrados</div>'}`;
+  const ft = abiertaT(t) && puede('tareas') ? `<button class="btn btn-s" onclick="avancePendiente('${id}')">Registrar avance</button><button class="btn btn-s" onclick="avancePendiente('${id}','reprogramar')">Reprogramar</button><button class="btn btn-p" onclick="cumplirTarea('${id}')">Cumplir</button>` : '';
+  modal('Pendiente', b, ft, 'lg');
+}
+
+// ── Nuevo pendiente ──
+function nuevoPendiente() {
+  const asigna = niv('tareas') >= 3;
+  const resp = USR.filter(u => u.activo !== false && niv('tareas', u) >= 2);
+  window._np = 'moderado';
+  modal('Nuevo pendiente', `<div class="fgrd">
+    <div class="fgrp sp2"><label>¿Qué hay que hacer?</label><input type="text" id="npT" placeholder="Ej. Conseguir factura de Coinsar de septiembre"></div>
+    <div class="fgrp sp2"><label>Detalle (opcional)</label><textarea id="npD" style="min-height:56px"></textarea></div>
+    <div class="fgrp sp2"><label>Prioridad</label>${Object.entries(PRI).map(([k, P]) => `<label class="opt ${k === 'moderado' ? 'sel' : ''}" onclick="document.querySelectorAll('.optp').forEach(e=>e.classList.remove('sel'));this.classList.add('sel');_np='${k}';npF.value=isoD(new Date(Date.now()+${P.plazo}*864e5))" style="margin-top:6px" data-k="${k}"><input type="radio" name="npP" ${k === 'moderado' ? 'checked' : ''}><span>${priBdg(k)} <span class="mini">${P.d}</span></span></label>`).join('').replace(/class="opt /g, 'class="opt optp ')}</div>
+    <div class="fgrp"><label>Fecha límite</label><input type="date" id="npF" value="${isoD(new Date(Date.now() + 3 * 864e5))}"></div>
+    <div class="fgrp"><label>Categoría</label><select id="npC">${CATS_PEND.filter(c => c !== 'Cronograma contable').map(c => `<option>${c}</option>`).join('')}</select></div>
+    <div class="fgrp"><label>Responsable</label><select id="npR" ${asigna ? '' : 'disabled'}>${(asigna ? resp : [USR.find(u => u.id === cu.id) || cu]).map(u => `<option value="${u.id}" ${u.id === cu.id ? 'selected' : ''}>${esc(u.nombre)}${u.rol ? ' · ' + esc(ROLES[u.rol] || u.rol) : ''}</option>`).join('')}</select></div>
+    <div class="fgrp"><label>Entregable (opcional)</label><input type="text" id="npE" placeholder="Ej. XML y PDF en el sistema"></div>
+  </div>`, `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="guardarPendiente()">Firmar y crear</button>`);
+}
+async function guardarPendiente() {
+  const d = { titulo: npT.value.trim(), descripcion: npD.value.trim(), prioridad: _np, fecha_limite: npF.value, categoria: npC.value, responsable_id: npR.value, entregable: npE.value.trim(), sede: cu.sede || '' };
+  if (!d.titulo) { toast('Escribe qué hay que hacer', 'warning'); return; }
+  const r = await rpcFirmado('fin_tarea_crear', { p_datos: d }, { titulo: 'Firmar nuevo pendiente', sub: `${PRI[d.prioridad].t} · ${fmtD(d.fecha_limite)}` });
+  if (r) { CM('mGen'); toast('Pendiente creado', 'success'); await cargarTodo(); }
+}
+
+// ── Avance / estatus / reprogramación ──
+function avancePendiente(id, modo) {
+  const t = TAR.find(x => x.id === id), dir = niv('tareas') >= 3;
+  window._pgFile = null;
+  modal((modo === 'reprogramar' ? 'Reprogramar: ' : 'Avance: ') + t.titulo, `
+    <div class="fld"><label>${modo === 'reprogramar' ? 'Motivo de la reprogramación' : 'Qué se hizo / situación actual'}</label><textarea id="avN" style="min-height:70px"></textarea></div>
+    <div class="fgrd">
+      <div class="fgrp"><label>Estatus</label><select id="avE"><option value="">Sin cambio (${(EST_T[t.estado] || [t.estado])[0]})</option><option value="en_proceso">En proceso</option><option value="bloqueado">Bloqueado (requiere motivo)</option><option value="pendiente">Pendiente</option>${dir ? '<option value="cancelada">Cancelar (requiere motivo)</option>' : ''}</select></div>
+      <div class="fgrp"><label>Nueva fecha límite ${modo === 'reprogramar' ? '' : '(opcional)'}</label><input type="date" id="avF" value="${modo === 'reprogramar' ? isoD(new Date(Date.now() + 2 * 864e5)) : ''}"></div>
+      ${dir ? `<div class="fgrp"><label>Prioridad</label><select id="avP"><option value="">Sin cambio (${PRI[t.prioridad]?.t || ''})</option>${Object.entries(PRI).map(([k, P]) => `<option value="${k}">${P.t}</option>`).join('')}</select></div>` : ''}
+      <div class="fgrp"><label>Evidencia (opcional)</label><input type="file" onchange="_pgFile=this.files[0]"></div>
+    </div>
+    <div class="mini" style="margin-top:8px">Reprogramar no borra el atraso: se sigue midiendo contra la fecha original (${fmtD(fOrig(t))}) y queda contado en el reporte.</div>`,
+    `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="guardarAvance('${id}')">Firmar</button>`);
+}
+async function guardarAvance(id) {
+  const d = { nota: avN.value.trim(), estado: avE.value, fecha_nueva: avF.value, prioridad: document.getElementById('avP')?.value || '' };
+  if (!d.nota && !d.estado && !d.fecha_nueva && !d.prioridad) { toast('Escribe el avance', 'warning'); return; }
+  if ((d.estado === 'bloqueado' || d.estado === 'cancelada' || d.fecha_nueva) && !d.nota) { toast('Escribe el motivo', 'warning'); return; }
+  if (_pgFile) { try { d.evidencia_url = (await subirArchivo(_pgFile, 'tareas')).url; } catch (e) { toast(e.message, 'error'); return; } }
+  const r = await rpcFirmado('fin_tarea_avance', { p_tarea: id, p_datos: d }, { titulo: 'Firmar seguimiento' });
+  if (r) { CM('mGen'); toast('Seguimiento registrado', 'success'); await cargarTodo(); }
+}
+function cumplirTarea(id) {
+  const t = TAR.find(x => x.id === id);
+  window._pgFile = null;
+  modal('Cumplir: ' + t.titulo, `${t.entregable ? `<div class="mini" style="margin-bottom:10px">Entregable: <b>${esc(t.entregable)}</b></div>` : ''}
+    <div class="drop"><input type="file" onchange="_pgFile=this.files[0];document.getElementById('tfN').textContent=this.files[0]?.name||''"><div class="big">⬆</div><div>Evidencia</div><div class="mini" id="tfN">Archivo o foto · si no hay, describe abajo cómo se resolvió</div></div>
+    <div class="fld" style="margin-top:12px"><label>Cómo se resolvió</label><input type="text" id="tfNota"></div>`,
+    `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="confirmarTarea('${id}')">Firmar cumplido</button>`, 'sm');
+}
+async function confirmarTarea(id) {
+  const nota = tfNota.value.trim();
+  if (!_pgFile && !nota) { toast('Sube la evidencia o describe cómo se resolvió', 'warning'); return; }
+  let url = '';
+  if (_pgFile) { try { url = (await subirArchivo(_pgFile, 'tareas')).url; } catch (e) { toast(e.message, 'error'); return; } }
+  const r = await rpcFirmado('fin_tarea_cumplir', { p_tarea: id, p_evidencia: url, p_nota: nota }, { titulo: 'Firmar pendiente cumplido' });
+  if (r) { CM('mGen'); toast('Pendiente cumplido', 'success'); await cargarTodo(); }
+}
+async function generarTareas() {
+  const sig = new Date(); sig.setMonth(sig.getMonth() + 1);
+  const { data, error } = await sb.rpc('fin_generar_tareas', { p_mes: isoD(sig) });
+  if (error) { toast(error.message, 'error'); return; }
+  toast(`${data || 0} pendientes del cronograma`, 'success'); await cargarTodo();
+}
+
+// ── Cierre del día ──
+function actividadDia(uid, fecha) {
+  const del = a => a.usuario_id === uid && String(a.created_at).slice(0, 10) === fecha;
+  const mios = TAR.filter(t => t.responsable_id === uid || (!t.responsable_id && USR.find(u => u.id === uid)?.rol === t.responsable_rol));
+  const avs = AVA.filter(del);
+  return {
+    cumplidos: avs.filter(a => a.tipo === 'cumplida').map(a => TAR.find(t => t.id === a.tarea_id)).filter(Boolean),
+    avances: avs.filter(a => a.tipo === 'avance' || a.tipo === 'estado'),
+    reprog: avs.filter(a => a.tipo === 'reprogramacion'),
+    nuevos: avs.filter(a => a.tipo === 'creacion'),
+    vencidos: mios.filter(vencidaT).sort(ordenPend),
+    criticosSinAvance: mios.filter(t => vencidaT(t) && t.prioridad === 'critico' && !avs.some(a => a.tarea_id === t.id)),
+    abiertos: mios.filter(abiertaT)
+  };
+}
+function cerrarDia() {
+  const a = actividadDia(cu.id, hoyISO());
+  const li = (arr, f) => arr.length ? arr.map(f).join('') : '<div class="mini">Ninguno</div>';
+  modal('Cerrar mi día · ' + fmtD(hoyISO()), `
+    <div class="dg" style="grid-template-columns:repeat(4,1fr)">
+      ${kpi('Cumplidos', String(a.cumplidos.length), 'hoy', 'var(--sc)')}${kpi('Avances', String(a.avances.length), 'hoy')}${kpi('Vencidos', String(a.vencidos.length), 'abiertos', a.vencidos.length ? 'var(--wn)' : '')}${kpi('Críticos sin avance', String(a.criticosSinAvance.length), 'hoy', a.criticosSinAvance.length ? 'var(--dg)' : '')}
+    </div>
+    ${a.criticosSinAvance.length ? `<div class="errbox">Tienes ${a.criticosSinAvance.length} pendiente(s) crítico(s) vencido(s) sin avance hoy. Explica en el resumen qué pasó.</div>` : ''}
+    <h4 style="margin:8px 0 6px">Cumplidos hoy</h4>${li(a.cumplidos, t => `<div class="aitem v"><div class="at">${priBdg(t.prioridad)} ${esc(t.titulo)}</div></div>`)}
+    <h4 style="margin:12px 0 6px">Siguen vencidos</h4>${li(a.vencidos.slice(0, 8), t => `<div class="aitem ${PRI[t.prioridad]?.c === 'r' ? 'r' : ''}"><div><div class="at">${priBdg(t.prioridad)} ${esc(t.titulo)}</div><div class="am">Atraso ${atraso(t)} d · ${esc(t.ultimo_avance || 'sin avance')}</div></div></div>`)}
+    <div class="fld" style="margin-top:12px"><label>Resumen del día y bloqueos${a.criticosSinAvance.length ? ' (obligatorio)' : ''}</label><textarea id="cdR" style="min-height:80px" placeholder="Qué se avanzó, qué está detenido y qué necesitas de Dirección"></textarea></div>`,
+    `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="confirmarCierreDia()">Firmar cierre y enviar a Dirección</button>`, 'xl');
+  window._cd = a;
+}
+async function confirmarCierreDia() {
+  const a = _cd, res = cdR.value.trim();
+  if (a.criticosSinAvance.length && !res) { toast('Explica los críticos sin avance', 'warning'); return; }
+  const snap = { cumplidos: a.cumplidos.length, avances: a.avances.length, reprogramados: a.reprog.length, nuevos: a.nuevos.length, vencidos: a.vencidos.length, criticos_vencidos: a.vencidos.filter(t => t.prioridad === 'critico').length, criticos_sin_avance: a.criticosSinAvance.length, abiertos: a.abiertos.length, atraso_max: Math.max(0, ...a.vencidos.map(atraso)) };
+  const r = await rpcFirmado('fin_cerrar_jornada', { p_resumen: res, p_snapshot: snap }, { titulo: 'Firmar cierre del día' });
+  if (!r) return;
+  CM('mGen'); toast('Día cerrado', 'success');
+  await cargarTodo();
+  enviarCorreoDirectivos(textoCierre(cu.id, hoyISO()), `Cierre del día · ${cu.nombre} · ${fmtD(hoyISO())}`);
+}
+function correosDirectivos() {
+  const m = USR.filter(u => u.activo !== false && ['admin', 'direccion'].includes(u.rol) && u.email).map(u => u.email);
+  return [...new Set(m.length ? m : [CFG.correo_alertas])].filter(Boolean);
+}
+function enviarCorreoDirectivos(cuerpo, asunto) {
+  window._mail2 = { cuerpo, asunto };
+  modal('Enviar a Dirección', `<div class="okbox">Queda guardado en el sistema y Dirección ya lo ve en su tablero. Además puedes enviarlo por correo a ${esc(correosDirectivos().join(', '))}.</div><div class="diff" style="max-height:260px">${esc(cuerpo)}</div>`,
+    `<button class="btn btn-s" onclick="CM('mGen')">Solo guardar</button><button class="btn btn-p" onclick="mailDirectivos(_mail2.asunto,_mail2.cuerpo);CM('mGen')">✉ Abrir correo</button>`);
+}
+function mailDirectivos(asunto, cuerpo) {
+  location.href = `mailto:${encodeURIComponent(correosDirectivos().join(','))}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
+}
+function textoCierre(uid, fecha) {
+  const a = actividadDia(uid, fecha), c = yaCerre(uid, fecha);
+  const L = (arr, f) => arr.length ? arr.map(f).join('\n') : '  (ninguno)';
+  return `CIERRE DEL DÍA ${fmtD(fecha)} — ${nomUsr(uid)}\nCentro Ocular Especializado · COE Finanzas\n\n` +
+    `Cumplidos: ${a.cumplidos.length} · Avances: ${a.avances.length} · Reprogramados: ${a.reprog.length} · Vencidos abiertos: ${a.vencidos.length} · Críticos sin avance: ${a.criticosSinAvance.length}\n\n` +
+    `CUMPLIDOS HOY\n${L(a.cumplidos, t => `  ✓ [${PRI[t.prioridad]?.t}] ${t.titulo}`)}\n\nSIGUEN VENCIDOS\n${L(a.vencidos, t => `  • [${PRI[t.prioridad]?.t}] ${t.titulo} — atraso ${atraso(t)} d — ${t.ultimo_avance || 'sin avance'}`)}\n\n` +
+    `RESUMEN\n${c?.resumen || '(sin resumen)'}\n`;
+}
+
+// ── Reporte del día para directivos ──
+function equipoResp() {
+  const ks = new Set(TAR.map(respKey));
+  USR.filter(u => u.activo !== false && niv('tareas', u) === 2).forEach(u => ks.add(u.id));
+  return [...ks].filter(k => !String(k).startsWith('rol:') || !USR.some(u => u.activo !== false && 'rol:' + u.rol === k && ks.has(u.id)));
+}
+function filaEquipo(k, fecha) {
+  const uid = String(k).startsWith('rol:') ? null : k;
+  const tk = TAR.filter(t => respKey(t) === k);
+  const a = uid ? actividadDia(uid, fecha) : { cumplidos: [], avances: [], reprog: [], nuevos: [], vencidos: tk.filter(vencidaT), criticosSinAvance: [] };
+  const ven = tk.filter(vencidaT), con = tk.filter(t => abiertaT(t) && atraso(t) > 0);
+  return { k, esDir: !!uid && USR.find(u => u.id === uid)?.rol === 'admin', nombre: respNom(k), cierre: uid ? yaCerre(uid, fecha) : null, cumplidos: a.cumplidos.length, avances: a.avances.length, reprog: a.reprog.length, abiertos: tk.filter(abiertaT).length, vencidos: ven.length, criticos: ven.filter(t => t.prioridad === 'critico').length, prom: con.length ? Math.round(con.reduce((s, t) => s + atraso(t), 0) / con.length) : 0, sinSeg: tk.filter(t => t.prioridad !== 'no_critico' && sinSeguimiento(t) >= 3).length };
+}
+function reporteDia(fecha = hoyISO()) {
+  const F = equipoResp().map(k => filaEquipo(k, fecha));
+  const crit = TAR.filter(t => vencidaT(t) && t.prioridad === 'critico').sort(ordenPend);
+  const cump = AVA.filter(a => a.tipo === 'cumplida' && String(a.created_at).slice(0, 10) === fecha).map(a => ({ a, t: TAR.find(t => t.id === a.tarea_id) })).filter(x => x.t);
+  const body = `<table><thead><tr><th>Responsable</th><th>Cerró el día</th><th class="r">Cumplidos</th><th class="r">Avances</th><th class="r">Reprog.</th><th class="r">Abiertos</th><th class="r">Vencidos</th><th class="r">Críticos venc.</th><th class="r">Atraso prom.</th></tr></thead><tbody>
+    ${F.map(f => `<tr><td><b>${esc(f.nombre)}</b></td><td>${f.esDir ? '—' : f.cierre ? '<span class="verde">Sí · ' + fmtDT(f.cierre.created_at).slice(-5) + '</span>' : '<b class="rojo">No</b>'}</td><td class="r">${f.cumplidos}</td><td class="r">${f.avances}</td><td class="r">${f.reprog}</td><td class="r">${f.abiertos}</td><td class="r">${f.vencidos}</td><td class="r ${f.criticos ? 'rojo' : ''}"><b>${f.criticos}</b></td><td class="r">${f.prom} d</td></tr>`).join('')}</tbody></table>
+    <table><thead><tr><th>Críticos vencidos</th><th>Responsable</th><th class="r">Atraso</th><th>Último avance</th></tr></thead><tbody>${crit.length ? crit.slice(0, 12).map(t => `<tr><td>${esc(t.titulo)}</td><td>${esc(respNom(respKey(t)))}</td><td class="r rojo"><b>${atraso(t)} d</b></td><td>${esc(t.ultimo_avance || 'sin avance')}</td></tr>`).join('') : '<tr><td colspan="4" class="verde">Ninguno</td></tr>'}</tbody></table>
+    ${cump.length ? `<table><thead><tr><th>Cumplidos hoy</th><th>Prioridad</th><th>Quién</th></tr></thead><tbody>${cump.slice(0, 12).map(x => `<tr><td>${esc(x.t.titulo)}</td><td>${PRI[x.t.prioridad]?.t || ''}</td><td>${esc(nomUsr(x.a.usuario_id))}</td></tr>`).join('')}</tbody></table>` : ''}
+    ${F.filter(f => f.cierre?.resumen).map(f => `<div class="p"><b>${esc(f.nombre)}:</b> ${esc(f.cierre.resumen)}</div>`).join('')}`;
+  const txt = `REPORTE DEL DÍA ${fmtD(fecha)} — COE Finanzas\n\n` + F.map(f => `${f.nombre}: ${f.esDir ? 'Dirección' : f.cierre ? 'cerró ' + fmtDT(f.cierre.created_at).slice(-5) : 'NO CERRÓ'} · cumplidos ${f.cumplidos} · avances ${f.avances} · vencidos ${f.vencidos} · críticos vencidos ${f.criticos} · atraso prom. ${f.prom} d`).join('\n') +
+    `\n\nCRÍTICOS VENCIDOS\n` + (crit.length ? crit.map(t => `  • ${t.titulo} — ${respNom(respKey(t))} — ${atraso(t)} d — ${t.ultimo_avance || 'sin avance'}`).join('\n') : '  (ninguno)') +
+    '\n\n' + F.filter(f => f.cierre?.resumen).map(f => `${f.nombre}: ${f.cierre.resumen}`).join('\n');
+  window._rdTxt = txt;
+  modal('Reporte del día · ' + fmtD(fecha), `<div class="mini" style="margin-bottom:10px">Equipo, cierres del día y críticos vencidos.</div>${body.replace(/class="r /g, 'style="text-align:right" class="').replace(/class="r"/g, 'style="text-align:right"').replace(/class="verde"/g, 'style="color:var(--sc)"').replace(/class="rojo"/g, 'style="color:var(--dg)"').replace(/<div class="p">/g, '<div class="mini" style="margin-top:8px">')}`,
+    `<button class="btn btn-s" onclick="imprimir('Reporte del día · ${fmtD(fecha)}', _rdBody)">🖨 Imprimir</button><button class="btn btn-p" onclick="mailDirectivos('Reporte del día ${fmtD(fecha)} · COE Finanzas', _rdTxt)">✉ Enviar a Dirección</button>`, 'xl');
+  window._rdBody = body;
+}
+
+// ── Desempeño semanal, quincenal y mensual ──
+function rangoPer(per) {
+  const h = hoyD(); let ini;
+  if (per === 'semanal') { ini = new Date(h); ini.setDate(h.getDate() - ((h.getDay() + 6) % 7)); }
+  else if (per === 'quincenal') ini = new Date(h.getFullYear(), h.getMonth(), h.getDate() <= 15 ? 1 : 16);
+  else ini = new Date(h.getFullYear(), h.getMonth(), 1);
+  return [isoD(ini), isoD(h)];
+}
+function diasHabiles(a, b) { let n = 0; for (let d = new Date(a + 'T00:00:00'); isoD(d) <= b; d.setDate(d.getDate() + 1)) if (d.getDay() !== 0) n++; return n; }
+function datosCumplimiento(per) {
+  const [a, b] = rangoPer(per), en = d => d && String(d).slice(0, 10) >= a && String(d).slice(0, 10) <= b;
+  // Pendientes que vencían en el periodo (fecha original) o que arrastran atraso desde antes
+  const tar = TAR.filter(t => t.estado !== 'cancelada' && (en(fOrig(t)) || (abiertaT(t) && fOrig(t) < a)) && fOrig(t) <= b);
+  const vence = t => fOrig(t) <= b && (t.estado === 'cumplida' || diasA(fOrig(t)) < 0);
+  const aTiempo = tar.filter(t => t.estado === 'cumplida' && String(t.cumplida_at).slice(0, 10) <= fOrig(t));
+  const tarde = tar.filter(t => t.estado === 'cumplida' && String(t.cumplida_at).slice(0, 10) > fOrig(t));
+  const noCump = tar.filter(t => abiertaT(t) && diasA(fOrig(t)) < 0);
+  const enPlazo = tar.filter(t => abiertaT(t) && diasA(fOrig(t)) >= 0);
+  const fpsV = vivas().filter(f => f.factura_pendiente && diasA(f.factura_limite) < 0);
+  const cxpV = abiertas('egreso').filter(f => semaforo(f) === 'r');
+  const sinRev = vivas().filter(f => en(String(f.created_at)) && !f.revision);
+  const pag = ABO.filter(x => !x.anulado && en(x.fecha_pago));
+  const hab = diasHabiles(a, b);
+  const grupo = (lista, key) => { const o = {}; lista.forEach(t => { (o[key(t)] = o[key(t)] || []).push(t); }); return o; };
+  const met = L => {
+    const at = L.filter(t => aTiempo.includes(t)).length, td = L.filter(t => tarde.includes(t)).length, nc = L.filter(t => noCump.includes(t)).length;
+    const conA = L.filter(t => atraso(t) > 0);
+    return { total: L.length, aTiempo: at, tarde: td, noCump: nc, enPlazo: L.filter(t => enPlazo.includes(t)).length,
+      criticosNoCump: L.filter(t => noCump.includes(t) && t.prioridad === 'critico').length,
+      prom: conA.length ? Math.round(conA.reduce((s, t) => s + atraso(t), 0) / conA.length) : 0,
+      reprog: L.reduce((s, t) => s + (t.reprogramaciones || 0), 0),
+      pct: (at + td + nc) ? Math.round(at / (at + td + nc) * 100) : 100 };
+  };
+  const gR = grupo(tar.filter(vence).concat(enPlazo), respKey);
+  const porResp = Object.entries(gR).map(([k, L]) => {
+    const uid = String(k).startsWith('rol:') ? null : k;
+    return { k, nombre: respNom(k), ...met(L), cierres: uid ? CJ.filter(c => c.usuario_id === uid && en(c.fecha)).length : 0, habiles: hab };
+  }).sort((x, y) => x.pct - y.pct);
+  const porPri = Object.keys(PRI).map(p => ({ p, ...met(tar.filter(t => t.prioridad === p)) }));
+  return { a, b, tar, aTiempo, tarde, noCump, enPlazo, fpsV, cxpV, sinRev, pag, porResp, porPri, hab };
+}
+const colPct = p => p >= 90 ? 'var(--sc)' : p >= 70 ? 'var(--wn)' : 'var(--dg)';
+function rRep() {
+  const per = VIEW.repPer, d = datosCumplimiento(per);
+  const pct = (d.aTiempo.length + d.tarde.length + d.noCump.length) ? Math.round(d.aTiempo.length / (d.aTiempo.length + d.tarde.length + d.noCump.length) * 100) : 100;
+  const chips = [['semanal', 'Semanal'], ['quincenal', 'Quincenal'], ['mensual', 'Mensual']].map(([k, l]) => `<span class="chip ${per === k ? 'act' : ''}" onclick="VIEW.repPer='${k}';renderTab()">${l}</span>`).join('');
+  const lst = (arr, f) => arr.length ? arr.map(f).join('') : '<div class="mini">Ninguno</div>';
+  return `<div class="ph"><div><div class="ptit">Desempeño</div><div class="psub">Del ${fmtD(d.a)} al ${fmtD(d.b)} · ${d.hab} días hábiles · a tiempo = cumplido en la fecha original</div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><div class="chips">${chips}</div><button class="btn btn-s btn-sm" onclick="reporteDia()">Reporte del día</button><button class="btn btn-p btn-sm" onclick="imprimirCumplimiento('${per}')">🖨 Imprimir (1 página)</button></div></div>
+  <div class="pad"><div class="dg">
+    ${kpi('Cumplimiento a tiempo', pct + '%', `${d.aTiempo.length} a tiempo · ${d.tarde.length} tarde · ${d.noCump.length} no cumplidos`, colPct(pct))}
+    ${kpi('Críticos no cumplidos', String(d.noCump.filter(t => t.prioridad === 'critico').length), 'vencidos sin cerrar', d.noCump.some(t => t.prioridad === 'critico') ? 'var(--dg)' : '')}
+    ${kpi('Reprogramaciones', String(d.tar.reduce((s, t) => s + (t.reprogramaciones || 0), 0)), 'en el periodo')}
+    ${kpi('Facturas no conseguidas', String(d.fpsV.length), 'pasado el límite', d.fpsV.length ? 'var(--dg)' : '')}
+  </div>
+  <div class="tc" style="margin-bottom:20px;overflow-x:auto"><table><thead><tr><th>Responsable</th><th style="text-align:right">Asig.</th><th style="text-align:right">A tiempo</th><th style="text-align:right">Tarde</th><th style="text-align:right">No cumpl.</th><th style="text-align:right">Críticos</th><th style="text-align:right">Atraso</th><th style="text-align:right">Reprog.</th><th style="text-align:right">Cierres</th><th style="text-align:right">%</th></tr></thead><tbody>
+    ${d.porResp.length ? d.porResp.map(r => `<tr><td><b>${esc(r.nombre)}</b></td><td style="text-align:right">${r.total}</td><td style="text-align:right">${r.aTiempo}</td><td style="text-align:right">${r.tarde}</td><td style="text-align:right;${r.noCump ? 'color:var(--dg)' : ''}">${r.noCump}</td><td style="text-align:right;${r.criticosNoCump ? 'color:var(--dg);font-weight:800' : ''}">${r.criticosNoCump}</td><td style="text-align:right">${r.prom} d</td><td style="text-align:right">${r.reprog}</td><td style="text-align:right">${String(r.k).startsWith('rol:') ? '—' : r.cierres + ' / ' + r.habiles}</td><td style="text-align:right;font-weight:800;color:${colPct(r.pct)}">${r.pct}%</td></tr>`).join('') : '<tr><td colspan="10" class="mini">Sin pendientes en el periodo</td></tr>'}
+  </tbody></table></div>
+  <div class="cfgg">
+    <div class="cfg-section"><h3>Por prioridad</h3><div class="body"><table><tbody>${d.porPri.map(p => `<tr><td>${priBdg(p.p)}</td><td class="mini">${p.total} · ${p.aTiempo} a tiempo · ${p.tarde} tarde · ${p.noCump} no cumplidos</td><td style="text-align:right;font-weight:800;color:${colPct(p.pct)}">${p.pct}%</td></tr>`).join('')}</tbody></table></div></div>
+    <div class="cfg-section"><h3>No cumplido</h3><div class="body">${lst(d.noCump.sort(ordenPend), t => `<div class="aitem ${t.prioridad === 'critico' ? 'r' : ''}" onclick="verPendiente('${t.id}')"><div><div class="at">${priBdg(t.prioridad)} ${esc(t.titulo)}</div><div class="am">${esc(respNom(respKey(t)))} · atraso ${atraso(t)} d · ${esc(t.ultimo_avance || 'sin avance')}</div></div></div>`)}</div></div>
+    <div class="cfg-section"><h3>Cumplido tarde</h3><div class="body">${lst(d.tarde, t => `<div class="aitem" onclick="verPendiente('${t.id}')"><div><div class="at">${priBdg(t.prioridad)} ${esc(t.titulo)}</div><div class="am">${esc(nomUsr(t.cumplida_por))} · ${atraso(t)} d tarde</div></div></div>`)}</div></div>
+    <div class="cfg-section"><h3>Facturas por solicitar vencidas</h3><div class="body">${lst(d.fpsV, f => `<div class="aitem r" onclick="verCuenta('${f.id}')"><div><div class="at">${esc(nomEnt(f.entidad_id))}</div><div class="am">${esc(f.descripcion)} · ${$$(f.monto_total)}</div></div></div>`)}</div></div>
+  </div></div>`;
+}
+function imprimirCumplimiento(per) {
+  const d = datosCumplimiento(per), tot = d.aTiempo.length + d.tarde.length + d.noCump.length, pct = tot ? Math.round(d.aTiempo.length / tot * 100) : 100;
+  imprimir(`Reporte de desempeño ${per} · ${fmtD(d.a)} al ${fmtD(d.b)}`, `
+    <div class="kv"><b>Cumplimiento a tiempo</b><div><b class="${pct >= 90 ? 'verde' : 'rojo'}" style="font-size:15px">${pct}%</b> · ${d.aTiempo.length} a tiempo · ${d.tarde.length} tarde · ${d.noCump.length} no cumplidos · ${d.enPlazo.length} en plazo</div>
+    <b>Pagos del periodo</b><div>${d.pag.length} movimientos · ${$$(d.pag.reduce((s, a) => s + num(a.monto), 0))}</div><b>Pagos vencidos</b><div>${d.cxpV.length} · ${$$(d.cxpV.reduce((s, f) => s + saldo(f), 0))}</div>
+    <b>Facturas no conseguidas</b><div>${d.fpsV.length}</div></div>
+    <table><thead><tr><th>Responsable</th><th class="r">Asig.</th><th class="r">A tiempo</th><th class="r">Tarde</th><th class="r">No cumpl.</th><th class="r">Críticos</th><th class="r">Atraso</th><th class="r">Reprog.</th><th class="r">Cierres</th><th class="r">%</th></tr></thead><tbody>
+    ${d.porResp.map(r => `<tr><td><b>${esc(r.nombre)}</b></td><td class="r">${r.total}</td><td class="r">${r.aTiempo}</td><td class="r">${r.tarde}</td><td class="r">${r.noCump}</td><td class="r ${r.criticosNoCump ? 'rojo' : ''}">${r.criticosNoCump}</td><td class="r">${r.prom} d</td><td class="r">${r.reprog}</td><td class="r">${String(r.k).startsWith('rol:') ? '—' : r.cierres + '/' + r.habiles}</td><td class="r"><b class="${r.pct >= 90 ? 'verde' : 'rojo'}">${r.pct}%</b></td></tr>`).join('') || '<tr><td colspan="10">Sin pendientes</td></tr>'}</tbody></table>
+    <table><thead><tr><th>Prioridad</th><th class="r">Total</th><th class="r">A tiempo</th><th class="r">Tarde</th><th class="r">No cumplidos</th><th class="r">%</th></tr></thead><tbody>${d.porPri.map(p => `<tr><td>${PRI[p.p].t}</td><td class="r">${p.total}</td><td class="r">${p.aTiempo}</td><td class="r">${p.tarde}</td><td class="r">${p.noCump}</td><td class="r">${p.pct}%</td></tr>`).join('')}</tbody></table>
+    <table><thead><tr><th>No cumplido</th><th>Prioridad</th><th>Responsable</th><th class="r">Atraso</th></tr></thead><tbody>${d.noCump.sort(ordenPend).slice(0, 12).map(t => `<tr><td>${esc(t.titulo)}</td><td class="${t.prioridad === 'critico' ? 'rojo' : ''}">${PRI[t.prioridad]?.t}</td><td>${esc(respNom(respKey(t)))}</td><td class="r">${atraso(t)} d</td></tr>`).join('') || '<tr><td colspan="4" class="verde">Ninguno</td></tr>'}</tbody></table>
+    <div class="firmas"><div>Responsable<br>&nbsp;</div><div>Dirección General<br><b>Dr. José Antonio Villegas Ávila</b></div></div>`);
 }
 
 // ══ DOCUMENTOS IMPRIMIBLES (una página, con logo) ══
@@ -2009,20 +2332,6 @@ function imprimirRecurrentes() {
     ${L.map(o => { const e = ent(o.rec.entidad_id) || {}; return `<tr><td>${o.estado === 'pagado' ? '✔' : '<span class="chk"></span>'}</td><td>${fmtD(isoD(o.fecha))}</td><td><b>${esc(o.rec.descripcion)}</b><br><span style="color:#778">${esc(o.rec.categoria || '')}</span></td><td>${esc(e.nombre || '')}</td><td>${esc(e.convenio_cie ? 'CIE ' + e.convenio_cie : e.clabe || '')}</td><td class="r">${o.factura ? $$(o.factura.monto_total) : '__________'}</td><td>${o.factura?.fecha_pago ? fmtD(o.factura.fecha_pago) : '__________'}</td></tr>`; }).join('')}
     <tr class="tot"><td colspan="5">Total registrado</td><td class="r">${$$(tot)}</td><td></td></tr></tbody></table>
     <div class="firmas"><div>Preparó<br><b>Contadora</b></div><div>Autorizó<br><b>Dirección General</b></div></div>`);
-}
-function imprimirCumplimiento(per) {
-  const d = datosCumplimiento(per), pct = d.tar.length ? Math.round(d.aTiempo.length / d.tar.length * 100) : 100;
-  const filas = (arr, f) => arr.length ? arr.map(f).join('') : '<tr><td colspan="4" style="color:#778">Ninguno</td></tr>';
-  imprimir(`Reporte de cumplimiento ${per} · ${fmtD(d.a)} al ${fmtD(d.b)}`, `
-    <div class="kv"><b>Cumplimiento a tiempo</b><div><b class="${pct >= 90 ? 'verde' : 'rojo'}" style="font-size:15px">${pct}%</b> (${d.aTiempo.length} de ${d.tar.length} tareas; ${d.tarde.length} tarde; ${d.noCump.length} no cumplidas)</div>
-    <b>Pagos del periodo</b><div>${d.pag.length} movimientos · ${$$(d.pag.reduce((s, a) => s + num(a.monto), 0))}</div><b>Pagos vencidos</b><div>${d.cxpV.length} · ${$$(d.cxpV.reduce((s, f) => s + saldo(f), 0))}</div>
-    <b>Facturas no conseguidas</b><div>${d.fpsV.length}</div><b>Sin revisar</b><div>${d.sinRev.length} movimientos</div></div>
-    <table><thead><tr><th>Estado</th><th>Tarea</th><th>Límite</th><th>Cumplió</th></tr></thead><tbody>
-    ${filas(d.noCump, t => `<tr><td class="rojo"><b>No cumplida</b></td><td>${esc(t.titulo)}</td><td>${fmtD(t.fecha_limite)}</td><td>—</td></tr>`)}
-    ${d.tarde.map(t => `<tr><td>Tarde</td><td>${esc(t.titulo)}</td><td>${fmtD(t.fecha_limite)}</td><td>${esc(nomUsr(t.cumplida_por))} ${fmtD(String(t.cumplida_at).slice(0, 10))}</td></tr>`).join('')}
-    ${d.aTiempo.map(t => `<tr><td class="verde">A tiempo</td><td>${esc(t.titulo)}</td><td>${fmtD(t.fecha_limite)}</td><td>${esc(nomUsr(t.cumplida_por))} ${fmtD(String(t.cumplida_at).slice(0, 10))}</td></tr>`).join('')}</tbody></table>
-    ${d.fpsV.length ? `<table><thead><tr><th>Factura no conseguida</th><th>Concepto</th><th class="r">Monto</th><th>Límite</th></tr></thead><tbody>${d.fpsV.slice(0, 10).map(f => `<tr><td>${esc(nomEnt(f.entidad_id))}</td><td>${esc(f.descripcion)}</td><td class="r">${$$(f.monto_total)}</td><td>${fmtD(f.factura_limite)}</td></tr>`).join('')}</tbody></table>` : ''}
-    <div class="firmas"><div>Contadora<br>&nbsp;</div><div>Dirección General<br><b>Dr. José Antonio Villegas Ávila</b></div></div>`);
 }
 
 // ══ SUBIR DOCUMENTO: el sistema lee y decide ═══
