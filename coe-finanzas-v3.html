@@ -674,7 +674,6 @@ const ROLES = {
   administracion: 'Administración', solicitante: 'Área solicitante', usuario: 'Usuario'
 };
 const esAdmin = () => cu?.rol === 'admin';
-const puedeAutorizar = () => ['admin', 'direccion', 'administracion'].includes(cu?.rol);
 const puedeVerTodo = () => ['admin', 'direccion', 'contadora'].includes(cu?.rol) || !cu?.sede;
 const enMiSede = r => puedeVerTodo() || !r.sede || r.sede === cu.sede;
 const limiteFirma = () => num(CFG.monto_doble_firma) || 3000;
@@ -713,11 +712,11 @@ const ERR = {
   comprobante: 'Falta el comprobante', monto_saldo: 'El monto excede el saldo de la cuenta', cuenta: 'Cuenta no encontrada',
   monto: 'Monto no válido', proveedor: 'Falta el proveedor', descripcion: 'Falta la descripción',
   solo_director: 'Solo el Director General puede anular', motivo: 'Escribe el motivo', tiene_pagos: 'Tiene pagos; anula primero los pagos',
-  uuid_duplicado: 'Esta factura (UUID) ya está registrada', sin_permiso: 'Tu usuario no puede autorizar',
+  uuid_duplicado: 'Esta factura (UUID) ya está registrada', sin_permiso: 'Tu perfil no tiene permiso para esta acción',
   estado: 'El estado actual no permite esta acción', no_autorizado: 'El pedido aún no está autorizado', sede: 'Pedido de otra sede',
   evidencia: 'Sube la evidencia de la tarea', nombre: 'Falta el nombre', tabla: 'Operación no permitida',
   credenciales: 'Usuario o contraseña incorrectos', password_corta: 'La contraseña debe tener al menos 6 caracteres',
-  usuario_ocupado: 'Ese usuario ya existe', nota: 'Escribe la observación'
+  usuario_ocupado: 'Ese usuario ya existe', nota: 'Escribe la observación', pin_nuevo: 'El PIN inicial debe tener 4 dígitos'
 };
 
 // Ejecuta una RPC firmada. Si pide firma del Director, la solicita y reintenta.
@@ -820,7 +819,7 @@ async function boot() {
   const n = new Date(); calY = n.getFullYear(); calM = n.getMonth();
   try {
     sb = window.supabase.createClient(SB_URL, SB_KEY, { realtime: { params: { eventsPerSecond: 5 } } });
-    const { data, error } = await sb.from('fin_usuarios').select('id,nombre,rol,sede,activo,email,usuario').eq('activo', true).order('nombre');
+    const { data, error } = await sb.from('fin_usuarios').select('id,nombre,rol,sede,activo,email,usuario,permisos').order('nombre');
     if (error && /usuario/.test(error.message)) {
       const r = await sb.from('fin_usuarios').select('id,nombre,rol,sede,activo,email').eq('activo', true).order('nombre');
       USR = r.data || [];
@@ -834,7 +833,8 @@ async function boot() {
   try { s = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch { }
   if (s && USR.find(u => u.id === s.id)) {
     const u = USR.find(x => x.id === s.id);
-    cu = { ...s, rol: u.rol, sede: u.sede || null, nombre: u.nombre };
+    if (u.activo === false) { try { localStorage.removeItem(SESSION_KEY); } catch { } location.reload(); return; }
+    cu = { ...s, rol: u.rol, sede: u.sede || null, nombre: u.nombre, permisos: u.permisos || {} };
     LOGIN_LEGACY = !!s.legacy;
     entrarApp();
   } else {
@@ -847,7 +847,7 @@ async function entrarApp() {
   document.getElementById('app').style.display = 'block';
   document.getElementById('tnom').textContent = cu.nombre + ' · ' + (ROLES[cu.rol] || cu.rol);
   document.getElementById('tav').textContent = (cu.nombre || '?')[0].toUpperCase();
-  if (cu.rol !== 'admin') document.getElementById('n-cfg').style.display = 'none';
+  aplicarPermisosMenu();
   await cargarTodo();
   suscribir();
   goTab(location.hash.slice(1) || 'dash');
@@ -885,6 +885,7 @@ async function cargarTodo(silencioso) {
     q('fin_correos', x => x.order('enviado_at', { ascending: false }).limit(200)),
   ]);
   [ENT, FAC, ABO, REC, PED, TAR, DOCS, RS, CIE, SUC] = r;
+  if (silencioso !== 'sinusr') { await cargarUsuarios(); const yo = USR.find(u => u.id === cu.id); if (yo) { cu.permisos = yo.permisos || {}; cu.rol = yo.rol; cu.sede = yo.sede || null; aplicarPermisosMenu(); } }
   CORR = r[11];
   r[10].forEach(c => { CFG[c.clave] = c.valor; });
   if (!RS.length) RS = [{ id: null, nombre: 'José Antonio Villegas Ávila', rfc: 'VIAA870425115' }];
@@ -904,7 +905,7 @@ let canal = null;
 function suscribir() {
   if (canal) sb.removeChannel(canal);
   canal = sb.channel('coe-finanzas-v3');
-  ['fin_facturas', 'fin_abonos', 'fin_pedidos', 'fin_tareas', 'fin_documentos', 'fin_entidades', 'fin_recurrentes', 'con_cierres_dia']
+  ['fin_facturas', 'fin_abonos', 'fin_pedidos', 'fin_tareas', 'fin_documentos', 'fin_entidades', 'fin_recurrentes', 'con_cierres_dia', 'fin_correos']
     .forEach(t => canal.on('postgres_changes', { event: '*', schema: 'public', table: t }, p => onCambio(t, p)));
   canal.subscribe(st => {
     rtState = st === 'SUBSCRIBED' ? 'on' : (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT' || st === 'CLOSED') ? 'off' : 'wait';
@@ -986,7 +987,7 @@ function calcAlertas() {
     if (d !== null && d < 0) A.push({ n: 'r', t: `Cobro vencido: ${nomEnt(f.entidad_id)}`, m: `${f.descripcion} · ${$$(saldo(f))}`, go: () => verCuenta(f.id) });
     else if (d !== null && d <= aviso) A.push({ n: 'a', t: `Cobro por vencer: ${nomEnt(f.entidad_id)}`, m: `${f.descripcion} · ${$$(saldo(f))}`, go: () => verCuenta(f.id) });
   });
-  if (puedeAutorizar()) PED.filter(p => p.estado === 'solicitado' && enMiSede(p)).forEach(p => A.push({ n: p.urgente ? 'r' : 'i', t: `${p.urgente ? 'URGENTE · ' : ''}Pedido por autorizar ${p.folio}`, m: `${p.area} · ${p.descripcion} · ${$$(p.monto_estimado)}`, go: () => verPedido(p.id) }));
+  if (puede('pedidos', 3)) PED.filter(p => p.estado === 'solicitado' && enMiSede(p)).forEach(p => A.push({ n: p.urgente ? 'r' : 'i', t: `${p.urgente ? 'URGENTE · ' : ''}Pedido por autorizar ${p.folio}`, m: `${p.area} · ${p.descripcion} · ${$$(p.monto_estimado)}`, go: () => verPedido(p.id) }));
   PED.filter(p => p.estado === 'autorizado' && enMiSede(p)).forEach(p => A.push({ n: 'i', t: `Pedido autorizado sin enviar ${p.folio}`, m: `${nomEnt(p.entidad_id)} · enviar al proveedor`, go: () => verPedido(p.id) }));
   const fps = vivas().filter(f => f.factura_pendiente);
   fps.forEach(f => { const d = diasA(f.factura_limite); if (d !== null && d <= 5) A.push({ n: d < 0 ? 'r' : 'a', t: `${d < 0 ? 'Factura no conseguida' : 'Factura por solicitar'}: ${nomEnt(f.entidad_id)}`, m: `${f.descripcion} · límite ${fmtD(f.factura_limite)}`, go: () => goTab('fps') }); });
@@ -994,6 +995,8 @@ function calcAlertas() {
   buildRecOcurrencias(aviso).filter(o => o.estado === 'vencido' || o.estado === 'proximo').forEach(o => A.push({ n: o.estado === 'vencido' ? 'r' : 'a', t: `Recurrente ${o.estado === 'vencido' ? 'vencido' : 'por vencer'}: ${o.rec.descripcion}`, m: `${nomEnt(o.rec.entidad_id)} · ${fmtD(isoD(o.fecha))}`, go: () => goTab('rec') }));
   if (cu.rol === 'contadora' || esAdmin()) vivas().filter(f => f.revision === 'observado').forEach(f => A.push({ n: 'a', t: `Observación pendiente: ${nomEnt(f.entidad_id)}`, m: f.revision_nota || f.descripcion, go: () => verCuenta(f.id) }));
   const orden = { r: 0, a: 1, i: 2, v: 3 };
+  const modDe = a => /^Pago|^Vence/.test(a.t) ? 'cxp' : /^Cobro/.test(a.t) ? 'cxc' : /edido/.test(a.t) ? 'pedidos' : /^Factura/.test(a.t) ? 'fps' : /^Tarea/.test(a.t) ? 'tareas' : /^Recurrente/.test(a.t) ? 'recurrentes' : 'revision';
+  A.splice(0, A.length, ...A.filter(a => niv(modDe(a)) >= 1));
   ALR = A.sort((a, b) => orden[a.n] - orden[b.n]);
   const urg = ALR.filter(a => a.n === 'r').length;
   const bell = document.getElementById('bellN');
@@ -1021,7 +1024,7 @@ function mostrarResumen() {
 const TABS = { dash: rDash, alr: rAlr, cxp: () => rCuentas('egreso'), cxc: () => rCuentas('ingreso'), ingd: rIngDiario, pag: rPagos, cal: rCal, ped: rPedidos, prov: rProv, fps: rFps, tar: rTareas, rec: rRec, rep: rRep, aud: rAud, cfg: rCfg };
 function goTab(t) {
   if (!TABS[t]) t = 'dash';
-  if (t === 'cfg' && !esAdmin()) t = 'dash';
+  if (TAB_MOD[t] && t !== 'dash' && t !== 'alr' && niv(TAB_MOD[t]) < 1) t = 'dash';
   tab = t; history.replaceState(null, '', '#' + t);
   document.querySelectorAll('.ni').forEach(n => n.classList.toggle('act', n.id === 'n-' + t));
   closeSb(); renderTab();
@@ -1039,39 +1042,6 @@ function renderTab() {
 // ══ TABLERO ════════════════════════════════════
 function kpi(lbl, val, meta, color, onclick) {
   return `<div class="dc ${onclick ? 'tap' : ''}" ${onclick ? `onclick="${onclick}"` : ''}><div class="dlbl" style="${color ? 'color:' + color : ''}">${lbl}</div><div class="dval" style="${color ? 'color:' + color : ''}">${val}</div><div class="dmta">${meta}</div></div>`;
-}
-function rDash() {
-  const cxp = abiertas('egreso'), cxc = abiertas('ingreso');
-  const sum = a => a.reduce((s, f) => s + saldo(f), 0);
-  const venc = cxp.filter(f => semaforo(f) === 'r'), prox = cxp.filter(f => { const d = diasA(f.fecha_vencimiento); return d !== null && d >= 0 && d <= 7; });
-  const mes = isoD(new Date()).slice(0, 7);
-  const pagMes = ABO.filter(a => !a.anulado && String(a.fecha_pago).startsWith(mes));
-  const egrMes = pagMes.filter(a => FAC.find(f => f.id === a.factura_id)?.tipo === 'egreso').reduce((s, a) => s + num(a.monto), 0);
-  const cobMes = pagMes.filter(a => FAC.find(f => f.id === a.factura_id)?.tipo === 'ingreso').reduce((s, a) => s + num(a.monto), 0);
-  const cajaMes = CIE.filter(c => String(c.fecha).startsWith(mes)).reduce((s, c) => s + num(c.corte_total), 0);
-  const tarV = TAR.filter(t => t.estado !== 'cumplida' && diasA(t.fecha_limite) < 0);
-  const pedP = PED.filter(p => p.estado === 'solicitado' && enMiSede(p));
-  const fps = vivas().filter(f => f.factura_pendiente);
-  return `<div class="ph"><div><div class="ptit">Tablero</div><div class="psub">${new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · ${esc(RS[0]?.nombre || '')}</div></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-s btn-sm" onclick="mostrarResumen()">Resumen del día</button><button class="btn btn-p btn-sm" onclick="openUpload()">⬆ Subir documento</button></div></div>
-  <div class="pad">
-    <div class="dg">
-      ${kpi('Por pagar', $$(sum(cxp)), `${cxp.length} cuentas abiertas`, '', "goTab('cxp')")}
-      ${kpi('Vencido', $$(sum(venc)), `${venc.length} pagos vencidos`, venc.length ? 'var(--dg)' : '', "goTab('cxp')")}
-      ${kpi('Vence en 7 días', $$(sum(prox)), `${prox.length} pagos`, prox.length ? 'var(--wn)' : '', "goTab('cal')")}
-      ${kpi('Por cobrar', $$(sum(cxc)), `${cxc.length} cuentas`, 'var(--sc)', "goTab('cxc')")}
-    </div>
-    <div class="dg">
-      ${kpi('Pagado este mes', $$(egrMes), MESES[new Date().getMonth()], '', "goTab('pag')")}
-      ${kpi('Cobrado este mes', $$(cobMes), 'abonos a cuentas por cobrar', '', "goTab('pag')")}
-      ${kpi('Ingreso de cajas (mes)', $$(cajaMes), `${CIE.filter(c => String(c.fecha).startsWith(mes)).length} cierres de Conciliación`, '', "goTab('ingd')")}
-      ${kpi('Pendientes de control', String(pedP.length + fps.length + tarV.length), `${pedP.length} pedidos · ${fps.length} facturas · ${tarV.length} tareas vencidas`, (pedP.length + tarV.length) ? 'var(--wn)' : '', "goTab('alr')")}
-    </div>
-    <div class="cfgg">
-      <div class="cfg-section"><h3>Alertas (${ALR.length})</h3><div class="body">${alertasHtml(ALR.slice(0, 8))}${ALR.length > 8 ? `<button class="btn btn-s btn-sm" style="margin-top:10px" onclick="goTab('alr')">Ver las ${ALR.length}</button>` : ''}</div></div>
-      <div class="cfg-section"><h3>Próximos vencimientos</h3><div class="body">${tablaCorta(cxp.filter(f => f.fecha_vencimiento).sort((a, b) => a.fecha_vencimiento.localeCompare(b.fecha_vencimiento)).slice(0, 10))}</div></div>
-    </div>
-  </div>`;
 }
 function tablaCorta(lista) {
   if (!lista.length) return '<div class="emp">Sin cuentas abiertas</div>';
@@ -1091,7 +1061,7 @@ function docsDe(f) {
   const comp = f.comprobante_pago_url || pagos.find(a => a.comprobante_url)?.comprobante_url;
   const tag = (lbl, url, req) => url ? `<a class="dtag ok" href="${esc(url)}" target="_blank" onclick="event.stopPropagation()">${lbl}</a>` : `<span class="dtag ${req ? 'no' : ''}">${lbl}</span>`;
   const sinFac = f.documento_tipo === 'sin_factura' && f.factura_pendiente;
-  return `<div class="docs">${tag('XML', tiene('xml'), !sinFac && f.tipo === 'egreso')}${tag('PDF', tiene('pdf'), !sinFac && f.tipo === 'egreso')}${tag('PAGO', comp, pagos.length > 0)}${f.revision === 'revisado' ? '<span class="dtag ok">REV</span>' : f.revision === 'observado' ? '<span class="dtag no">OBS</span>' : ''}</div>`;
+  return `<div class="docs">${tag('XML', tiene('xml'), !sinFac && f.tipo === 'egreso')}${tag('PDF', tiene('pdf'), !sinFac && f.tipo === 'egreso')}${tag('PAGO', comp, pagos.length > 0)}${f.propuesta_pago && f.estado !== 'pagado' ? `<span class="dtag ok" title="Propuesto para pagar el ${fmtD(f.propuesta_pago)}">PROP</span>` : ''}${f.revision === 'revisado' ? '<span class="dtag ok">REV</span>' : f.revision === 'observado' ? '<span class="dtag no">OBS</span>' : ''}</div>`;
 }
 function rCuentas(tipo) {
   const egr = tipo === 'egreso';
@@ -1111,8 +1081,8 @@ function rCuentas(tipo) {
   const chips = [['todas', 'Abiertas'], ['r', '● Vencidas'], ['a', '● Por vencer'], ['v', '● Al corriente'], ['g', '● En aclaración'], ['pagadas', 'Pagadas']]
     .map(([k, l]) => `<span class="chip ${F === k ? 'act' : ''}" onclick="VIEW.cxpF='${k}';renderTab()">${l}</span>`).join('');
   return `<div class="ph"><div><div class="ptit">${egr ? 'Por pagar' : 'Por cobrar'}</div><div class="psub">${L.length} cuentas · saldo ${$$(tot)} · agrupado por ${egr ? 'proveedor' : 'deudor'}</div></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-s btn-sm" onclick="nuevaCuenta('${tipo}')">${egr ? '+ Captura manual' : '+ Cuenta por cobrar'}</button>
-    <button class="btn btn-s btn-sm" onclick="expCuentas('${tipo}')">Excel</button><button class="btn btn-p btn-sm" onclick="openUpload()">⬆ Subir factura o pago</button></div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${puede(egr ? 'cxp' : 'cxc') ? `<button class="btn btn-s btn-sm" onclick="nuevaCuenta('${tipo}')">${egr ? '+ Captura manual' : '+ Cuenta por cobrar'}</button>` : ''}
+    <button class="btn btn-s btn-sm" onclick="expCuentas('${tipo}')">Excel</button>${puede(egr ? 'cxp' : 'cxc') ? `<button class="btn btn-p btn-sm" onclick="openUpload()">⬆ Subir factura o pago</button>` : ''}</div></div>
   <div class="pad"><div class="tc">
     <div class="ttb"><input class="sbox" placeholder="Buscar proveedor, concepto, folio, UUID o monto" value="${esc(egr ? VIEW.cxpQ : VIEW.cxcQ)}" oninput="VIEW.${egr ? 'cxpQ' : 'cxcQ'}=this.value;clearTimeout(window._bq);window._bq=setTimeout(()=>{renderTab();const s=document.querySelector('.sbox');s.focus();s.setSelectionRange(s.value.length,s.value.length)},350)"><div class="chips">${chips}</div></div>
     ${L.length ? `<table><thead><tr><th>Estatus</th><th>Concepto</th><th>Factura</th><th>Vence</th><th style="text-align:right">Total</th><th style="text-align:right">Saldo</th><th>Documentos</th><th></th></tr></thead><tbody>
@@ -1127,7 +1097,7 @@ function rCuentas(tipo) {
           <td class="amt" style="text-align:right">${$$(f.monto_total)}</td>
           <td class="amt" style="text-align:right;font-weight:700">${$$(saldo(f))}</td>
           <td>${docsDe(f)}</td>
-          <td onclick="event.stopPropagation()">${f.estado !== 'pagado' ? `<button class="btn btn-p btn-sm" onclick="pagarCuenta('${f.id}')">${egr ? 'Pagar' : 'Cobrar'}</button>` : ''}</td></tr>`).join('');
+          <td onclick="event.stopPropagation()">${f.estado === 'pagado' ? '' : puedePagar(f) ? `<button class="btn btn-p btn-sm" onclick="pagarCuenta('${f.id}')">${egr ? 'Pagar' : 'Cobrar'}</button>` : egr && puede('cxp') && !f.propuesta_pago ? `<button class="btn btn-s btn-sm" onclick="proponerUna('${f.id}')">Proponer</button>` : ''}</td></tr>`).join('');
     }).join('')}</tbody></table>` : `<div class="emp"><div class="ic">✓</div><p>Sin cuentas en este filtro</p></div>`}
   </div></div>`;
 }
@@ -1148,18 +1118,21 @@ function verCuenta(id) {
     <b>Categoría · sede</b><div>${esc(f.categoria || '—')} · ${esc(f.sede || 'Tacámbaro')}</div>
     <b>Pago a</b><div class="mini">${esc(e.banco || '')} ${e.clabe ? 'CLABE ' + esc(e.clabe) : ''} ${e.convenio_cie ? '· CIE ' + esc(e.convenio_cie) : ''} ${f.referencia_cie ? '· Ref ' + esc(f.referencia_cie) : ''}</div>
     <b>Firmas</b><div class="mini">Registró ${esc(nomUsr(f.firma1_por || f.created_by))} ${fmtDT(f.firma1_at || f.created_at)}${f.firma2_por ? ' · 2ª firma ' + esc(nomUsr(f.firma2_por)) : ''}</div>
+    ${f.propuesta_pago ? `<b>Propuesta</b><div class="mini">Pagar el ${fmtD(f.propuesta_pago)} · propuso ${esc(nomUsr(f.propuesta_por))}</div>` : ''}
     <b>Revisión</b><div class="mini">${f.revision ? esc(f.revision) + ' por ' + esc(nomUsr(f.revision_por)) + ' ' + fmtDT(f.revision_at) + (f.revision_nota ? ' — ' + esc(f.revision_nota) : '') : 'Sin revisar'}</div>
   </div>
   <h4 style="margin:18px 0 8px">Documentos probatorios</h4>
   ${docs.length || f.xml_url || f.pdf_url ? `<div class="flist">${docs.map(d => `<div class="fitem"><span class="fk">${esc(d.tipo.toUpperCase())}</span><a class="fn" href="${esc(d.url)}" target="_blank">${esc(d.url.split('/').pop())}</a><span class="mini">${esc(nomUsr(d.subido_por))} · ${fmtDT(d.subido_at)}</span><span class="mini" title="Huella SHA-256">#${esc((d.sha256 || '').slice(0, 8))}</span></div>`).join('')}</div>` : '<div class="mini">Sin documentos</div>'}
   <h4 style="margin:18px 0 8px">${egr ? 'Pagos' : 'Cobros'}</h4>
   ${pagos.length ? `<table><tbody>${pagos.map(a => `<tr style="${a.anulado ? 'opacity:.45;text-decoration:line-through' : ''}"><td>${fmtD(a.fecha_pago)}</td><td>${esc(a.metodo || '')}</td><td class="amt">${$$(a.monto)}</td><td>${a.comprobante_url ? `<a class="docprev" href="${esc(a.comprobante_url)}" target="_blank">Comprobante</a>` : ''}</td><td class="mini">${esc(nomUsr(a.firma1_por || a.created_by))}${a.firma2_por ? ' + ' + esc(nomUsr(a.firma2_por)) : ''}</td><td>${!a.anulado && esAdmin() ? `<button class="btn btn-d btn-sm" onclick="anular('fin_abonos','${a.id}')">Anular</button>` : a.anulado ? '<span class="mini">' + esc(a.anulado_motivo || '') + '</span>' : ''}</td></tr>`).join('')}</tbody></table>` : '<div class="mini">Sin movimientos</div>'}`;
+  const mod = egr ? 'cxp' : 'cxc';
   const ft = [
-    f.estado !== 'pagado' && !f.anulado ? `<button class="btn btn-p" onclick="pagarCuenta('${id}')">${egr ? 'Pagar' : 'Registrar cobro'}</button>` : '',
-    `<button class="btn btn-s" onclick="openUpload('${id}')">⬆ Adjuntar documento</button>`,
-    `<button class="btn btn-s" onclick="correoProveedor('${f.entidad_id}','${id}')">✉ Correo</button>`,
-    ['contadora', 'admin', 'direccion'].includes(cu.rol) ? `<button class="btn btn-s" onclick="revisar('${id}','revisado')">✓ Revisado</button><button class="btn btn-w" onclick="revisar('${id}','observado')">Observar</button>` : '',
-    egr && f.estado !== 'pagado' ? `<button class="btn btn-s" onclick="registrarDevolucion('${id}')">Devolución</button>` : '',
+    f.estado !== 'pagado' && !f.anulado && puedePagar(f) ? `<button class="btn btn-p" onclick="pagarCuenta('${id}')">${egr ? 'Pagar' : 'Registrar cobro'}</button>` : '',
+    egr && f.estado !== 'pagado' && !f.anulado && puede('cxp') ? (f.propuesta_pago ? `<button class="btn btn-s" onclick="quitarPropuesta('${id}')">Quitar de propuesta</button>` : `<button class="btn btn-s" onclick="proponerUna('${id}')">Proponer pago</button>`) : '',
+    puede(mod) ? `<button class="btn btn-s" onclick="openUpload('${id}')">⬆ Adjuntar documento</button>` : '',
+    puede(mod) ? `<button class="btn btn-s" onclick="correoProveedor('${f.entidad_id}','${id}')">✉ Correo</button>` : '',
+    puede('revision') ? `<button class="btn btn-s" onclick="revisar('${id}','revisado')">✓ Revisado</button><button class="btn btn-w" onclick="revisar('${id}','observado')">Observar</button>` : '',
+    egr && f.estado !== 'pagado' && puede('cxc') ? `<button class="btn btn-s" onclick="registrarDevolucion('${id}')">Devolución</button>` : '',
     esAdmin() && !f.anulado ? `<button class="btn btn-d" onclick="anular('fin_facturas','${id}')">Anular</button>` : '',
   ].join('');
   modal(`${egr ? 'Cuenta por pagar' : 'Cuenta por cobrar'} · ${nomEnt(f.entidad_id)}`, b, ft, 'xl');
@@ -1277,6 +1250,14 @@ function xls(rows, nombre) {
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Datos'); XLSX.writeFile(wb, nombre + '.xlsx');
 }
 
+const puedePagar = f => f.tipo === 'egreso' ? puede('pagos', 3) : puede('cxc');
+async function proponerUna(id) {
+  const fecha = prompt('Fecha propuesta de pago (AAAA-MM-DD):', isoD(new Date()));
+  if (!fecha) return;
+  const r = await rpcFirmado('fin_proponer_pago', { p_facturas: [id], p_fecha: fecha }, { titulo: 'Proponer pago al Director' });
+  if (r) { CM('mGen'); toast('Propuesto al Director', 'success'); await cargarTodo(); }
+}
+
 // ══ INGRESO DIARIO (desde COE Conciliación) ════
 function rIngDiario() {
   const suc = id => { const s = SUC.find(x => x.id === id); return s ? (s.nombre || s.sucursal || s.id) : '—'; };
@@ -1336,11 +1317,11 @@ function rPedidos() {
   const chips = [['activos', 'Activos'], ['solicitado', 'Por autorizar'], ['autorizado', 'Autorizados'], ['enviado', 'Enviados'], ['recibido', 'Recibidos'], ['todos', 'Todos']]
     .map(([k, l]) => `<span class="chip ${VIEW.pedF === k ? 'act' : ''}" onclick="VIEW.pedF='${k}';renderTab()">${l}</span>`).join('');
   return `<div class="ph"><div><div class="ptit">Pedidos y órdenes de compra</div><div class="psub">El área solicita · Dirección o Administración autoriza · arriba de ${$$(limiteFirma())} firma el Director General · urgentes con autorización exprés</div></div>
-    <button class="btn btn-p btn-sm" onclick="nuevoPedido()">+ Nuevo pedido</button></div>
+    ${puede('pedidos') ? `<button class="btn btn-p btn-sm" onclick="nuevoPedido()">+ Nuevo pedido</button>` : ''}</div>
   <div class="pad"><div class="tc"><div class="ttb"><div class="chips">${chips}</div></div>
   ${L.length ? `<table><thead><tr><th>Folio</th><th>Área</th><th>Proveedor</th><th>Descripción</th><th style="text-align:right">Estimado</th><th>Estado</th><th>Solicitó</th><th></th></tr></thead><tbody>
   ${L.map(p => `<tr style="cursor:pointer" onclick="verPedido('${p.id}')"><td><b>${esc(p.folio)}</b>${p.urgente ? ' <span class="bdg bdg-rt-r">URGENTE</span>' : ''}</td><td>${esc(p.area)}<div class="mini">${esc(p.sede || '')}</div></td><td>${esc(nomEnt(p.entidad_id))}</td><td>${esc(p.descripcion)}</td><td class="amt" style="text-align:right">${$$(p.monto_estimado)}</td><td><span class="bdg ${PED_EST[p.estado]?.[1] || ''}">${PED_EST[p.estado]?.[0] || esc(p.estado)}</span></td><td class="mini">${esc(nomUsr(p.solicitado_por))}<br>${fmtDT(p.solicitado_at)}</td>
-    <td onclick="event.stopPropagation()">${p.estado === 'solicitado' && puedeAutorizar() ? `<button class="btn btn-p btn-sm" onclick="autorizarPedido('${p.id}','autorizar')">Autorizar</button>` : p.estado === 'autorizado' ? `<button class="btn btn-s btn-sm" onclick="enviarPedido('${p.id}')">✉ Enviar</button>` : ''}</td></tr>`).join('')}</tbody></table>`
+    <td onclick="event.stopPropagation()">${p.estado === 'solicitado' && puede('pedidos', 3) ? `<button class="btn btn-p btn-sm" onclick="autorizarPedido('${p.id}','autorizar')">Autorizar</button>` : p.estado === 'autorizado' && puede('pedidos') ? `<button class="btn btn-s btn-sm" onclick="enviarPedido('${p.id}')">✉ Enviar</button>` : ''}</td></tr>`).join('')}</tbody></table>`
       : `<div class="emp"><div class="ic">⬡</div><p>Sin pedidos en este filtro</p></div>`}</div></div>`;
 }
 function nuevoPedido() {
@@ -1396,9 +1377,9 @@ function verPedido(id) {
   </div>
   ${pt.length ? `<table style="margin-top:14px"><thead><tr><th>Cant.</th><th>Producto</th><th style="text-align:right">Precio</th><th style="text-align:right">Importe</th></tr></thead><tbody>${pt.map(l => `<tr><td>${l.cantidad}</td><td>${esc(l.descripcion)}</td><td class="amt" style="text-align:right">${$$(l.precio)}</td><td class="amt" style="text-align:right">${$$(l.cantidad * l.precio)}</td></tr>`).join('')}<tr><td colspan="3"><b>Total estimado</b></td><td class="amt" style="text-align:right;font-weight:800">${$$(p.monto_estimado)}</td></tr></tbody></table>` : ''}`;
   const ft = [
-    p.estado === 'solicitado' && puedeAutorizar() ? `<button class="btn btn-p" onclick="autorizarPedido('${id}','autorizar')">Autorizar</button><button class="btn btn-d" onclick="autorizarPedido('${id}','rechazar')">Rechazar</button>` : '',
+    p.estado === 'solicitado' && puede('pedidos', 3) ? `<button class="btn btn-p" onclick="autorizarPedido('${id}','autorizar')">Autorizar</button><button class="btn btn-d" onclick="autorizarPedido('${id}','rechazar')">Rechazar</button>` : '',
     ['autorizado', 'enviado', 'recibido', 'facturado'].includes(p.estado) ? `<button class="btn btn-s" onclick="imprimirOC('${id}')">🖨 Orden de compra</button>` : '',
-    p.estado === 'autorizado' ? `<button class="btn btn-p" onclick="enviarPedido('${id}')">✉ Enviar al proveedor</button>` : '',
+    p.estado === 'autorizado' && puede('pedidos') ? `<button class="btn btn-p" onclick="enviarPedido('${id}')">✉ Enviar al proveedor</button>` : '',
     ['autorizado', 'enviado'].includes(p.estado) ? `<button class="btn btn-s" onclick="estadoPedido('${id}','recibido')">Recibido</button>` : '',
     ['enviado', 'recibido'].includes(p.estado) ? `<button class="btn btn-s" onclick="correoProveedor('${p.entidad_id}',null,'${id}','aclaracion')">✉ Aclaración</button>` : '',
     p.entidad_id ? `<button class="btn btn-s" onclick="cartaProveedor('${p.entidad_id}','devolucion','${id}')">Carta de devolución</button><button class="btn btn-s" onclick="cartaProveedor('${p.entidad_id}','garantia','${id}')">Carta de garantía</button>` : '',
@@ -1469,9 +1450,9 @@ async function enviarCorreo() {
 // ══ PROVEEDORES ════════════════════════════════
 function rProv() {
   const L = ENT.filter(e => e.activo !== false);
-  return `<div class="ph"><div><div class="ptit">Proveedores</div><div class="psub">${L.length} activos · días de crédito, correo y datos bancarios</div></div><button class="btn btn-p btn-sm" onclick="editarProv()">+ Proveedor</button></div>
+  return `<div class="ph"><div><div class="ptit">Proveedores</div><div class="psub">${L.length} activos · días de crédito, correo y datos bancarios</div></div>${puede('proveedores') ? `<button class="btn btn-p btn-sm" onclick="editarProv()">+ Proveedor</button>` : ''}</div>
   <div class="pad"><div class="tc"><table><thead><tr><th>Nombre</th><th>RFC</th><th>Crédito</th><th>Correo</th><th>Banco / CLABE</th><th style="text-align:right">Saldo</th><th></th></tr></thead><tbody>
-  ${L.map(e => { const s = abiertas('egreso').filter(f => f.entidad_id === e.id).reduce((a, f) => a + saldo(f), 0); return `<tr><td><b>${esc(e.nombre)}</b><div class="mini">${esc(e.categoria || '')}</div></td><td class="mini">${esc(e.rfc || '—')}</td><td>${e.dias_credito ? e.dias_credito + ' días' : 'Contado'}</td><td class="mini">${esc(e.email || '—')}</td><td class="mini">${esc(e.banco || '')} ${esc(e.clabe || '')}</td><td class="amt" style="text-align:right">${s ? $$(s) : '—'}</td><td><div class="rowact"><button class="btn btn-s btn-sm" onclick="editarProv('${e.id}')">Editar</button><button class="btn btn-s btn-sm" onclick="correoProveedor('${e.id}')">✉</button></div></td></tr>`; }).join('')}
+  ${L.map(e => { const s = abiertas('egreso').filter(f => f.entidad_id === e.id).reduce((a, f) => a + saldo(f), 0); return `<tr><td><b>${esc(e.nombre)}</b><div class="mini">${esc(e.categoria || '')}</div></td><td class="mini">${esc(e.rfc || '—')}</td><td>${e.dias_credito ? e.dias_credito + ' días' : 'Contado'}</td><td class="mini">${esc(e.email || '—')}</td><td class="mini">${esc(e.banco || '')} ${esc(e.clabe || '')}</td><td class="amt" style="text-align:right">${s ? $$(s) : '—'}</td><td><div class="rowact">${puede('proveedores') ? `<button class="btn btn-s btn-sm" onclick="editarProv('${e.id}')">Editar</button>` : ''}<button class="btn btn-s btn-sm" onclick="correoProveedor('${e.id}')">✉</button></div></td></tr>`; }).join('')}
   </tbody></table></div></div>`;
 }
 function editarProv(id, pre = {}) {
@@ -1499,7 +1480,7 @@ function rFps() {
   const L = vivas().filter(f => f.factura_pendiente).sort((a, b) => String(a.factura_limite).localeCompare(String(b.factura_limite)));
   return `<div class="ph"><div><div class="ptit">Facturas por solicitar</div><div class="psub">Pagos hechos sin factura · la contadora las consigue antes de fin de mes · al subir el XML se cierran solas</div></div><button class="btn btn-p btn-sm" onclick="openUpload()">⬆ Subir factura</button></div>
   <div class="pad"><div class="tc">${L.length ? `<table><thead><tr><th></th><th>Proveedor</th><th>Concepto</th><th>Pagado</th><th style="text-align:right">Monto</th><th>Límite</th><th>Último correo</th><th></th></tr></thead><tbody>
-  ${L.map(f => { const d = diasA(f.factura_limite), c = CORR.find(x => x.factura_id === f.id); return `<tr><td><span class="sem ${d === null ? 'a' : d < 0 ? 'r' : d <= 5 ? 'a' : 'v'}"></span></td><td>${esc(nomEnt(f.entidad_id))}</td><td>${esc(f.descripcion)}</td><td>${fmtD(f.fecha_pago)}</td><td class="amt" style="text-align:right">${$$(f.monto_total)}</td><td>${fmtD(f.factura_limite)}</td><td class="mini">${c ? fmtDT(c.enviado_at) : '—'}</td><td><div class="rowact"><button class="btn btn-s btn-sm" onclick="correoProveedor('${f.entidad_id}','${f.id}',null,'factura')">✉ Pedir</button><button class="btn btn-p btn-sm" onclick="openUpload('${f.id}')">⬆ XML/PDF</button></div></td></tr>`; }).join('')}</tbody></table>`
+  ${L.map(f => { const d = diasA(f.factura_limite), c = CORR.find(x => x.factura_id === f.id); return `<tr><td><span class="sem ${d === null ? 'a' : d < 0 ? 'r' : d <= 5 ? 'a' : 'v'}"></span></td><td>${esc(nomEnt(f.entidad_id))}</td><td>${esc(f.descripcion)}</td><td>${fmtD(f.fecha_pago)}</td><td class="amt" style="text-align:right">${$$(f.monto_total)}</td><td>${fmtD(f.factura_limite)}</td><td class="mini">${c ? fmtDT(c.enviado_at) : '—'}</td><td>${puede('fps') ? `<div class="rowact"><button class="btn btn-s btn-sm" onclick="correoProveedor('${f.entidad_id}','${f.id}',null,'factura')">✉ Pedir</button><button class="btn btn-p btn-sm" onclick="openUpload('${f.id}')">⬆ XML/PDF</button></div>` : ''}</td></tr>`; }).join('')}</tbody></table>`
       : '<div class="emp"><div class="ic">✓</div><p>Lista en cero. No hay facturas por solicitar.</p></div>'}</div></div>`;
 }
 
@@ -1514,7 +1495,7 @@ function rTareas() {
   return `<div class="ph"><div><div class="ptit">Tareas de la contadora</div><div class="psub">Cronograma con fecha límite · se cumple subiendo la evidencia y firmando con PIN</div></div>
     <div style="display:flex;gap:8px"><button class="btn btn-s btn-sm" onclick="generarTareas()">Generar mes siguiente</button></div></div>
   <div class="pad"><div class="tc"><div class="ttb"><div class="chips">${chips}</div></div>${L.length ? `<table><thead><tr><th>Estatus</th><th>Fecha límite</th><th>Tarea</th><th>Entregable</th><th>Cumplió</th><th></th></tr></thead><tbody>
-  ${L.map(t => { const [s, tx] = est(t); return `<tr><td><span class="sem ${s}"></span><span class="mini">${tx}</span></td><td>${fmtD(t.fecha_limite)}</td><td><b>${esc(t.titulo)}</b><div class="mini">${esc(t.descripcion || '')}</div></td><td class="mini">${esc(t.entregable || '')}</td><td class="mini">${t.cumplida_por ? esc(nomUsr(t.cumplida_por)) + '<br>' + fmtDT(t.cumplida_at) : '—'}</td><td>${t.estado === 'cumplida' ? (t.evidencia_url ? `<a class="docprev" href="${esc(t.evidencia_url)}" target="_blank">Evidencia</a>` : '') : `<button class="btn btn-p btn-sm" onclick="cumplirTarea('${t.id}')">Cumplir</button>`}</td></tr>`; }).join('')}</tbody></table>`
+  ${L.map(t => { const [s, tx] = est(t); return `<tr><td><span class="sem ${s}"></span><span class="mini">${tx}</span></td><td>${fmtD(t.fecha_limite)}</td><td><b>${esc(t.titulo)}</b><div class="mini">${esc(t.descripcion || '')}</div></td><td class="mini">${esc(t.entregable || '')}</td><td class="mini">${t.cumplida_por ? esc(nomUsr(t.cumplida_por)) + '<br>' + fmtDT(t.cumplida_at) : '—'}</td><td>${t.estado === 'cumplida' ? (t.evidencia_url ? `<a class="docprev" href="${esc(t.evidencia_url)}" target="_blank">Evidencia</a>` : '') : (puede('tareas') ? `<button class="btn btn-p btn-sm" onclick="cumplirTarea('${t.id}')">Cumplir</button>` : '')}</td></tr>`; }).join('')}</tbody></table>`
       : `<div class="emp"><div class="ic">✓</div><p>${FALTA_SQL.includes('fin_tareas') ? 'Falta correr el SQL de la Fase 1b para cargar el cronograma.' : 'Sin tareas en este filtro'}</p></div>`}</div></div>`;
 }
 async function generarTareas() {
@@ -1580,12 +1561,12 @@ function rRec() {
     const L = buildRecOcurrencias(35).filter(o => o.diasDiff <= 35 && (o.estado !== 'pagado' || o.diasDiff >= -31));
     const sem = { pagado: 'v', vencido: 'r', proximo: 'a', futuro: 'g' }, txt = { pagado: 'Pagado', vencido: 'Vencido', proximo: 'Por vencer', futuro: 'Programado' };
     window._recOc = L;
-    body = L.length ? `<table><thead><tr><th>Estatus</th><th>Fecha</th><th>Pago</th><th>Proveedor</th><th>Frecuencia</th><th></th></tr></thead><tbody>${L.map((o, i) => `<tr><td><span class="sem ${sem[o.estado]}"></span><span class="mini">${txt[o.estado]}</span></td><td>${fmtD(isoD(o.fecha))}</td><td><b>${esc(o.rec.descripcion)}</b><div class="mini">${esc(o.rec.categoria || '')}</div></td><td>${esc(nomEnt(o.rec.entidad_id))}</td><td class="mini">${FREC[o.rec.frecuencia] || ''}</td><td>${o.estado === 'pagado' ? `<button class="btn btn-s btn-sm" onclick="verCuenta('${o.factura.id}')">Ver</button>` : `<button class="btn btn-p btn-sm" onclick="pagarRecurrente(${i})">Pagar</button>`}</td></tr>`).join('')}</tbody></table>` : '<div class="emp">Sin pagos recurrentes próximos</div>';
+    body = L.length ? `<table><thead><tr><th>Estatus</th><th>Fecha</th><th>Pago</th><th>Proveedor</th><th>Frecuencia</th><th></th></tr></thead><tbody>${L.map((o, i) => `<tr><td><span class="sem ${sem[o.estado]}"></span><span class="mini">${txt[o.estado]}</span></td><td>${fmtD(isoD(o.fecha))}</td><td><b>${esc(o.rec.descripcion)}</b><div class="mini">${esc(o.rec.categoria || '')}</div></td><td>${esc(nomEnt(o.rec.entidad_id))}</td><td class="mini">${FREC[o.rec.frecuencia] || ''}</td><td>${o.estado === 'pagado' ? `<button class="btn btn-s btn-sm" onclick="verCuenta('${o.factura.id}')">Ver</button>` : (puede('pagos', 3) ? `<button class="btn btn-p btn-sm" onclick="pagarRecurrente(${i})">Pagar</button>` : '')}</td></tr>`).join('')}</tbody></table>` : '<div class="emp">Sin pagos recurrentes próximos</div>';
   } else {
-    body = `<table><thead><tr><th>Plantilla</th><th>Proveedor</th><th>Frecuencia</th><th>Día</th><th>Aviso</th><th></th></tr></thead><tbody>${REC.map(r => `<tr><td><b>${esc(r.descripcion)}</b><div class="mini">${esc(r.categoria || '')}</div></td><td>${esc(nomEnt(r.entidad_id))}</td><td>${FREC[r.frecuencia] || r.frecuencia}</td><td>${r.dia_vencimiento || ''}${r.dia_vencimiento_2 ? ' y ' + r.dia_vencimiento_2 : ''}${r.mes_vencimiento ? ' / mes ' + r.mes_vencimiento : ''}</td><td>${r.dias_alerta || 3} días antes</td><td><button class="btn btn-s btn-sm" onclick="editarRec('${r.id}')">Editar</button></td></tr>`).join('')}</tbody></table>`;
+    body = `<table><thead><tr><th>Plantilla</th><th>Proveedor</th><th>Frecuencia</th><th>Día</th><th>Aviso</th><th></th></tr></thead><tbody>${REC.map(r => `<tr><td><b>${esc(r.descripcion)}</b><div class="mini">${esc(r.categoria || '')}</div></td><td>${esc(nomEnt(r.entidad_id))}</td><td>${FREC[r.frecuencia] || r.frecuencia}</td><td>${r.dia_vencimiento || ''}${r.dia_vencimiento_2 ? ' y ' + r.dia_vencimiento_2 : ''}${r.mes_vencimiento ? ' / mes ' + r.mes_vencimiento : ''}</td><td>${r.dias_alerta || 3} días antes</td><td>${puede('recurrentes') ? `<button class="btn btn-s btn-sm" onclick="editarRec('${r.id}')">Editar</button>` : ''}</td></tr>`).join('')}</tbody></table>`;
   }
   return `<div class="ph"><div><div class="ptit">Pagos recurrentes</div><div class="psub">Servicios y pagos fijos · avisos antes del vencimiento · hoja imprimible del mes</div></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">${tg}<button class="btn btn-s btn-sm" onclick="imprimirRecurrentes()">🖨 Hoja del mes</button><button class="btn btn-p btn-sm" onclick="editarRec()">+ Plantilla</button></div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${tg}<button class="btn btn-s btn-sm" onclick="imprimirRecurrentes()">🖨 Hoja del mes</button>${puede('recurrentes') ? `<button class="btn btn-p btn-sm" onclick="editarRec()">+ Plantilla</button>` : ''}</div></div>
   <div class="pad"><div class="tc">${body}</div></div>`;
 }
 function pagarRecurrente(i) {
@@ -1714,38 +1695,222 @@ function rCfg() {
   return `<div class="ph"><div><div class="ptit">Configuración</div><div class="psub">Usuarios, razón social y parámetros</div></div></div>
   <div class="pad"><div class="cfgg">
     <div class="cfg-section"><h3>Usuarios</h3><div class="body">
-      <table><tbody>${USR.map(u => `<tr><td><b>${esc(u.nombre)}</b><div class="mini">${esc(u.usuario ? '@' + u.usuario : 'sin usuario · usar Primer acceso')}</div></td><td>${esc(ROLES[u.rol] || u.rol)}</td><td class="mini">${esc(u.sede || 'Todas')}</td><td><button class="btn btn-s btn-sm" onclick="editarUsr('${u.id}')">Editar</button></td></tr>`).join('')}</tbody></table>
+      <table><tbody>${USR.map(u => `<tr style="${u.activo === false ? 'opacity:.45' : ''}"><td><b>${esc(u.nombre)}</b><div class="mini">${esc(u.usuario ? '@' + u.usuario : 'sin usuario · usar Primer acceso')}${u.activo === false ? ' · inactivo' : ''}</div></td><td>${esc(ROLES[u.rol] || u.rol)}${u.permisos && Object.keys(u.permisos).length ? '<div class="mini">permisos ajustados</div>' : ''}</td><td class="mini">${esc(u.sede || 'Todas')}</td><td><button class="btn btn-s btn-sm" onclick="editarUsr('${u.id}')">Editar</button></td></tr>`).join('')}</tbody></table>
       <button class="btn btn-p btn-sm" style="margin-top:10px" onclick="editarUsr()">+ Usuario</button></div></div>
+    <div class="cfg-section"><h3>Perfiles</h3><div class="body"><table><thead><tr><th>Módulo</th>${['admin','direccion','contadora','administracion','solicitante'].map(r=>`<th>${ROLES[r].split(' ')[0]}</th>`).join('')}</tr></thead><tbody>${MODS.map(([m,l])=>`<tr><td>${l}</td>${['admin','direccion','contadora','administracion','solicitante'].map(r=>`<td class="mini">${NIV[nivelRol(r,m)]}</td>`).join('')}</tr>`).join('')}</tbody></table><div class="mini" style="margin-top:8px">Valores por perfil. En cada usuario puedes ajustar módulo por módulo.</div></div></div>
     <div class="cfg-section"><h3>Razón social</h3><div class="body">${RS.map(r => `<div><b>${esc(r.nombre)}</b> · RFC ${esc(r.rfc)}</div>`).join('')}<div class="mini" style="margin-top:8px">Por ahora se trabaja con una sola razón social.</div></div></div>
     <div class="cfg-section"><h3>Parámetros</h3><div class="body">
       <div class="kv"><b>Doble firma desde</b><div>${$$(limiteFirma())}</div><b>Aviso de vencimiento</b><div>${esc(CFG.dias_aviso || 3)} días antes</div><b>Resumen diario</b><div>${esc(CFG.hora_alertas)}</div><b>Correo de alertas</b><div>${esc(CFG.correo_alertas)}</div><b>WhatsApp</b><div class="mini">En espera de conexión</div></div></div></div>
     <div class="cfg-section"><h3>Base de datos</h3><div class="body">${FALTA_SQL.length ? `<div class="warnbox">Falta correr <b>sql/v3_fase1b.sql</b> en el editor SQL de Supabase.</div>` : '<div class="okbox">Estructura completa.</div>'}<div class="mini">Última sincronización: ${fmtDT(lastSync)} · tiempo real: ${rtState === 'on' ? 'activo' : 'inactivo'}</div></div></div>
   </div></div>`;
 }
+
+// ══ PERFILES Y PERMISOS ════════════════════════
+// Niveles: 0 sin acceso · 1 ver · 2 operar · 3 autorizar. Igual que fin__nivel() en la base de datos,
+// que es quien realmente valida cada firma; aquí solo se ocultan pantallas y botones.
+const MODS = [
+  ['tablero', 'Tablero'], ['cxp', 'Por pagar y facturas'], ['cxc', 'Por cobrar'], ['ingreso', 'Ingreso diario'],
+  ['pagos', 'Ejecutar pagos'], ['pedidos', 'Pedidos'], ['proveedores', 'Proveedores'], ['fps', 'Facturas por solicitar'],
+  ['tareas', 'Tareas'], ['recurrentes', 'Recurrentes'], ['revision', 'Revisión contable'], ['reportes', 'Reportes'],
+  ['auditoria', 'Auditoría'], ['config', 'Configuración']
+];
+const NIV = ['Sin acceso', 'Ver', 'Operar', 'Autorizar'];
+function nivelRol(rol, m) {
+  if (rol === 'admin') return 3;
+  if (rol === 'direccion') return m === 'pedidos' ? 3 : m === 'revision' ? 2 : m === 'config' ? 0 : 1;
+  if (rol === 'contadora') return ['pagos', 'ingreso', 'reportes', 'auditoria', 'tablero'].includes(m) ? 1 : m === 'config' ? 0 : 2;
+  if (rol === 'administracion') return m === 'pedidos' ? 3 : ['cxp', 'fps'].includes(m) ? 2 : m === 'proveedores' ? 1 : ['auditoria', 'config', 'pagos'].includes(m) ? 0 : 1;
+  if (rol === 'solicitante') return m === 'pedidos' ? 2 : m === 'tablero' ? 1 : 0;
+  return 1;
+}
+function niv(m, u = cu) {
+  if (!u) return 0;
+  const p = u.permisos && u.permisos[m];
+  return p !== undefined && p !== null && p !== '' ? Number(p) : nivelRol(u.rol, m);
+}
+const puede = (m, n = 2) => niv(m) >= n;
+const TAB_MOD = { dash: 'tablero', alr: 'tablero', cxp: 'cxp', cxc: 'cxc', ingd: 'ingreso', pag: 'cxp', cal: 'cxp', ped: 'pedidos', prov: 'proveedores', fps: 'fps', tar: 'tareas', rec: 'recurrentes', rep: 'reportes', aud: 'auditoria', cfg: 'config' };
+function aplicarPermisosMenu() {
+  Object.entries(TAB_MOD).forEach(([t, m]) => { const el = document.getElementById('n-' + t); if (el) el.style.display = niv(m) >= 1 || t === 'dash' || t === 'alr' ? '' : 'none'; });
+  document.querySelectorAll('.ns').forEach(ns => {
+    let n = ns.nextElementSibling, vis = false;
+    while (n && !n.classList.contains('ns')) { if (n.style.display !== 'none') vis = true; n = n.nextElementSibling; }
+    ns.style.display = vis ? '' : 'none';
+  });
+  document.querySelector('.fab').style.display = puede('cxp') || puede('cxc') ? '' : 'none';
+}
+
+// Editor de usuario con matriz de permisos
 function editarUsr(id) {
-  const u = id ? USR.find(x => x.id === id) : {};
-  modal(id ? 'Editar usuario' : 'Nuevo usuario', `<div class="fgrd">
+  const u = id ? USR.find(x => x.id === id) : { rol: 'contadora', permisos: {} };
+  window._eu = { rol: u.rol, permisos: { ...(u.permisos || {}) } };
+  const matriz = () => MODS.map(([m, l]) => {
+    const def = nivelRol(_eu.rol, m), v = _eu.permisos[m];
+    return `<tr><td>${l}</td><td><select onchange="if(this.value==='')delete _eu.permisos['${m}'];else _eu.permisos['${m}']=+this.value">
+      <option value="" ${v === undefined ? 'selected' : ''}>Según rol (${NIV[def]})</option>${NIV.map((t, i) => `<option value="${i}" ${v !== undefined && +v === i ? 'selected' : ''}>${t}</option>`).join('')}</select></td></tr>`;
+  }).join('');
+  modal(id ? 'Usuario · ' + u.nombre : 'Nuevo usuario', `<div class="fgrd">
     <div class="fgrp sp2"><label>Nombre</label><input type="text" id="usN" value="${esc(u.nombre || '')}"></div>
-    <div class="fgrp"><label>Rol</label><select id="usR">${Object.entries(ROLES).filter(([k]) => k !== 'usuario').map(([k, l]) => `<option value="${k}" ${u.rol === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+    <div class="fgrp"><label>Perfil</label><select id="usR" onchange="_eu.rol=this.value;document.getElementById('usMx').innerHTML=_euMx()">${Object.entries(ROLES).filter(([k]) => k !== 'usuario').map(([k, l]) => `<option value="${k}" ${u.rol === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
     <div class="fgrp"><label>Sede</label><select id="usS"><option value="">Todas</option><option ${u.sede === 'Tacámbaro' ? 'selected' : ''}>Tacámbaro</option><option ${u.sede === 'Morelia' ? 'selected' : ''}>Morelia</option></select></div>
     <div class="fgrp"><label>Correo para alertas</label><input type="email" id="usE" value="${esc(u.email || '')}"></div>
-    <div class="fgrp"><label>${id ? 'Nuevo PIN (opcional)' : 'PIN inicial (4 dígitos)'}</label><input type="password" id="usP" maxlength="4" inputmode="numeric"></div></div>
-    <div class="mini" style="margin-top:10px">La persona crea su usuario y contraseña en "Primer acceso" con su nombre y este PIN.</div>`,
-    `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="guardarUsr('${id || ''}')">Firmar y guardar</button>`, 'sm');
+    <div class="fgrp"><label>${id ? 'Nuevo PIN (opcional)' : 'PIN inicial (4 dígitos)'}</label><input type="password" id="usP" maxlength="4" inputmode="numeric"></div>
+    ${id ? `<div class="fgrp sp2"><label style="text-transform:none;font-size:13px;color:var(--tx)"><input type="checkbox" id="usRst"> Restablecer usuario y contraseña (vuelve a "Primer acceso")</label></div>
+    <div class="fgrp sp2"><label style="text-transform:none;font-size:13px;color:var(--tx)"><input type="checkbox" id="usAct" ${u.activo !== false ? 'checked' : ''}> Activo</label></div>` : ''}
+    </div>
+    <h4 style="margin:16px 0 6px">Permisos</h4><div class="mini" style="margin-bottom:8px">Ver = consulta · Operar = registra y firma · Autorizar = aprueba pedidos y, en pagos, ejecuta. La base de datos valida cada firma con estos niveles.</div>
+    <table><tbody id="usMx">${matriz()}</tbody></table>`,
+    `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="guardarUsr('${id || ''}')">Firmar y guardar</button>`);
+  window._euMx = matriz;
 }
 async function guardarUsr(id) {
-  if (!usN.value.trim()) { toast('Falta el nombre', 'warning'); return; }
-  if (!id && !/^\d{4}$/.test(usP.value)) { toast('El PIN debe tener 4 dígitos', 'warning'); return; }
-  let pin; try { pin = await askPin('Firma del Director General'); } catch { return; }
-  const { data } = await sb.rpc('fin_verificar_pin', { p_usuario: cu.id, p_pin: pin });
-  if (!data?.ok) { toast('PIN incorrecto', 'error'); return; }
-  const pay = { nombre: usN.value.trim(), rol: usR.value, sede: usS.value || null, email: usE.value || null, activo: true };
-  if (/^\d{4}$/.test(usP.value)) pay.pin_hash = await sha256Text(usP.value);
-  const { error } = id ? await sb.from('fin_usuarios').update(pay).eq('id', id) : await sb.from('fin_usuarios').insert(pay);
-  if (error) { toast(error.message, 'error'); return; }
+  const d = { id, nombre: usN.value.trim(), rol: usR.value, sede: usS.value, email: usE.value, pin: usP.value, permisos: _eu.permisos };
+  if (id) { d.reset_password = document.getElementById('usRst').checked; d.activo = document.getElementById('usAct').checked; }
+  if (!d.nombre) { toast('Falta el nombre', 'warning'); return; }
+  if (!id && !/^\d{4}$/.test(d.pin)) { toast('El PIN inicial debe tener 4 dígitos', 'warning'); return; }
+  const r = await rpcFirmado('fin_guardar_usuario', { p_datos: d }, { titulo: 'Firma del Director General', sub: 'Guardar usuario y permisos' });
+  if (!r) return;
   CM('mGen'); toast('Usuario guardado', 'success');
-  const r = await sb.from('fin_usuarios').select('id,nombre,rol,sede,activo,email,usuario').eq('activo', true).order('nombre');
-  if (!r.error) USR = r.data; renderTab();
+  await cargarUsuarios(); renderTab();
+}
+async function cargarUsuarios() {
+  const { data, error } = await sb.from('fin_usuarios').select('id,nombre,rol,sede,activo,email,usuario,permisos').order('nombre');
+  if (!error) USR = data || [];
+}
+
+// ══ TABLEROS POR PERFIL ════════════════════════
+let DASH_VER = null;
+function rDash() {
+  const rol = DASH_VER || cu.rol;
+  const sel = esAdmin() ? `<div class="view-toggle">${[['admin', 'Director'], ['contadora', 'Contadora'], ['administracion', 'Sede'], ['solicitante', 'Solicitante']].map(([k, l]) => `<button class="vt-btn ${rol === k ? 'act' : ''}" onclick="DASH_VER='${k}';renderTab()">${l}</button>`).join('')}</div>` : '';
+  const fn = { admin: dashDirector, direccion: dashDirector, contadora: dashContadora, administracion: dashSede, solicitante: dashSolicitante }[rol] || dashDirector;
+  return fn(sel);
+}
+const sumS = a => a.reduce((s, f) => s + saldo(f), 0);
+function cabDash(titulo, sub, extra) {
+  return `<div class="ph"><div><div class="ptit">${titulo}</div><div class="psub">${new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · ${sub}</div></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${extra || ''}<button class="btn btn-s btn-sm" onclick="mostrarResumen()">Resumen del día</button></div></div>`;
+}
+function caja(titulo, cuerpo, accion) { return `<div class="cfg-section"><h3 style="display:flex;justify-content:space-between;align-items:center">${titulo}${accion || ''}</h3><div class="body">${cuerpo}</div></div>`; }
+function lista(arr, fila, vacio = 'Nada pendiente') { return arr.length ? `<div class="alist">${arr.map(fila).join('')}</div>` : `<div class="mini">✓ ${vacio}</div>`; }
+const propuestas = () => abiertas('egreso').filter(f => f.propuesta_pago);
+
+// ── Director General ──
+function dashDirector(sel) {
+  const cxp = abiertas('egreso'), cxc = abiertas('ingreso'), venc = cxp.filter(f => semaforo(f) === 'r');
+  const mes = isoD(new Date()).slice(0, 7);
+  const lim = esAdmin() ? 0 : limiteFirma();
+  const pedAut = PED.filter(p => p.estado === 'solicitado' && enMiSede(p)).sort((a, b) => b.urgente - a.urgente);
+  const prop = propuestas().sort((a, b) => String(a.propuesta_pago).localeCompare(String(b.propuesta_pago)));
+  const obs = vivas().filter(f => f.revision === 'observado');
+  const cajaMes = CIE.filter(c => String(c.fecha).startsWith(mes));
+  const ingProm = cajaMes.length ? cajaMes.reduce((s, c) => s + num(c.corte_total), 0) / cajaMes.length : 0;
+  // Compromisos de las próximas 4 semanas
+  const sem = [0, 1, 2, 3].map(i => {
+    const a = new Date(hoyD().getTime() + i * 7 * 86400000), b = new Date(a.getTime() + 6 * 86400000), ai = isoD(a), bi = isoD(b);
+    const cx = cxp.filter(f => f.fecha_vencimiento && (i === 0 ? f.fecha_vencimiento <= bi : f.fecha_vencimiento >= ai && f.fecha_vencimiento <= bi)).reduce((s, f) => s + saldo(f), 0);
+    const rc = buildRecOcurrencias(35).filter(o => !o.factura && isoD(o.fecha) >= ai && isoD(o.fecha) <= bi).length;
+    return { lbl: i === 0 ? 'Esta semana (incluye vencido)' : `${fmtD(ai).slice(0, 5)} – ${fmtD(bi).slice(0, 5)}`, cx, rc, ing: ingProm * 6 };
+  });
+  const maxB = Math.max(1, ...sem.map(s => Math.max(s.cx, s.ing)));
+  const d = datosCumplimiento('mensual'), pct = d.tar.length ? Math.round(d.aTiempo.length / d.tar.length * 100) : 100;
+  const topProv = Object.entries(cxp.reduce((o, f) => { o[f.entidad_id] = (o[f.entidad_id] || 0) + saldo(f); return o; }, {})).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const ult = CIE[0];
+  return cabDash('Tablero del Director', esc(RS[0]?.nombre || ''), sel) + `<div class="pad">
+    <div class="dg">
+      ${kpi('Requiere tu firma', String(pedAut.length + prop.length), `${pedAut.length} pedidos · ${prop.length} pagos propuestos`, (pedAut.length + prop.length) ? 'var(--wn)' : 'var(--sc)')}
+      ${kpi('Propuesta de pagos', $$(sumS(prop)), prop.length ? 'preparada por la contadora' : 'sin propuesta', '', "document.getElementById('bxProp').scrollIntoView({behavior:'smooth'})")}
+      ${kpi('Vencido por pagar', $$(sumS(venc)), `${venc.length} cuentas`, venc.length ? 'var(--dg)' : '', "VIEW.cxpF='r';goTab('cxp')")}
+      ${kpi('Por cobrar', $$(sumS(cxc)), `${cxc.filter(f => semaforo(f) === 'r').length} vencidas`, 'var(--sc)', "goTab('cxc')")}
+    </div>
+    <div class="cfgg">
+      <div id="bxProp">${caja(`Pagos propuestos (${prop.length})`, lista(prop, f => `<div class="aitem ${semaforo(f) === 'r' ? 'r' : ''}" onclick="verCuenta('${f.id}')"><div style="flex:1"><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(saldo(f))}</div><div class="am">${esc(f.descripcion)} · pagar el ${fmtD(f.propuesta_pago)} · vence ${fmtD(f.fecha_vencimiento)}</div></div>${puede('pagos', 3) ? `<button class="btn btn-p btn-sm" onclick="event.stopPropagation();pagarCuenta('${f.id}')">Pagar</button>` : ''}</div>`, 'La contadora no ha propuesto pagos'), prop.length ? `<button class="btn btn-s btn-sm" onclick="imprimirPropuesta()">🖨</button>` : '')}</div>
+      ${caja(`Pedidos por autorizar (${pedAut.length})`, lista(pedAut, p => `<div class="aitem ${p.urgente ? 'r' : 'i'}" onclick="verPedido('${p.id}')"><div style="flex:1"><div class="at">${p.urgente ? 'URGENTE · ' : ''}${esc(p.folio)} · ${$$(p.monto_estimado)}</div><div class="am">${esc(p.area)} · ${esc(p.descripcion)} · ${esc(nomUsr(p.solicitado_por))}</div></div>${puede('pedidos', 3) && (!lim || p.monto_estimado <= lim) ? `<button class="btn btn-p btn-sm" onclick="event.stopPropagation();autorizarPedido('${p.id}','autorizar')">Autorizar</button>` : ''}</div>`))}
+      ${caja('Compromisos de pago · próximas 4 semanas', sem.map(s => `<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:12px"><span>${s.lbl}</span><b class="amt">${$$(s.cx)}</b></div>
+        <div class="prog" style="height:9px"><div style="width:${Math.round(s.cx / maxB * 100)}%;background:${s.cx > s.ing && s.ing ? 'var(--dg)' : 'var(--wn)'}"></div></div>
+        ${s.ing ? `<div class="prog" style="height:5px;margin-top:3px"><div style="width:${Math.round(s.ing / maxB * 100)}%;background:var(--sc)"></div></div>` : ''}${s.rc ? `<div class="mini">+ ${s.rc} recurrente(s) sin monto</div>` : ''}</div>`).join('') + `<div class="mini"><span class="cal-dot" style="background:var(--wn)"></span> por pagar <span class="cal-dot" style="background:var(--sc)"></span> ingreso estimado de cajas (promedio del mes × 6 días)</div>`)}
+      ${caja('Cumplimiento de la contadora · mes', `<div class="dval" style="color:${pct >= 90 ? 'var(--sc)' : pct >= 70 ? 'var(--wn)' : 'var(--dg)'}">${pct}%</div><div class="mini" style="margin-bottom:10px">${d.aTiempo.length} a tiempo · ${d.tarde.length} tarde · ${d.noCump.length} no cumplidas · ${d.fpsV.length} facturas no conseguidas</div>` + lista(d.noCump.slice(0, 5), t => `<div class="aitem r" onclick="goTab('tar')"><div><div class="at">${esc(t.titulo)}</div><div class="am">Venció ${fmtD(t.fecha_limite)}</div></div></div>`, 'Sin incumplimientos'), `<button class="btn btn-s btn-sm" onclick="goTab('rep')">Reporte</button>`)}
+      ${caja('Mayores saldos por proveedor', topProv.length ? `<table><tbody>${topProv.map(([e, s]) => `<tr><td>${esc(nomEnt(e))}</td><td class="amt" style="text-align:right">${$$(s)}</td></tr>`).join('')}</tbody></table>` : '<div class="mini">Sin saldos</div>')}
+      ${caja('Caja y observaciones', `<div class="kv"><b>Último cierre</b><div>${ult ? fmtD(ult.fecha) + ' · ' + $$(ult.corte_total) + (Math.abs(num(ult.diferencia)) > 0.5 ? ' · <span style="color:var(--dg)">diferencia ' + $$(ult.diferencia) + '</span>' : '') : 'Sin cierres aún'}</div><b>Ingreso de cajas (mes)</b><div>${$$(cajaMes.reduce((s, c) => s + num(c.corte_total), 0))}</div><b>Observaciones abiertas</b><div>${obs.length}</div></div>` + lista(obs.slice(0, 4), f => `<div class="aitem" onclick="verCuenta('${f.id}')"><div><div class="at">${esc(nomEnt(f.entidad_id))}</div><div class="am">${esc(f.revision_nota || '')}</div></div></div>`, 'Sin observaciones'))}
+    </div></div>`;
+}
+
+// ── Contadora ──
+function dashContadora(sel) {
+  const hoy = isoD(new Date()), finMes = isoD(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0));
+  const tarV = TAR.filter(t => t.estado !== 'cumplida' && t.fecha_limite < hoy), tarH = TAR.filter(t => t.estado !== 'cumplida' && t.fecha_limite >= hoy && diasA(t.fecha_limite) <= 7);
+  const fps = vivas().filter(f => f.factura_pendiente);
+  const hace60 = isoD(new Date(Date.now() - 60 * 86400000));
+  const sinRev = vivas().filter(f => !f.revision && String(f.created_at || '').slice(0, 10) >= hace60);
+  const faltan = abiertas('egreso').concat(vivas().filter(f => f.tipo === 'egreso' && f.estado === 'pagado' && String(f.fecha_pago || '') >= hace60))
+    .filter(f => f.documento_tipo !== 'sin_factura' && (!(f.xml_url || DOCS.some(d => d.registro_id === f.id && d.tipo === 'xml')) || !(f.pdf_url || DOCS.some(d => d.registro_id === f.id && d.tipo === 'pdf'))));
+  const porProp = abiertas('egreso').filter(f => !f.propuesta_pago && diasA(f.fecha_vencimiento) !== null && diasA(f.fecha_vencimiento) <= 10).sort((a, b) => a.fecha_vencimiento.localeCompare(b.fecha_vencimiento));
+  const prop = propuestas();
+  const cobV = abiertas('ingreso').filter(f => semaforo(f) === 'r');
+  const d = datosCumplimiento('mensual'), pct = d.tar.length ? Math.round(d.aTiempo.length / d.tar.length * 100) : 100;
+  window._pp = new Set();
+  return cabDash('Mi día · Contadora', `faltan ${diasA(finMes)} días para fin de mes`, sel + (puede('cxp') ? `<button class="btn btn-p btn-sm" onclick="openUpload()">⬆ Subir documento</button>` : '')) + `<div class="pad">
+    <div class="dg">
+      ${kpi('Tareas vencidas', String(tarV.length), `${tarH.length} en los próximos 7 días`, tarV.length ? 'var(--dg)' : 'var(--sc)', "goTab('tar')")}
+      ${kpi('Facturas por solicitar', String(fps.length), `límite ${fmtD(finMes)}`, fps.length ? 'var(--wn)' : 'var(--sc)', "goTab('fps')")}
+      ${kpi('Por revisar', String(sinRev.length), 'movimientos de 60 días sin revisión', sinRev.length ? 'var(--wn)' : '')}
+      ${kpi('Mi cumplimiento', pct + '%', `${d.aTiempo.length} de ${d.tar.length} a tiempo este mes`, pct >= 90 ? 'var(--sc)' : 'var(--wn)', "goTab('rep')")}
+    </div>
+    <div class="cfgg">
+      ${caja('Mis tareas', lista([...tarV, ...tarH], t => `<div class="aitem ${t.fecha_limite < hoy ? 'r' : 'a'}"><div style="flex:1"><div class="at">${esc(t.titulo)}</div><div class="am">${t.fecha_limite < hoy ? 'Venció' : 'Vence'} ${fmtD(t.fecha_limite)} · ${esc(t.entregable || '')}</div></div>${puede('tareas') ? `<button class="btn btn-p btn-sm" onclick="cumplirTarea('${t.id}')">Cumplir</button>` : ''}</div>`, 'Tareas al día'))}
+      ${caja(`Armar propuesta de pagos (${porProp.length})`, porProp.length ? `<div class="mini" style="margin-bottom:8px">Vencen en los próximos 10 días. Marca las que propones pagar y la fecha; el Director las ve en su tablero.</div>
+        ${porProp.map(f => `<label class="opt"><input type="checkbox" onchange="this.checked?_pp.add('${f.id}'):_pp.delete('${f.id}')"><span style="flex:1"><b>${esc(nomEnt(f.entidad_id))}</b> · ${$$(saldo(f))}<br><span class="mini">${esc(f.descripcion)} · vence ${fmtD(f.fecha_vencimiento)} ${docsDe(f)}</span></span></label>`).join('')}
+        <div style="display:flex;gap:8px;margin-top:10px;align-items:center"><input type="date" id="ppF" value="${hoy}" style="max-width:170px"><button class="btn btn-p btn-sm" onclick="proponer()">Firmar propuesta</button></div>` : '<div class="mini">✓ Nada por vencer sin proponer</div>')}
+      ${caja(`Propuesta enviada al Director (${prop.length} · ${$$(sumS(prop))})`, lista(prop, f => `<div class="aitem i"><div style="flex:1"><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(saldo(f))}</div><div class="am">Pagar el ${fmtD(f.propuesta_pago)} · ${esc(f.descripcion)}</div></div><button class="btn btn-s btn-sm" onclick="quitarPropuesta('${f.id}')">Quitar</button></div>`, 'Sin propuesta activa'))}
+      ${caja(`Documentos faltantes (${faltan.length})`, lista(faltan.slice(0, 10), f => `<div class="aitem a" onclick="openUpload('${f.id}')"><div style="flex:1"><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(f.monto_total)}</div><div class="am">${esc(f.descripcion)}</div></div>${docsDe(f)}</div>`, 'Todos los movimientos tienen XML y PDF'))}
+      ${caja(`Facturas por solicitar (${fps.length})`, lista(fps.slice(0, 8), f => `<div class="aitem ${diasA(f.factura_limite) < 0 ? 'r' : 'a'}"><div style="flex:1"><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(f.monto_total)}</div><div class="am">${esc(f.descripcion)} · límite ${fmtD(f.factura_limite)}</div></div><button class="btn btn-s btn-sm" onclick="correoProveedor('${f.entidad_id}','${f.id}',null,'factura')">✉ Pedir</button></div>`, 'Lista en cero'), `<button class="btn btn-s btn-sm" onclick="goTab('fps')">Ver todas</button>`)}
+      ${caja(`Por revisar (${sinRev.length})`, lista(sinRev.slice(0, 8), f => `<div class="aitem" onclick="verCuenta('${f.id}')"><div style="flex:1"><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(f.monto_total)}</div><div class="am">${esc(f.descripcion)} · ${fmtD(String(f.created_at).slice(0, 10))}</div></div>${puede('revision') ? `<button class="btn btn-s btn-sm" onclick="event.stopPropagation();revisar('${f.id}','revisado')">✓</button>` : ''}</div>`, 'Todo revisado'))}
+      ${caja(`Cobros vencidos (${cobV.length})`, lista(cobV, f => `<div class="aitem r" onclick="verCuenta('${f.id}')"><div><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(saldo(f))}</div><div class="am">${esc(f.descripcion)} · venció ${fmtD(f.fecha_vencimiento)}</div></div></div>`, 'Sin cobros vencidos'))}
+    </div></div>`;
+}
+async function proponer() {
+  const ids = [..._pp];
+  if (!ids.length) { toast('Marca al menos una cuenta', 'warning'); return; }
+  const r = await rpcFirmado('fin_proponer_pago', { p_facturas: ids, p_fecha: ppF.value }, { titulo: 'Firmar propuesta de pagos', sub: `${ids.length} cuenta(s)` });
+  if (r) { toast('Propuesta enviada al Director', 'success'); await cargarTodo(); }
+}
+async function quitarPropuesta(id) {
+  const r = await rpcFirmado('fin_proponer_pago', { p_facturas: [id], p_fecha: null }, { titulo: 'Quitar de la propuesta' });
+  if (r) { toast('Quitada de la propuesta', 'success'); await cargarTodo(); }
+}
+function imprimirPropuesta() {
+  const P = propuestas().sort((a, b) => String(a.propuesta_pago).localeCompare(String(b.propuesta_pago)));
+  imprimir('Propuesta de pagos', `<table><thead><tr><th></th><th>Pagar el</th><th>Proveedor</th><th>Concepto</th><th>Banco / CLABE / CIE</th><th>Vence</th><th class="r">Monto</th></tr></thead><tbody>
+    ${P.map(f => { const e = ent(f.entidad_id) || {}; return `<tr><td><span class="chk"></span></td><td>${fmtD(f.propuesta_pago)}</td><td>${esc(e.nombre || '')}</td><td>${esc(f.descripcion)}<br><span style="color:#778">${esc(f.numero_factura || '')}</span></td><td>${esc([e.banco, e.clabe, e.convenio_cie ? 'CIE ' + e.convenio_cie : '', f.referencia_cie ? 'Ref ' + f.referencia_cie : ''].filter(Boolean).join(' · '))}</td><td>${fmtD(f.fecha_vencimiento)}</td><td class="r">${$$(saldo(f))}</td></tr>`; }).join('')}
+    <tr class="tot"><td colspan="6">Total propuesto</td><td class="r">${$$(sumS(P))}</td></tr></tbody></table>
+    <div class="firmas"><div>Preparó<br><b>Contadora</b></div><div>Autorizó y pagó<br><b>Dr. José Antonio Villegas Ávila</b></div></div>`);
+}
+
+// ── Administración de sede ──
+function dashSede(sel) {
+  const sede = (DASH_VER && esAdmin()) ? 'Morelia' : (cu.sede || 'todas las sedes');
+  const deSede = r => (DASH_VER && esAdmin()) ? r.sede === 'Morelia' : enMiSede(r);
+  const pAut = PED.filter(p => deSede(p) && p.estado === 'solicitado'), pTr = PED.filter(p => deSede(p) && ['autorizado', 'enviado'].includes(p.estado)), pRec = PED.filter(p => deSede(p) && p.estado === 'recibido');
+  const cxp = abiertas('egreso').filter(deSede), fps = vivas().filter(f => f.factura_pendiente && deSede(f));
+  return cabDash('Tablero de Administración · ' + esc(sede), 'pedidos, cuentas y facturas de la sede', sel + (puede('pedidos') ? `<button class="btn btn-p btn-sm" onclick="nuevoPedido()">+ Pedido</button>` : '')) + `<div class="pad">
+    <div class="dg">
+      ${kpi('Por autorizar', String(pAut.length), `${pAut.filter(p => p.urgente).length} urgentes`, pAut.length ? 'var(--wn)' : '', "goTab('ped')")}
+      ${kpi('En tránsito', String(pTr.length), 'autorizados o enviados', '', "goTab('ped')")}
+      ${kpi('Por pagar (sede)', $$(sumS(cxp)), `${cxp.filter(f => semaforo(f) === 'r').length} vencidas`, cxp.some(f => semaforo(f) === 'r') ? 'var(--dg)' : '', "goTab('cxp')")}
+      ${kpi('Facturas por solicitar', String(fps.length), 'de la sede', fps.length ? 'var(--wn)' : '', "goTab('fps')")}
+    </div>
+    <div class="cfgg">
+      ${caja('Pedidos por autorizar', lista(pAut, p => `<div class="aitem ${p.urgente ? 'r' : 'i'}" onclick="verPedido('${p.id}')"><div style="flex:1"><div class="at">${p.urgente ? 'URGENTE · ' : ''}${esc(p.folio)} · ${$$(p.monto_estimado)}</div><div class="am">${esc(p.area)} · ${esc(p.descripcion)}${p.monto_estimado > limiteFirma() ? ' · requiere firma del Director' : ''}</div></div></div>`))}
+      ${caja('Pedidos en tránsito', lista(pTr, p => `<div class="aitem" onclick="verPedido('${p.id}')"><div><div class="at">${esc(p.folio)} · ${esc(nomEnt(p.entidad_id))}</div><div class="am">${PED_EST[p.estado][0]} · ${esc(p.descripcion)}${p.fecha_requerida ? ' · requerido ' + fmtD(p.fecha_requerida) : ''}</div></div></div>`))}
+      ${caja('Recibidos sin factura', lista(pRec, p => `<div class="aitem a" onclick="verPedido('${p.id}')"><div><div class="at">${esc(p.folio)} · ${esc(nomEnt(p.entidad_id))}</div><div class="am">Recibido ${fmtDT(p.recibido_at)} · sube el XML y PDF</div></div></div>`))}
+      ${caja('Pagos de la sede por vencer', tablaCorta(cxp.filter(f => f.fecha_vencimiento).sort((a, b) => a.fecha_vencimiento.localeCompare(b.fecha_vencimiento)).slice(0, 8)))}
+    </div></div>`;
+}
+
+// ── Área solicitante ──
+function dashSolicitante(sel) {
+  const mios = PED.filter(p => p.solicitado_por === cu.id || (esAdmin() && DASH_VER));
+  return cabDash('Mis pedidos', 'solicita y da seguimiento', sel + `<button class="btn btn-p btn-sm" onclick="nuevoPedido()">+ Nuevo pedido</button>`) + `<div class="pad"><div class="tc">${mios.length ? `<table><thead><tr><th>Folio</th><th>Descripción</th><th>Estado</th><th>Solicitado</th><th>Requerido</th></tr></thead><tbody>${mios.map(p => `<tr style="cursor:pointer" onclick="verPedido('${p.id}')"><td><b>${esc(p.folio)}</b>${p.urgente ? ' <span class="bdg bdg-rt-r">URGENTE</span>' : ''}</td><td>${esc(p.descripcion)}</td><td><span class="bdg ${PED_EST[p.estado]?.[1] || ''}">${PED_EST[p.estado]?.[0] || esc(p.estado)}</span>${p.rechazo_motivo ? `<div class="mini">${esc(p.rechazo_motivo)}</div>` : ''}</td><td class="mini">${fmtDT(p.solicitado_at)}</td><td>${fmtD(p.fecha_requerida)}</td></tr>`).join('')}</tbody></table>` : '<div class="emp"><div class="ic">⬡</div><p>Aún no tienes pedidos</p></div>'}</div></div>`;
 }
 
 // ══ DOCUMENTOS IMPRIMIBLES (una página, con logo) ══
@@ -2166,7 +2331,7 @@ async function upAplicar() {
       } else {
         let eid = P.e?.id;
         if (!eid) {
-          const r = await R('fin_guardar_proveedor', { p_datos: { nombre: P.otroNom || P.otroRfc, rfc: P.otroRfc, dias_credito: 0, categoria: '' } });
+          const r = await R('fin_guardar_proveedor', { p_datos: { nombre: P.otroNom || P.otroRfc, rfc: P.otroRfc, dias_credito: 0, categoria: '', desde_cfdi: true } });
           if (!r.ok) throw new Error(ERR[r.error] || r.error);
           eid = r.id;
         }
