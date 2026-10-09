@@ -1,0 +1,4 @@
+-- Migración aplicada 09/10/2026: fin_v3_escenarios_y_bajas
+-- Restricciones heredadas de v2 ampliadas (documento_tipo, estado, origen, método de pago, tipo de documento).
+-- Proveedores que no facturan (fin_entidades.no_factura), método de pago CFDI (fin_facturas.metodo_pago), estado 'parcial'.
+-- Solicitudes de baja: fin_solicitudes_baja + fin_solicitar_baja (contadora) / fin_anular o fin_rechazar_baja (Dirección General).

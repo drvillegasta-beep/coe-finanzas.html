@@ -574,7 +574,6 @@ input[type=email],input[type=tel]{background:var(--sf2);border:1px solid var(--b
   </div>
 
   <div class="main" id="mainContent"></div>
-  <button class="fab" onclick="openUpload()">⬆ <span>Subir documento</span></button>
 </div>
 
 <div id="toastBox"></div>
@@ -707,7 +706,7 @@ document.addEventListener('keydown', e => {
 const ERR = {
   pin: 'PIN incorrecto', usuario: 'Usuario no válido', bloqueado: 'Usuario bloqueado 5 minutos por intentos fallidos',
   director_requerido: 'Se requiere el PIN del Director General', director_pin: 'PIN del Director incorrecto',
-  comprobante: 'Falta el comprobante', monto_saldo: 'El monto excede el saldo de la cuenta', cuenta: 'Cuenta no encontrada',
+  comprobante: 'Falta el comprobante', monto_saldo: 'El monto excede el saldo de la cuenta (no se permite descuadrar)', ya_solicitada: 'Ya hay una solicitud de baja pendiente', cuenta: 'Cuenta no encontrada',
   monto: 'Monto no válido', proveedor: 'Falta el proveedor', descripcion: 'Falta la descripción',
   solo_director: 'Solo el Director General puede anular', motivo: 'Escribe el motivo', tiene_pagos: 'Tiene pagos; anula primero los pagos',
   uuid_duplicado: 'Esta factura (UUID) ya está registrada', sin_permiso: 'Tu perfil no tiene permiso para esta acción',
@@ -895,10 +894,11 @@ async function cargarTodo(silencioso) {
     q('fin_correos', x => x.order('enviado_at', { ascending: false }).limit(200)),
     q('fin_tareas_avances', x => x.order('created_at', { ascending: false }).limit(3000)),
     q('fin_cierres_jornada', x => x.order('fecha', { ascending: false }).limit(400)),
+    q('fin_solicitudes_baja', x => x.order('solicitado_at', { ascending: false }).limit(300)),
   ]);
   [ENT, FAC, ABO, REC, PED, TAR, DOCS, RS, CIE, SUC] = r;
   if (silencioso !== 'sinusr') { await cargarUsuarios(); const yo = USR.find(u => u.id === cu.id); if (!yo || yo.activo === false || yo.debe_cambiar) { try { localStorage.removeItem(SESSION_KEY); } catch { } alert('Tu acceso fue cambiado por Dirección General. Entra de nuevo.'); location.reload(); return; } if (yo) { cu.permisos = yo.permisos || {}; cu.rol = yo.rol; cu.sede = yo.sede || null; aplicarPermisosMenu(); } }
-  CORR = r[11]; AVA = r[12]; CJ = r[13];
+  CORR = r[11]; AVA = r[12]; CJ = r[13]; SOLB = r[14];
   r[10].forEach(c => { CFG[c.clave] = c.valor; });
   if (!RS.length) RS = [{ id: null, nombre: 'José Antonio Villegas Ávila', rfc: 'VIAA870425115' }];
   lastSync = new Date();
@@ -917,7 +917,7 @@ let canal = null;
 function suscribir() {
   if (canal) sb.removeChannel(canal);
   canal = sb.channel('coe-finanzas-v3');
-  ['fin_facturas', 'fin_abonos', 'fin_pedidos', 'fin_tareas', 'fin_documentos', 'fin_entidades', 'fin_recurrentes', 'con_cierres_dia', 'fin_correos', 'fin_tareas_avances', 'fin_cierres_jornada']
+  ['fin_facturas', 'fin_abonos', 'fin_pedidos', 'fin_tareas', 'fin_documentos', 'fin_entidades', 'fin_recurrentes', 'con_cierres_dia', 'fin_correos', 'fin_tareas_avances', 'fin_cierres_jornada', 'fin_solicitudes_baja']
     .forEach(t => canal.on('postgres_changes', { event: '*', schema: 'public', table: t }, p => onCambio(t, p)));
   canal.subscribe(st => {
     rtState = st === 'SUBSCRIBED' ? 'on' : (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT' || st === 'CLOSED') ? 'off' : 'wait';
@@ -934,6 +934,7 @@ function onCambio(tabla, p) {
     fin_pedidos: p.eventType === 'INSERT' ? `Nuevo pedido ${n.folio || ''}${n.urgente ? ' URGENTE' : ''}` : `Pedido ${n.folio || ''}: ${n.estado || ''}`,
     fin_tareas: p.eventType === 'INSERT' && n.responsable_id === cu.id ? `Nuevo pendiente para ti: ${n.titulo || ''}` : n.estado === 'cumplida' ? `Pendiente cumplido: ${n.titulo || ''}` : null,
     fin_cierres_jornada: p.eventType === 'INSERT' ? `${nomUsr(n.usuario_id)} cerró su día` : null,
+    fin_solicitudes_baja: p.eventType === 'INSERT' && esAdmin() ? `${nomUsr(n.solicitado_por)} solicita una baja` : p.eventType === 'UPDATE' && n.solicitado_por === cu.id ? `Tu solicitud de baja fue ${n.estado}` : null,
     con_cierres_dia: 'Llegó un cierre de caja de Conciliación',
   }[tabla];
   if (msg) { toast(msg, 'info'); notificar(msg); }
@@ -1020,8 +1021,9 @@ function calcAlertas() {
   if (veEquipo()) equipoResp().filter(k => !String(k).startsWith('rol:') && k !== cu.id).forEach(k => { const h = new Date(); if (h.getHours() >= 20 && !yaCerre(k)) A.push({ n: 'i', t: `${nomUsr(k)} no ha cerrado su día`, m: 'Cierre del día pendiente', go: () => reporteDia() }); });
   buildRecOcurrencias(aviso).filter(o => o.estado === 'vencido' || o.estado === 'proximo').forEach(o => A.push({ n: o.estado === 'vencido' ? 'r' : 'a', t: `Recurrente ${o.estado === 'vencido' ? 'vencido' : 'por vencer'}: ${o.rec.descripcion}`, m: `${nomEnt(o.rec.entidad_id)} · ${fmtD(isoD(o.fecha))}`, go: () => goTab('rec') }));
   if (cu.rol === 'contadora' || esAdmin()) vivas().filter(f => f.revision === 'observado').forEach(f => A.push({ n: 'a', t: `Observación pendiente: ${nomEnt(f.entidad_id)}`, m: f.revision_nota || f.descripcion, go: () => verCuenta(f.id) }));
+  if (esAdmin()) SOLB.filter(s => s.estado === 'pendiente').forEach(s => { const x = descSolicitud(s); A.push({ n: 'a', t: `Solicitud de baja: ${nomUsr(s.solicitado_por)}`, m: `${x.txt} · ${s.motivo}`, go: () => x.f.id && verCuenta(x.f.id) }); });
   const orden = { r: 0, a: 1, i: 2, v: 3 };
-  const modDe = a => /^Pago|^Vence/.test(a.t) ? 'cxp' : /^Cobro/.test(a.t) ? 'cxc' : /edido/.test(a.t) ? 'pedidos' : /^Factura/.test(a.t) ? 'fps' : /^Pendiente|cerrado su día/.test(a.t) ? 'tareas' : /^Recurrente/.test(a.t) ? 'recurrentes' : 'revision';
+  const modDe = a => /^Pago|^Vence/.test(a.t) ? 'cxp' : /^Cobro/.test(a.t) ? 'cxc' : /edido/.test(a.t) ? 'pedidos' : /^Factura/.test(a.t) ? 'fps' : /^Pendiente|cerrado su día/.test(a.t) ? 'tareas' : /^Solicitud de baja/.test(a.t) ? 'cxp' : /^Recurrente/.test(a.t) ? 'recurrentes' : 'revision';
   A.splice(0, A.length, ...A.filter(a => niv(modDe(a)) >= 1));
   ALR = A.sort((a, b) => orden[a.n] - orden[b.n]);
   const urg = ALR.filter(a => a.n === 'r').length;
@@ -1086,7 +1088,11 @@ function docsDe(f) {
   const comp = f.comprobante_pago_url || pagos.find(a => a.comprobante_url)?.comprobante_url;
   const tag = (lbl, url, req) => url ? `<a class="dtag ok" href="${esc(url)}" target="_blank" onclick="event.stopPropagation()">${lbl}</a>` : `<span class="dtag ${req ? 'no' : ''}">${lbl}</span>`;
   const sinFac = f.documento_tipo === 'sin_factura' && f.factura_pendiente;
-  return `<div class="docs">${tag('XML', tiene('xml'), !sinFac && f.tipo === 'egreso')}${tag('PDF', tiene('pdf'), !sinFac && f.tipo === 'egreso')}${tag('PAGO', comp, pagos.length > 0)}${f.propuesta_pago && f.estado !== 'pagado' ? `<span class="dtag ok" title="Propuesto para pagar el ${fmtD(f.propuesta_pago)}">PROP</span>` : ''}${f.revision === 'revisado' ? '<span class="dtag ok">REV</span>' : f.revision === 'observado' ? '<span class="dtag no">OBS</span>' : ''}</div>`;
+  const nf = ent(f.entidad_id)?.no_factura;
+  const comps = DOCS.filter(x => x.tabla === 'fin_facturas' && x.registro_id === f.id && x.tipo === 'complemento').length;
+  const compTag = f.metodo_pago === 'PPD' && pagos.length ? `<span class="dtag ${comps >= pagos.length ? 'ok' : 'no'}" title="Complementos de pago recibidos / pagos">COMP ${comps}/${pagos.length}</span>` : '';
+  const baja = SOLB.find(s => s.registro_id === f.id && s.estado === 'pendiente') ? '<span class="dtag no">BAJA SOLIC.</span>' : '';
+  return `<div class="docs">${nf ? '<span class="dtag">NO FACTURA</span>' : tag('XML', tiene('xml'), !sinFac && f.tipo === 'egreso') + tag('PDF', tiene('pdf'), !sinFac && f.tipo === 'egreso')}${tag('PAGO', comp, pagos.length > 0)}${compTag}${baja}${f.propuesta_pago && f.estado !== 'pagado' ? `<span class="dtag ok" title="Propuesto para pagar el ${fmtD(f.propuesta_pago)}">PROP</span>` : ''}${f.revision === 'revisado' ? '<span class="dtag ok">REV</span>' : f.revision === 'observado' ? '<span class="dtag no">OBS</span>' : ''}</div>`;
 }
 function rCuentas(tipo) {
   const egr = tipo === 'egreso';
@@ -1107,7 +1113,7 @@ function rCuentas(tipo) {
     .map(([k, l]) => `<span class="chip ${F === k ? 'act' : ''}" onclick="VIEW.cxpF='${k}';renderTab()">${l}</span>`).join('');
   return `<div class="ph"><div><div class="ptit">${egr ? 'Por pagar' : 'Por cobrar'}</div><div class="psub">${L.length} cuentas · saldo ${$$(tot)} · agrupado por ${egr ? 'proveedor' : 'deudor'}</div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">${puede(egr ? 'cxp' : 'cxc') ? `<button class="btn btn-s btn-sm" onclick="nuevaCuenta('${tipo}')">${egr ? '+ Captura manual' : '+ Cuenta por cobrar'}</button>` : ''}
-    <button class="btn btn-s btn-sm" onclick="expCuentas('${tipo}')">Excel</button>${puede(egr ? 'cxp' : 'cxc') ? `<button class="btn btn-p btn-sm" onclick="openUpload()">⬆ Subir factura o pago</button>` : ''}</div></div>
+    <button class="btn btn-s btn-sm" onclick="expCuentas('${tipo}')">Excel</button>${puede(egr ? 'cxp' : 'cxc') ? `<button class="btn btn-p btn-sm" onclick="openUpload()">⬆ ${egr ? 'Subir factura de proveedor' : 'Subir factura emitida'}</button>` : ''}</div></div>
   <div class="pad"><div class="tc">
     <div class="ttb"><input class="sbox" placeholder="Buscar proveedor, concepto, folio, UUID o monto" value="${esc(egr ? VIEW.cxpQ : VIEW.cxcQ)}" oninput="VIEW.${egr ? 'cxpQ' : 'cxcQ'}=this.value;clearTimeout(window._bq);window._bq=setTimeout(()=>{renderTab();const s=document.querySelector('.sbox');s.focus();s.setSelectionRange(s.value.length,s.value.length)},350)"><div class="chips">${chips}</div></div>
     ${L.length ? `<table><thead><tr><th>Estatus</th><th>Concepto</th><th>Factura</th><th>Vence</th><th style="text-align:right">Total</th><th style="text-align:right">Saldo</th><th>Documentos</th><th></th></tr></thead><tbody>
@@ -1132,8 +1138,9 @@ function verCuenta(id) {
   const e = ent(f.entidad_id) || {};
   const pagos = ABO.filter(a => a.factura_id === id);
   const docs = DOCS.filter(d => d.tabla === 'fin_facturas' && d.registro_id === id);
-  const egr = f.tipo === 'egreso';
-  const b = `<div style="display:flex;gap:10px;align-items:center;margin-bottom:14px"><span class="sem ${semaforo(f)}"></span><b>${semTxt[semaforo(f)]}</b>${f.anulado ? '<span class="bdg bdg-ven">ANULADO</span>' : ''}<span class="tsp"></span><span class="bdg ${egr ? 'bdg-egr' : 'bdg-ing'}">${egr ? 'POR PAGAR' : 'POR COBRAR'}</span></div>
+  const egr = f.tipo === 'egreso', mod = egr ? 'cxp' : 'cxc';
+  const solF = SOLB.find(s => s.registro_id === id && s.estado === 'pendiente');
+  const b = `${solF ? `<div class="warnbox">Baja solicitada por ${esc(nomUsr(solF.solicitado_por))}: ${esc(solF.motivo)}</div>` : ''}<div style="display:flex;gap:10px;align-items:center;margin-bottom:14px"><span class="sem ${semaforo(f)}"></span><b>${semTxt[semaforo(f)]}</b>${f.anulado ? '<span class="bdg bdg-ven">ANULADO</span>' : ''}<span class="tsp"></span><span class="bdg ${egr ? 'bdg-egr' : 'bdg-ing'}">${egr ? 'POR PAGAR' : 'POR COBRAR'}</span></div>
   <div class="kv">
     <b>${egr ? 'Proveedor' : 'Deudor'}</b><div>${esc(e.nombre || '—')} ${e.rfc ? `<span class="mini">${esc(e.rfc)}</span>` : ''}</div>
     <b>Concepto</b><div>${esc(f.descripcion)}</div>
@@ -1149,16 +1156,15 @@ function verCuenta(id) {
   <h4 style="margin:18px 0 8px">Documentos probatorios</h4>
   ${docs.length || f.xml_url || f.pdf_url ? `<div class="flist">${docs.map(d => `<div class="fitem"><span class="fk">${esc(d.tipo.toUpperCase())}</span><a class="fn" href="${esc(d.url)}" target="_blank">${esc(d.url.split('/').pop())}</a><span class="mini">${esc(nomUsr(d.subido_por))} · ${fmtDT(d.subido_at)}</span><span class="mini" title="Huella SHA-256">#${esc((d.sha256 || '').slice(0, 8))}</span></div>`).join('')}</div>` : '<div class="mini">Sin documentos</div>'}
   <h4 style="margin:18px 0 8px">${egr ? 'Pagos' : 'Cobros'}</h4>
-  ${pagos.length ? `<table><tbody>${pagos.map(a => `<tr style="${a.anulado ? 'opacity:.45;text-decoration:line-through' : ''}"><td>${fmtD(a.fecha_pago)}</td><td>${esc(a.metodo || '')}</td><td class="amt">${$$(a.monto)}</td><td>${a.comprobante_url ? `<a class="docprev" href="${esc(a.comprobante_url)}" target="_blank">Comprobante</a>` : ''}</td><td class="mini">${esc(nomUsr(a.firma1_por || a.created_by))}${a.firma2_por ? ' + ' + esc(nomUsr(a.firma2_por)) : ''}</td><td>${!a.anulado && esAdmin() ? `<button class="btn btn-d btn-sm" onclick="anular('fin_abonos','${a.id}')">Anular</button>` : a.anulado ? '<span class="mini">' + esc(a.anulado_motivo || '') + '</span>' : ''}</td></tr>`).join('')}</tbody></table>` : '<div class="mini">Sin movimientos</div>'}`;
-  const mod = egr ? 'cxp' : 'cxc';
+  ${pagos.length ? `<table><tbody>${pagos.map(a => `<tr style="${a.anulado ? 'opacity:.45;text-decoration:line-through' : ''}"><td>${fmtD(a.fecha_pago)}</td><td>${esc(a.metodo || '')}</td><td class="amt">${$$(a.monto)}</td><td>${a.comprobante_url ? `<a class="docprev" href="${esc(a.comprobante_url)}" target="_blank">Comprobante</a>` : ''}</td><td class="mini">${esc(nomUsr(a.firma1_por || a.created_by))}${a.firma2_por ? ' + ' + esc(nomUsr(a.firma2_por)) : ''}</td><td>${a.anulado ? '<span class="mini">' + esc(a.anulado_motivo || '') + '</span>' : esAdmin() ? `<button class="btn btn-d btn-sm" onclick="anular('fin_abonos','${a.id}')">Anular</button>` : SOLB.find(s => s.registro_id === a.id && s.estado === 'pendiente') ? '<span class="dtag no">baja solicitada</span>' : puede(mod) ? `<button class="btn btn-s btn-sm" onclick="solicitarBaja('fin_abonos','${a.id}')">Solicitar baja</button>` : ''}</td></tr>`).join('')}</tbody></table>` : '<div class="mini">Sin movimientos</div>'}`;
   const ft = [
     f.estado !== 'pagado' && !f.anulado && puedePagar(f) ? `<button class="btn btn-p" onclick="pagarCuenta('${id}')">${egr ? 'Pagar' : 'Registrar cobro'}</button>` : '',
     egr && f.estado !== 'pagado' && !f.anulado && puede('cxp') ? (f.propuesta_pago ? `<button class="btn btn-s" onclick="quitarPropuesta('${id}')">Quitar de propuesta</button>` : `<button class="btn btn-s" onclick="proponerUna('${id}')">Proponer pago</button>`) : '',
-    puede(mod) ? `<button class="btn btn-s" onclick="openUpload('${id}')">⬆ Adjuntar documento</button>` : '',
+    puede(mod) ? `<button class="btn btn-s" onclick="openUpload('${id}')">⬆ Factura, complemento o nota de crédito</button>` : '',
     puede(mod) ? `<button class="btn btn-s" onclick="correoProveedor('${f.entidad_id}','${id}')">✉ Correo</button>` : '',
     puede('revision') ? `<button class="btn btn-s" onclick="revisar('${id}','revisado')">✓ Revisado</button><button class="btn btn-w" onclick="revisar('${id}','observado')">Observar</button>` : '',
     egr && f.estado !== 'pagado' && puede('cxc') ? `<button class="btn btn-s" onclick="registrarDevolucion('${id}')">Devolución</button>` : '',
-    esAdmin() && !f.anulado ? `<button class="btn btn-d" onclick="anular('fin_facturas','${id}')">Anular</button>` : '',
+    esAdmin() && !f.anulado ? `<button class="btn btn-d" onclick="anular('fin_facturas','${id}')">Anular</button>` : !f.anulado && !solF && puede(mod) ? `<button class="btn btn-d" onclick="solicitarBaja('fin_facturas','${id}')">Solicitar baja</button>` : '',
   ].join('');
   modal(`${egr ? 'Cuenta por pagar' : 'Cuenta por cobrar'} · ${nomEnt(f.entidad_id)}`, b, ft, 'xl');
 }
@@ -1236,7 +1242,7 @@ function catOpts(sel) {
 function nuevaCuenta(tipo, pre = {}) {
   const egr = tipo === 'egreso';
   modal(egr ? 'Nueva cuenta por pagar' : 'Nueva cuenta por cobrar', `
-    ${egr ? '<div class="warnbox">Lo normal es subir el XML y PDF con el botón "Subir documento"; el sistema llena todo. Usa esta captura solo si no hay factura.</div>' : '<div class="mini" style="margin-bottom:12px">Ej. devolución pendiente de un proveedor, convenio, aseguradora o paciente con saldo.</div>'}
+    ${egr ? '<div class="warnbox">Lo normal es subir el XML y PDF con "Subir factura de proveedor"; el sistema llena todo. Usa esta captura solo si no hay factura.</div>' : '<div class="mini" style="margin-bottom:12px">Ej. devolución pendiente de un proveedor, convenio, aseguradora o paciente con saldo.</div>'}
     <div class="fgrd">
       <div class="fgrp sp2"><label>${egr ? 'Proveedor' : 'Quién debe'}</label><select id="ncE">${optsEnt(pre.entidad_id)}</select></div>
       <div class="fgrp sp2"><label>Concepto</label><input type="text" id="ncD" value="${esc(pre.descripcion || '')}"></div>
@@ -1281,6 +1287,28 @@ async function proponerUna(id) {
   if (!fecha) return;
   const r = await rpcFirmado('fin_proponer_pago', { p_facturas: [id], p_fecha: fecha }, { titulo: 'Proponer pago al Director' });
   if (r) { CM('mGen'); toast('Propuesto al Director', 'success'); await cargarTodo(); }
+}
+
+let SOLB = [];
+async function solicitarBaja(tabla, id) {
+  const motivo = prompt('¿Por qué debe darse de baja? (lo autoriza Dirección General)');
+  if (!motivo) return;
+  const r = await rpcFirmado('fin_solicitar_baja', { p_tabla: tabla, p_id: id, p_motivo: motivo }, { titulo: 'Firmar solicitud de baja' });
+  if (r) { CM('mGen'); toast('Solicitud enviada a Dirección General', 'success'); await cargarTodo(); }
+}
+async function aprobarBaja(sid) {
+  const s = SOLB.find(x => x.id === sid); if (!s) return;
+  const r = await rpcFirmado('fin_anular', { p_tabla: s.tabla, p_id: s.registro_id, p_motivo: 'Solicitud de ' + nomUsr(s.solicitado_por) + ': ' + s.motivo }, { titulo: 'Autorizar baja', sub: s.motivo });
+  if (r) { toast('Baja autorizada', 'success'); await cargarTodo(); }
+}
+async function rechazarBaja(sid) {
+  const nota = prompt('Motivo del rechazo (opcional):') ?? null; if (nota === null) return;
+  const r = await rpcFirmado('fin_rechazar_baja', { p_solicitud: sid, p_nota: nota }, { titulo: 'Rechazar solicitud de baja' });
+  if (r) { toast('Solicitud rechazada', 'success'); await cargarTodo(); }
+}
+function descSolicitud(s) {
+  if (s.tabla === 'fin_abonos') { const a = ABO.find(x => x.id === s.registro_id) || {}, f = FAC.find(x => x.id === a.factura_id) || {}; return { f, txt: `Pago de ${$$(a.monto)} del ${fmtD(a.fecha_pago)} · ${nomEnt(f.entidad_id)} · ${f.descripcion || ''}` }; }
+  const f = FAC.find(x => x.id === s.registro_id) || {}; return { f, txt: `Cuenta ${nomEnt(f.entidad_id)} · ${f.descripcion || ''} · ${$$(f.monto_total)}` };
 }
 
 // ══ INGRESO DIARIO (desde COE Conciliación) ════
@@ -1477,7 +1505,7 @@ function rProv() {
   const L = ENT.filter(e => e.activo !== false);
   return `<div class="ph"><div><div class="ptit">Proveedores</div><div class="psub">${L.length} activos · días de crédito, correo y datos bancarios</div></div>${puede('proveedores') ? `<button class="btn btn-p btn-sm" onclick="editarProv()">+ Proveedor</button>` : ''}</div>
   <div class="pad"><div class="tc"><table><thead><tr><th>Nombre</th><th>RFC</th><th>Crédito</th><th>Correo</th><th>Banco / CLABE</th><th style="text-align:right">Saldo</th><th></th></tr></thead><tbody>
-  ${L.map(e => { const s = abiertas('egreso').filter(f => f.entidad_id === e.id).reduce((a, f) => a + saldo(f), 0); return `<tr><td><b>${esc(e.nombre)}</b><div class="mini">${esc(e.categoria || '')}</div></td><td class="mini">${esc(e.rfc || '—')}</td><td>${e.dias_credito ? e.dias_credito + ' días' : 'Contado'}</td><td class="mini">${esc(e.email || '—')}</td><td class="mini">${esc(e.banco || '')} ${esc(e.clabe || '')}</td><td class="amt" style="text-align:right">${s ? $$(s) : '—'}</td><td><div class="rowact">${puede('proveedores') ? `<button class="btn btn-s btn-sm" onclick="editarProv('${e.id}')">Editar</button>` : ''}<button class="btn btn-s btn-sm" onclick="correoProveedor('${e.id}')">✉</button></div></td></tr>`; }).join('')}
+  ${L.map(e => { const s = abiertas('egreso').filter(f => f.entidad_id === e.id).reduce((a, f) => a + saldo(f), 0); return `<tr><td><b>${esc(e.nombre)}</b>${e.no_factura ? ' <span class="dtag">NO FACTURA</span>' : ''}<div class="mini">${esc(e.categoria || '')}</div></td><td class="mini">${esc(e.rfc || '—')}</td><td>${e.dias_credito ? e.dias_credito + ' días' : 'Contado'}</td><td class="mini">${esc(e.email || '—')}</td><td class="mini">${esc(e.banco || '')} ${esc(e.clabe || '')}</td><td class="amt" style="text-align:right">${s ? $$(s) : '—'}</td><td><div class="rowact">${puede('proveedores') ? `<button class="btn btn-s btn-sm" onclick="editarProv('${e.id}')">Editar</button>` : ''}<button class="btn btn-s btn-sm" onclick="correoProveedor('${e.id}')">✉</button></div></td></tr>`; }).join('')}
   </tbody></table></div></div>`;
 }
 function editarProv(id, pre = {}) {
@@ -1491,11 +1519,12 @@ function editarProv(id, pre = {}) {
     <div class="fgrp"><label>Teléfono</label><input type="tel" id="pvT" value="${esc(e.telefono || '')}"></div>
     <div class="fgrp"><label>Banco</label><input type="text" id="pvB" value="${esc(e.banco || '')}"></div>
     <div class="fgrp"><label>CLABE</label><input type="text" id="pvCl" value="${esc(e.clabe || '')}"></div>
-    <div class="fgrp"><label>Convenio CIE</label><input type="text" id="pvCie" value="${esc(e.convenio_cie || '')}"></div></div>`,
+    <div class="fgrp"><label>Convenio CIE</label><input type="text" id="pvCie" value="${esc(e.convenio_cie || '')}"></div>
+    <div class="fgrp sp2"><label style="text-transform:none;font-size:13px;color:var(--tx)"><input type="checkbox" id="pvNF" ${e.no_factura ? 'checked' : ''}> Este proveedor no factura (sus pagos no se piden como factura pendiente)</label></div></div>`,
     `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="guardarProv('${id || ''}')">Firmar y guardar</button>`);
 }
 async function guardarProv(id) {
-  const d = { id, nombre: pvN.value, rfc: pvR.value, dias_credito: pvD.value, categoria: pvC.value, email: pvE.value, telefono: pvT.value, banco: pvB.value, clabe: pvCl.value, convenio_cie: pvCie.value };
+  const d = { id, nombre: pvN.value, rfc: pvR.value, dias_credito: pvD.value, categoria: pvC.value, email: pvE.value, telefono: pvT.value, banco: pvB.value, clabe: pvCl.value, convenio_cie: pvCie.value, no_factura: pvNF.checked };
   const r = await rpcFirmado('fin_guardar_proveedor', { p_datos: d }, { titulo: 'Firmar datos de proveedor' });
   if (r) { CM('mGen'); toast('Proveedor guardado', 'success'); await cargarTodo(); }
 }
@@ -1506,7 +1535,15 @@ function rFps() {
   return `<div class="ph"><div><div class="ptit">Facturas por solicitar</div><div class="psub">Pagos hechos sin factura · la contadora las consigue antes de fin de mes · al subir el XML se cierran solas</div></div><button class="btn btn-p btn-sm" onclick="openUpload()">⬆ Subir factura</button></div>
   <div class="pad"><div class="tc">${L.length ? `<table><thead><tr><th></th><th>Proveedor</th><th>Concepto</th><th>Pagado</th><th style="text-align:right">Monto</th><th>Límite</th><th>Último correo</th><th></th></tr></thead><tbody>
   ${L.map(f => { const d = diasA(f.factura_limite), c = CORR.find(x => x.factura_id === f.id); return `<tr><td><span class="sem ${d === null ? 'a' : d < 0 ? 'r' : d <= 5 ? 'a' : 'v'}"></span></td><td>${esc(nomEnt(f.entidad_id))}</td><td>${esc(f.descripcion)}</td><td>${fmtD(f.fecha_pago)}</td><td class="amt" style="text-align:right">${$$(f.monto_total)}</td><td>${fmtD(f.factura_limite)}</td><td class="mini">${c ? fmtDT(c.enviado_at) : '—'}</td><td>${puede('fps') ? `<div class="rowact"><button class="btn btn-s btn-sm" onclick="correoProveedor('${f.entidad_id}','${f.id}',null,'factura')">✉ Pedir</button><button class="btn btn-p btn-sm" onclick="openUpload('${f.id}')">⬆ XML/PDF</button></div>` : ''}</td></tr>`; }).join('')}</tbody></table>`
-      : '<div class="emp"><div class="ic">✓</div><p>Lista en cero. No hay facturas por solicitar.</p></div>'}</div></div>`;
+      : '<div class="emp"><div class="ic">✓</div><p>Lista en cero. No hay facturas por solicitar.</p></div>'}</div>
+  ${(() => { const C = complementosPendientes(); return `<h3 style="margin:24px 0 10px;font-size:15px">Complementos de pago por solicitar (${C.length})</h3><div class="tc">${C.length ? `<table><thead><tr><th>Proveedor</th><th>Factura</th><th style="text-align:right">Total</th><th style="text-align:right">Pagado</th><th>Faltan</th><th></th></tr></thead><tbody>${C.map(x => `<tr><td>${esc(nomEnt(x.f.entidad_id))}</td><td>${esc(x.f.numero_factura || x.f.descripcion)}</td><td class="amt" style="text-align:right">${$$(x.f.monto_total)}</td><td class="amt" style="text-align:right">${$$(x.f.monto_pagado)}</td><td><span class="dtag no">${x.falta} de ${x.pg}</span></td><td>${puede('fps') ? `<div class="rowact"><button class="btn btn-s btn-sm" onclick="correoProveedor('${x.f.entidad_id}','${x.f.id}',null,'aclaracion')">✉ Pedir</button><button class="btn btn-p btn-sm" onclick="openUpload('${x.f.id}')">⬆ Complemento</button></div>` : ''}</td></tr>`).join('')}</tbody></table>` : '<div class="emp">Sin complementos pendientes</div>'}</div>`; })()}
+  </div>`;
+}
+function complementosPendientes() {
+  return vivas().filter(f => f.tipo === 'egreso' && f.metodo_pago === 'PPD').map(f => {
+    const pg = ABO.filter(a => a.factura_id === f.id && !a.anulado).length, cp = DOCS.filter(x => x.tabla === 'fin_facturas' && x.registro_id === f.id && x.tipo === 'complemento').length;
+    return { f, falta: pg - cp, pg };
+  }).filter(x => x.falta > 0);
 }
 
 // ══ RECURRENTES (lógica de la v2) ══════════════
@@ -1684,7 +1721,6 @@ function aplicarPermisosMenu() {
     while (n && !n.classList.contains('ns')) { if (n.style.display !== 'none') vis = true; n = n.nextElementSibling; }
     ns.style.display = vis ? '' : 'none';
   });
-  document.querySelector('.fab').style.display = puede('cxp') || puede('cxc') ? '' : 'none';
 }
 
 // Editor de usuario con matriz de permisos
@@ -1784,6 +1820,7 @@ function dashDirector(sel) {
     </div>
     <div class="cfgg">
       <div id="bxProp">${caja(`Pagos propuestos (${prop.length})`, lista(prop, f => `<div class="aitem ${semaforo(f) === 'r' ? 'r' : ''}" onclick="verCuenta('${f.id}')"><div style="flex:1"><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(saldo(f))}</div><div class="am">${esc(f.descripcion)} · pagar el ${fmtD(f.propuesta_pago)} · vence ${fmtD(f.fecha_vencimiento)}</div></div>${puede('pagos', 3) ? `<button class="btn btn-p btn-sm" onclick="event.stopPropagation();pagarCuenta('${f.id}')">Pagar</button>` : ''}</div>`, 'La contadora no ha propuesto pagos'), prop.length ? `<button class="btn btn-s btn-sm" onclick="imprimirPropuesta()">🖨</button>` : '')}</div>
+      ${SOLB.some(s => s.estado === 'pendiente') ? caja(`Solicitudes de baja (${SOLB.filter(s => s.estado === 'pendiente').length})`, lista(SOLB.filter(s => s.estado === 'pendiente'), s => { const x = descSolicitud(s); return `<div class="aitem a" onclick="${x.f.id ? `verCuenta('${x.f.id}')` : ''}"><div style="flex:1"><div class="at">${esc(x.txt)}</div><div class="am">${esc(nomUsr(s.solicitado_por))} · ${fmtDT(s.solicitado_at)} · ${esc(s.motivo)}</div></div>${esAdmin() ? `<div class="rowact"><button class="btn btn-d btn-sm" onclick="event.stopPropagation();aprobarBaja('${s.id}')">Autorizar</button><button class="btn btn-s btn-sm" onclick="event.stopPropagation();rechazarBaja('${s.id}')">Rechazar</button></div>` : ''}</div>`; })) : ''}
       ${caja(`Pedidos por autorizar (${pedAut.length})`, lista(pedAut, p => `<div class="aitem ${p.urgente ? 'r' : 'i'}" onclick="verPedido('${p.id}')"><div style="flex:1"><div class="at">${p.urgente ? 'URGENTE · ' : ''}${esc(p.folio)} · ${$$(p.monto_estimado)}</div><div class="am">${esc(p.area)} · ${esc(p.descripcion)} · ${esc(nomUsr(p.solicitado_por))}</div></div>${puede('pedidos', 3) && (!lim || p.monto_estimado <= lim) ? `<button class="btn btn-p btn-sm" onclick="event.stopPropagation();autorizarPedido('${p.id}','autorizar')">Autorizar</button>` : ''}</div>`))}
       ${caja('Compromisos de pago · próximas 4 semanas', sem.map(s => `<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:12px"><span>${s.lbl}</span><b class="amt">${$$(s.cx)}</b></div>
         <div class="prog" style="height:9px"><div style="width:${Math.round(s.cx / maxB * 100)}%;background:${s.cx > s.ing && s.ing ? 'var(--dg)' : 'var(--wn)'}"></div></div>
@@ -1810,7 +1847,7 @@ function dashContadora(sel) {
   const cobV = abiertas('ingreso').filter(f => semaforo(f) === 'r');
   const d = datosCumplimiento('mensual'), pct = d.tar.length ? Math.round(d.aTiempo.length / d.tar.length * 100) : 100;
   window._pp = new Set();
-  return cabDash('Mi día · Contadora', `faltan ${diasA(finMes)} días para fin de mes`, sel + botonCierre() + (puede('cxp') ? `<button class="btn btn-p btn-sm" onclick="openUpload()">⬆ Subir documento</button>` : '')) + `<div class="pad">
+  return cabDash('Mi día · Contadora', `faltan ${diasA(finMes)} días para fin de mes`, sel + botonCierre() + (puede('cxp') ? `<button class="btn btn-p btn-sm" onclick="openUpload()">⬆ Subir factura de proveedor</button>` : '')) + `<div class="pad">
     <div class="dg">
       ${kpi('Pendientes vencidos', String(tarV.length), `${tarV.filter(t => t.prioridad === 'critico').length} críticos · ${tarH.length} próximos 7 días`, tarV.length ? 'var(--dg)' : 'var(--sc)', "goTab('tar')")}
       ${kpi('Facturas por solicitar', String(fps.length), `límite ${fmtD(finMes)}`, fps.length ? 'var(--wn)' : 'var(--sc)', "goTab('fps')")}
@@ -2336,11 +2373,19 @@ const RX_UUID = /[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}/i;
 function openUpload(targetId) {
   UP = { files: [], target: targetId || null, props: [] };
   const f = targetId ? FAC.find(x => x.id === targetId) : null;
-  modal(f ? 'Adjuntar a: ' + nomEnt(f.entidad_id) : 'Subir documento', `
-    ${f ? `<div class="prop" style="margin-top:0;margin-bottom:14px"><div class="row"><span>Cuenta</span><span>${esc(f.descripcion)}</span></div><div class="row"><span>Saldo</span><span class="amt">${$$(saldo(f))}</span></div></div>` : ''}
+  const pagos = f ? ABO.filter(a => a.factura_id === f.id && !a.anulado) : [];
+  const cab = f ? `<div class="prop" style="margin-top:0;margin-bottom:14px;border-color:var(--in)"><h4 style="color:var(--in)">Todo lo que subas aquí queda solo en esta cuenta</h4>
+      <div class="row"><span>${f.tipo === 'ingreso' ? 'Deudor' : 'Proveedor'}</span><span>${esc(nomEnt(f.entidad_id))}${ent(f.entidad_id)?.no_factura ? ' · <b>no factura</b>' : ''}</span></div>
+      <div class="row"><span>Concepto</span><span>${esc(f.descripcion)}</span></div>
+      <div class="row"><span>Total · pagado · saldo</span><span class="amt">${$$(f.monto_total)} · ${$$(f.monto_pagado)} · <b>${$$(saldo(f))}</b></span></div>
+      <div class="row"><span>Tiene</span><span>${docsDe(f)} <span class="mini">${pagos.length} pago(s)</span></span></div></div>
+      <div class="mini" style="margin-bottom:10px">Comprobante = se registra como pago o abono parcial de esta cuenta · XML/PDF = su factura · Complemento de pago = se archiva con sus pagos · Nota de crédito = se descuenta del saldo</div>`
+    : `<div class="prop" style="margin-top:0;margin-bottom:14px;border-color:var(--in)"><h4 style="color:var(--in)">Registrar factura(s) de proveedor</h4>
+      <div class="mini">Sube el XML y el PDF de la factura. Si ya se pagó, agrega su comprobante: se registra completa o como abono parcial y el saldo queda pendiente. Para pagar una cuenta que ya existe, usa "Pagar" en esa cuenta.</div></div>`;
+  modal(f ? 'Documentos de la cuenta' : 'Registrar factura de proveedor', cab + `
     <div class="drop" id="upDrop"><input type="file" multiple accept=".xml,.pdf,image/*,text/xml,application/pdf" onchange="upAgregar(this.files);this.value=''">
       <div class="big">⬆</div><div><b>Arrastra o elige los archivos</b></div>
-      <div class="mini">Factura: XML + PDF · Pago: comprobante de transferencia, voucher o recibo · Complemento de pago · Nota de crédito<br>Puedes subir varios a la vez; primero el comprobante de pago si ya se pagó.</div></div>
+      <div class="mini">${f ? 'Comprobante, XML, PDF, complemento o nota de crédito de esta cuenta' : 'XML + PDF de la factura · comprobante opcional'}</div></div>
     <div id="upList" class="flist"></div><div id="upProps"></div>`,
     `<button class="btn btn-s" onclick="CM('mGen')">Cerrar</button><button class="btn btn-p" id="upGo" onclick="upAplicar()" disabled>Firmar y aplicar</button>`, 'xl');
   const dz = document.getElementById('upDrop');
@@ -2511,6 +2556,7 @@ function upProponer() {
         const f = FAC.find(z => (z.uuid_cfdi || '').toUpperCase() === d.uuid);
         P.opciones.push(f ? { k: 'complemento', f, d, txt: `Adjuntar a ${f.descripcion} (${f.numero_factura || d.folio || d.uuid.slice(0, 8)}) · pagado ${$$(d.pagado)}${saldo(f) > 0.01 ? ' · saldo en sistema ' + $$(saldo(f)) : ''}` } : { k: 'nada', txt: `Factura ${d.folio || d.uuid.slice(0, 8)} (${$$(d.pagado)}) no está registrada` });
       });
+      if (target && !P.opciones.some(o => o.k === 'complemento')) P.opciones = [{ k: 'complemento', f: target, d: { pagado: c.pagosTotal }, txt: `Archivar en esta cuenta: ${target.descripcion} · pagado según complemento ${$$(c.pagosTotal)}` }];
       P.multi = true;
       // ¿hay comprobante de pago para registrar el abono?
       const pg = pagos.find(p => !usados.has(p.id) && p.pago?.monto && casi(p.pago.monto, c.pagosTotal, 2));
@@ -2534,13 +2580,18 @@ function upProponer() {
           .forEach(f => P.opciones.push({ k: 'ligar', f, txt: `Completa la factura pendiente del pago del ${fmtD(f.fecha_pago)}: ${f.descripcion} · ${$$(f.monto_total)}`, top: 1 }));
         cand.filter(f => !f.factura_pendiente && f.estado !== 'pagado' && casi(f.monto_total, c.total, 1))
           .forEach(f => P.opciones.push({ k: 'ligar', f, txt: `Liga a la cuenta abierta: ${f.descripcion} · vence ${fmtD(f.fecha_vencimiento)}` }));
-        const pg = pagos.find(p => !usados.has(p.id) && p.pago?.monto && casi(p.pago.monto, c.total, 1));
-        if (pg) { usados.add(pg.id); P.pago = pg; }
+        // Comprobante del mismo pago: monto igual, o mismo proveedor / único comprobante como abono parcial
+        let pg = pagos.find(p => !usados.has(p.id) && p.pago?.monto && casi(p.pago.monto, c.total, 1));
+        if (!pg) pg = pagos.find(p => !usados.has(p.id) && p.pago?.monto && p.pago.monto < c.total - 1 && (simil(p.pago.beneficiario || '', otroNom) >= 0.5 || (xs.length === 1 && pagos.length === 1)));
+        const mayor = !pg && pagos.find(p => !usados.has(p.id) && p.pago?.monto > c.total + 1 && (xs.length === 1 && pagos.length === 1));
+        if (mayor) P.avisos.push(`El comprobante (${$$(mayor.pago.monto)}) es mayor que la factura (${$$(c.total)}). Revisa que sea el pago correcto; no se aplicó.`);
+        if (pg) { usados.add(pg.id); P.pago = pg; P.parcial = pg.pago.monto < c.total - 1; }
         const ped = e ? PED.find(p => p.entidad_id === e.id && ['autorizado', 'enviado', 'recibido'].includes(p.estado) && (!p.monto_estimado || Math.abs(p.monto_estimado - c.total) <= Math.max(50, c.total * 0.1))) : null;
         P.pedido = ped;
         const venc = c.metodo === 'PUE' ? c.fecha : isoD(new Date(new Date(c.fecha + 'T00:00:00').getTime() + (num(e?.dias_credito)) * 86400000));
         P.venc = venc;
-        P.opciones.push({ k: 'nueva', txt: `${tipo === 'egreso' ? 'Nueva cuenta por pagar' : 'Nueva cuenta por cobrar'}${pg ? ' y registrar el pago del comprobante (' + $$(pg.pago.monto) + ')' : ''} · vence ${fmtD(venc)}${!e ? ' · se da de alta el proveedor ' + otroNom : ''}` });
+        P.opciones.push({ k: 'nueva', txt: `${tipo === 'egreso' ? 'Nueva cuenta por pagar' : 'Nueva cuenta por cobrar'} de ${$$(c.total)}${pg ? (P.parcial ? ` con abono parcial de ${$$(pg.pago.monto)} · queda saldo ${$$(c.total - pg.pago.monto)}` : ' pagada con el comprobante') : ''} · vence ${fmtD(venc)}${!e ? ' · se da de alta el proveedor ' + otroNom : ''}` });
+        if (c.metodo === 'PPD') P.avisos.push('Factura PPD (pago en parcialidades): por cada pago el proveedor debe enviar su complemento de pago; quedará en "Complementos por solicitar".');
         if (c.metodo === 'PUE' && !pg) P.avisos.push('Factura PUE (pagada en una exhibición): si ya la pagaste, sube también el comprobante para registrarla como pagada.');
       }
     }
@@ -2558,11 +2609,15 @@ function upProponer() {
     const m = p.pago?.monto || 0, P = { pagoSolo: p, titulo: `Comprobante de pago${m ? ' · ' + $$(m) : ''}${p.pago?.beneficiario ? ' · ' + p.pago.beneficiario : ''}`, opciones: [], sel: 0, avisos: [] };
     if (target) P.opciones.push({ k: 'pagar', f: target, txt: `${target.tipo === 'ingreso' ? 'Cobro' : 'Pago'} a ${target.descripcion} · saldo ${$$(saldo(target))}` });
     else {
-      const cand = [...abiertas('egreso'), ...abiertas('ingreso')].map(f => ({ f, s: (m && casi(saldo(f), m, 1) ? 3 : m && casi(f.monto_total, m, 1) ? 2 : 0) + simil(nomEnt(f.entidad_id), p.pago?.beneficiario || '') * 2 }))
-        .filter(x => x.s >= 2).sort((a, b) => b.s - a.s).slice(0, 5);
-      cand.forEach(x => P.opciones.push({ k: 'pagar', f: x.f, txt: `${x.f.tipo === 'ingreso' ? 'Cobro de' : 'Pago a'} ${nomEnt(x.f.entidad_id)} · ${x.f.descripcion} · saldo ${$$(saldo(x.f))} · vence ${fmtD(x.f.fecha_vencimiento)}` }));
-      P.opciones.push({ k: 'sin_factura', txt: 'Pago sin factura (pasa a Facturas por solicitar)' });
+      const ben = p.pago?.beneficiario || '';
+      const cand = [...abiertas('egreso'), ...abiertas('ingreso')].map(f => ({ f, s: (m && casi(saldo(f), m, 1) ? 3 : m && casi(f.monto_total, m, 1) ? 2 : 0) + simil(nomEnt(f.entidad_id), ben) * 2 }))
+        .filter(x => x.s >= 1 && (!m || m <= saldo(x.f) + 1)).sort((a, b) => b.s - a.s).slice(0, 6);
+      cand.forEach(x => P.opciones.push({ k: 'pagar', f: x.f, txt: `${x.f.tipo === 'ingreso' ? 'Cobro de' : 'Pago a'} ${nomEnt(x.f.entidad_id)} · ${x.f.descripcion} · saldo ${$$(saldo(x.f))}${m && m < saldo(x.f) - 1 ? ` → abono parcial, queda ${$$(saldo(x.f) - m)}` : ''}` }));
+      P.opciones.push({ k: 'sin_factura', txt: 'Pago a proveedor sin factura (si el proveedor factura, queda en Facturas por solicitar)' });
+      P.opciones.push({ k: 'nada', txt: 'No aplicar todavía' });
+      P.sel = cand.length ? 0 : P.opciones.length - 1;
       if (!m) P.avisos.push('No se leyó el monto: escríbelo.');
+      if (!cand.length) P.avisos.push('No encontré una cuenta abierta que coincida. Elige "Pago a proveedor sin factura" o súbelo desde la cuenta con el botón "Pagar".');
     }
     P.monto = m;
     props.push(P);
@@ -2648,7 +2703,7 @@ async function upAplicar() {
         const r = await R('fin_crear_cxp', { p_datos: {
           tipo: P.tipo, entidad_id: eid, descripcion: (P.c.conceptos[0] || 'Factura ' + P.c.folio).slice(0, 140), monto_total: P.c.total,
           numero_factura: (P.c.serie || '') + (P.c.folio || ''), uuid_cfdi: P.c.uuid, rfc_emisor: P.c.emisorRfc, fecha_vencimiento: P.venc,
-          categoria: ent(eid)?.categoria || '', documento_tipo: 'factura', notas: P.c.metodo ? 'CFDI ' + P.c.metodo : '', sede: cu.sede || ''
+          categoria: ent(eid)?.categoria || '', documento_tipo: 'factura', metodo_pago: P.c.metodo || '', notas: P.c.metodo ? 'CFDI ' + P.c.metodo : '', sede: cu.sede || ''
         } });
         if (!r.ok) throw new Error(ERR[r.error] || r.error);
         fid = r.id;
@@ -2657,7 +2712,7 @@ async function upAplicar() {
       if (P.pdf) await adj(fid, P.pdf, 'pdf');
       if (P.pago) {
         const f = FAC.find(z => z.id === fid);
-        const s = f ? saldo(f) : P.c.total;
+        const s = o.k === 'nueva' ? P.c.total : (f ? saldo(f) : P.c.total);
         if (s > 0.01) await pagar(fid, P.pago, Math.min(num(P.pago.pago.monto), s), P.metodo || P.pago.pago.metodo || 'Transferencia', P.pago.pago.fecha, P.pago.pago.referencia);
       }
       if (P.pedido) await R('fin_pedido_estado', { p_pedido: P.pedido.id, p_estado: 'facturado', p_datos: { factura_id: fid } });
