@@ -716,12 +716,14 @@ const ERR = {
   usuario_ocupado: 'Ese usuario ya existe', nota: 'Escribe la observación', pin_nuevo: 'El PIN debe tener 4 dígitos', password_igual: 'Usa una contraseña distinta', propio: 'Tu propio acceso se cambia en Mi acceso'
 };
 
+// Funciones cuya firma en la base incluye p_pin_director (aunque ya no se pida)
+const CON_DIR = ['fin_pagar', 'fin_crear_cxp', 'fin_pedido_autorizar'];
 // Ejecuta una RPC firmada. Si pide firma del Director, la solicita y reintenta.
 async function rpcFirmado(fn, args, { titulo, sub, conDirector = false } = {}) {
   let pin;
   try { pin = await askPin(titulo || 'Firma con PIN', sub || ''); } catch { return null; }
   const a = { ...args, p_usuario: cu.id, p_pin: pin };
-  if (conDirector) a.p_pin_director = null;
+  if (conDirector || CON_DIR.includes(fn)) a.p_pin_director = null;
   for (let intento = 0; intento < 3; intento++) {
     const { data, error } = await sb.rpc(fn, a);
     if (error) { toast('Error: ' + error.message, 'error'); return null; }
@@ -739,7 +741,7 @@ async function rpcFirmado(fn, args, { titulo, sub, conDirector = false } = {}) {
 // Reutiliza un PIN ya capturado en la misma operación (varios pasos, una sola firma)
 async function rpcConPin(fn, args, pin, pinDir) {
   const a = { ...args, p_usuario: cu.id, p_pin: pin };
-  if (pinDir !== undefined) a.p_pin_director = pinDir;
+  if (pinDir !== undefined || CON_DIR.includes(fn)) a.p_pin_director = pinDir ?? null;
   const { data, error } = await sb.rpc(fn, a);
   if (error) return { ok: false, error: error.message };
   return data || { ok: false, error: 'sin_respuesta' };
