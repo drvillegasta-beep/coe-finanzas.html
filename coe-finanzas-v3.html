@@ -810,12 +810,27 @@ async function subirArchivo(file, carpeta) {
 }
 
 // ══ ACCESO: usuario y contraseña. El PIN solo firma movimientos. ══
+// Sesión segura: valida en el servidor y abre una sesión de Supabase marcada para Finanzas.
+// Si el servicio no responde, se usa el acceso anterior (mientras la protección no esté activa).
+async function puenteSesion(u, p) {
+  try {
+    const r = await fetch(SB_URL + '/functions/v1/coe-sesion', { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY }, body: JSON.stringify({ app: 'fin', usuario: u, password: p }) });
+    if (!r.ok) return null;
+    const j = await r.json();
+    if (j && j.ok && j.token_hash) {
+      const { error } = await sb.auth.verifyOtp({ token_hash: j.token_hash, type: 'magiclink' });
+      if (error) console.warn('Sesión segura no disponible:', error.message);
+    }
+    return j && (j.ok || j.error) ? j : null;
+  } catch (e) { return null; }
+}
 async function doLogin() {
   const u = document.getElementById('lgU').value.trim(), p = document.getElementById('lgP').value;
   const err = document.getElementById('lgErr');
   if (!u || !p) { err.textContent = 'Escribe usuario y contraseña'; return; }
   err.textContent = 'Verificando…';
-  const { data, error } = await sb.rpc('fin_login', { p_usuario: u, p_password: p });
+  let data = await puenteSesion(u, p), error = null;
+  if (!data) ({ data, error } = await sb.rpc('fin_login', { p_usuario: u, p_password: p }));
   if (error) { err.textContent = 'Sin conexión, intenta de nuevo'; return; }
   if (!data?.ok) { err.textContent = data?.error === 'bloqueado' ? 'Usuario bloqueado 5 minutos por intentos fallidos' : 'Usuario o contraseña incorrectos'; return; }
   err.textContent = '';
@@ -870,9 +885,10 @@ function iniciarSesion(d) {
   try { localStorage.setItem(SESSION_KEY, JSON.stringify(cu)); } catch { }
   entrarApp();
 }
-function logout() {
+async function logout() {
   if (!confirm('¿Cerrar sesión en este equipo?')) return;
   try { localStorage.removeItem(SESSION_KEY); } catch { }
+  try { await sb.auth.signOut(); } catch { }
   location.reload();
 }
 
@@ -880,7 +896,7 @@ function logout() {
 async function boot() {
   const n = new Date(); calY = n.getFullYear(); calM = n.getMonth();
   try {
-    sb = window.supabase.createClient(SB_URL, SB_KEY, { realtime: { params: { eventsPerSecond: 5 } } });
+    sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { storageKey: 'coe-fin-auth' }, realtime: { params: { eventsPerSecond: 5 } } });
     const { data, error } = await sb.from('fin_usuarios').select('id,nombre,rol,sede,activo,email,usuario,permisos,debe_cambiar').order('nombre');
     if (error && /usuario/.test(error.message)) {
       const r = await sb.from('fin_usuarios').select('id,nombre,rol,sede,activo,email').eq('activo', true).order('nombre');
