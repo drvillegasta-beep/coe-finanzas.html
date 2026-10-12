@@ -1039,7 +1039,8 @@ const saldo = f => Math.max(0, num(f.monto_total) - num(f.monto_pagado));
 // Factura por solicitar: pagada (total o parcial) sin XML, salvo proveedores que no facturan
 const tieneXML = f => !!(f.xml_url || f.uuid_cfdi || DOCS.some(d => d.registro_id === f.id && d.tipo === 'xml'));
 const finMesISO = () => isoD(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0));
-const porSolicitar = f => f.tipo === 'egreso' && !f.anulado && f.estado !== 'cancelado' && (f.factura_pendiente || (num(f.monto_pagado) > 0.009 && !tieneXML(f) && !ent(f.entidad_id)?.no_factura));
+// Los pagos de COE Nómina solo piden factura cuando Nómina la marca (honorarios activos con pago comprobado)
+const porSolicitar = f => f.tipo === 'egreso' && !f.anulado && f.estado !== 'cancelado' && (f.factura_pendiente || (f.origen !== 'nomina' && num(f.monto_pagado) > 0.009 && !tieneXML(f) && !ent(f.entidad_id)?.no_factura));
 const limFps = f => f.factura_limite || finMesISO();
 const abiertas = tipo => vivas().filter(f => f.tipo === tipo && f.estado !== 'pagado' && saldo(f) > 0.01);
 function semaforo(f) {
