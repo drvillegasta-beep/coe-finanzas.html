@@ -549,6 +549,14 @@ tr.trsep td{background:var(--dd);color:var(--dg);font-size:11px;font-weight:800;
 @media(max-width:1250px){.dg6{grid-template-columns:repeat(3,1fr)!important}}
 @media(max-width:1100px){.cdash{grid-template-columns:1fr}.cdash-side{position:static}.mtl{max-height:none}}
 @media(max-width:700px){.dg6{grid-template-columns:1fr 1fr!important}.ccal{gap:3px}.ccal-d{min-height:54px;padding:4px}.ccal-n{font-size:12px}.ccal-hoy{display:none}.cchip{min-width:16px;height:16px;font-size:10px;padding:0 3px}}
+.ccal-d{min-height:92px}
+.cico{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:5px;font-size:11px;font-weight:800;font-style:normal;border:1.5px solid;background:var(--sf)}
+.cico.r{color:var(--dg);border-color:var(--dg)}.cico.a{color:var(--wn);border-color:var(--wn)}.cico.p{color:#58A6FF;border-color:#58A6FF}.cico.v{color:var(--sc);border-color:var(--sc)}
+.cico.nom{color:#000;background:#D2A8FF;border-color:#D2A8FF;font-size:10px}
+.ccal-m{font-family:'DM Mono',monospace;font-size:11px;font-weight:600;color:var(--tx);opacity:.85;margin-top:3px}
+.dsec{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--tm);margin:2px 0 6px}
+.ccal-ley b{color:var(--tx);font-size:11px}
+@media(max-width:700px){.ccal-m{display:none}.cico{min-width:14px;height:15px;font-size:9px;padding:0 2px}.cico.nom{font-size:0;width:10px;min-width:10px}.ccal-d{min-height:62px}}
 </style>
 </head>
 <body>
@@ -701,7 +709,7 @@ function closeSb() { document.getElementById('sdb').classList.remove('open'); do
 
 // ── Estado ──────────────────────────────────────
 let sb = null, cu = null, tab = 'dash';
-let USR = [], ENT = [], FAC = [], ABO = [], REC = [], PED = [], TAR = [], DOCS = [], RS = [], CIE = [], SUC = [], CORR = [];
+let USR = [], ENT = [], FAC = [], ABO = [], REC = [], PED = [], TAR = [], DOCS = [], RS = [], CIE = [], SUC = [], CORR = [], NOM = [];
 let CFG = { monto_doble_firma: 3000, correo_alertas: 'drvillegas.ta@gmail.com', hora_alertas: '09:00', dias_aviso: 3 };
 let FALTA_SQL = [];
 let lastSync = null, rtState = 'wait', calY, calM;
@@ -938,10 +946,11 @@ async function cargarTodo(silencioso) {
     q('fin_tareas_avances', x => x.order('created_at', { ascending: false }).limit(3000)),
     q('fin_cierres_jornada', x => x.order('fecha', { ascending: false }).limit(400)),
     q('fin_solicitudes_baja', x => x.order('solicitado_at', { ascending: false }).limit(300)),
+    q('nom_periodos', x => x.select('fecha_pago,salario_neto,tipo').gte('fecha_pago', isoD(new Date(Date.now() - 200 * 86400000)))),
   ]);
   [ENT, FAC, ABO, REC, PED, TAR, DOCS, RS, CIE, SUC] = r;
   if (silencioso !== 'sinusr') { await cargarUsuarios(); const yo = USR.find(u => u.id === cu.id); if (!yo || yo.activo === false || yo.debe_cambiar) { try { localStorage.removeItem(SESSION_KEY); } catch { } alert('Tu acceso fue cambiado por Dirección General. Entra de nuevo.'); location.reload(); return; } if (yo) { cu.permisos = yo.permisos || {}; cu.rol = yo.rol; cu.sede = yo.sede || null; aplicarPermisosMenu(); } }
-  CORR = r[11]; AVA = r[12]; CJ = r[13]; SOLB = r[14];
+  CORR = r[11]; AVA = r[12]; CJ = r[13]; SOLB = r[14]; NOM = r[15] || [];
   r[10].forEach(c => { CFG[c.clave] = c.valor; });
   if (!RS.length) RS = [{ id: null, nombre: 'José Antonio Villegas Ávila', rfc: 'VIAA870425115' }];
   lastSync = new Date();
@@ -1385,24 +1394,9 @@ function expPagos() {
 
 // ══ CALENDARIO ═════════════════════════════════
 function rCal() {
-  const ini = new Date(calY, calM, 1), dow = (ini.getDay() + 6) % 7, dim = new Date(calY, calM + 1, 0).getDate();
-  const ev = {};
-  const add = (d, color, txt, go) => { if (!d) return; const k = String(d).slice(0, 10); (ev[k] = ev[k] || []).push({ color, txt, go }); };
-  abiertas('egreso').forEach(f => add(f.fecha_vencimiento, semaforo(f) === 'r' ? 'var(--dg)' : 'var(--wn)', `${nomEnt(f.entidad_id)} ${$$(saldo(f))}`, `verCuenta('${f.id}')`));
-  abiertas('ingreso').forEach(f => add(f.fecha_vencimiento, 'var(--sc)', `Cobro ${nomEnt(f.entidad_id)} ${$$(saldo(f))}`, `verCuenta('${f.id}')`));
-  buildRecOcurrencias(62).filter(o => o.estado !== 'pagado').forEach(o => add(isoD(o.fecha), 'var(--pu)', 'Recurrente ' + o.rec.descripcion, "goTab('rec')"));
-  TAR.filter(t => t.estado !== 'cumplida').forEach(t => add(t.fecha_limite, 'var(--in)', 'Tarea ' + t.titulo, "goTab('tar')"));
-  let cells = '';
-  for (let i = 0; i < dow; i++) cells += '<div class="cal-day other"></div>';
-  const hoy = isoD(new Date());
-  for (let d = 1; d <= dim; d++) {
-    const k = isoD(new Date(calY, calM, d)), e = ev[k] || [];
-    cells += `<div class="cal-day ${k === hoy ? 'today' : ''}" ${e.length ? `style="cursor:pointer" onclick="calDia('${k}')"` : ''}><div class="cal-dn">${d}</div>${e.slice(0, 8).map(x => `<span class="cal-dot" style="background:${x.color}" title="${esc(x.txt)}"></span>`).join('')}${e.length > 8 ? '<span class="mini">+' + (e.length - 8) + '</span>' : ''}</div>`;
-  }
-  window._calEv = ev;
-  return `<div class="ph"><div><div class="ptit">Calendario</div><div class="psub"><span class="cal-dot" style="background:var(--dg)"></span> vencido <span class="cal-dot" style="background:var(--wn)"></span> por pagar <span class="cal-dot" style="background:var(--sc)"></span> por cobrar <span class="cal-dot" style="background:var(--pu)"></span> recurrente <span class="cal-dot" style="background:var(--in)"></span> tarea</div></div>
-    <div style="display:flex;gap:8px;align-items:center"><button class="btn btn-s btn-sm" onclick="calM--;if(calM<0){calM=11;calY--};renderTab()">‹</button><b style="min-width:140px;text-align:center;text-transform:capitalize">${MESES[calM]} ${calY}</b><button class="btn btn-s btn-sm" onclick="calM++;if(calM>11){calM=0;calY++};renderTab()">›</button></div></div>
-  <div class="pad"><div class="cal-grid">${['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map(d => `<div class="cal-hdr">${d}</div>`).join('')}${cells}</div></div>`;
+  const T = veEquipo() ? TAR : TAR.filter(esMia);
+  return `<div class="ph"><div><div class="ptit">Calendario</div><div class="psub">Pendientes, cuentas por pagar, pagos recurrentes, nómina y cobros · toca un día para ver el detalle</div></div></div>
+  <div class="pad"><div class="cdash-main">${calSemaforo(T, true)}${tablaDia(T)}</div></div>`;
 }
 function calDia(k) {
   const e = window._calEv[k] || [];
@@ -1893,32 +1887,60 @@ function semT(t) {
   const d = diasA(t.fecha_limite);
   return d === null ? 'p' : d < 0 ? 'r' : d <= 3 ? 'a' : 'p';
 }
-const SEMT = { r: 'Vencido', a: 'Por vencer', p: 'Programado', v: 'Cumplido' };
-function calSemaforo(tareas) {
+const SEMT = { r: 'Vencido', a: 'Por vencer', p: 'Programado', v: 'Cumplido / pagado' };
+const ORD_S = { r: 0, a: 1, p: 2, v: 3 };
+// Nómina (COE Nómina): quincenas 15 y fin de mes; monto real si ya está calculada, si no estimado con la última
+function nominaTotal(k) { const P = NOM.filter(p => p.fecha_pago === k); return P.length ? P.reduce((s, p) => s + num(p.salario_neto), 0) : null; }
+function nominaEstimada() { const fs = [...new Set(NOM.filter(p => (p.tipo || 'regular') === 'regular').map(p => p.fecha_pago))].sort(); return fs.length ? nominaTotal(fs[fs.length - 1]) : null; }
+// Todo lo que cae en el calendario del mes y, m
+function eventosCal(y, m, tareas, conCobros) {
+  const ev = {}, add = (k, o) => { if (k) (ev[k] = ev[k] || []).push(o); };
+  const sDe = k => { const d = diasA(k); return d < 0 ? 'r' : d <= 3 ? 'a' : 'p'; };
+  tareas.filter(t => t.estado !== 'cancelada').forEach(t => add(fT(t), { k: 'tar', s: semT(t), t }));
+  if (niv('cxp') >= 1) {
+    abiertas('egreso').filter(f => !f.recurrente_id && f.fecha_vencimiento).forEach(f => { const k = f.fecha_vencimiento.slice(0, 10); add(k, { k: 'cxp', s: sDe(k), f, monto: saldo(f) }); });
+    const fin = new Date(y, m + 1, 0), dias = Math.max(1, Math.ceil((fin - hoyD()) / 86400000) + 1);
+    const SR = { pagado: 'v', vencido: 'r', proximo: 'a', futuro: 'p' };
+    buildRecOcurrencias(dias).forEach(o => add(isoD(o.fecha), { k: 'rec', s: SR[o.estado], o, monto: o.factura ? num(o.factura.monto_total) : null }));
+    const desde = NOM.length ? NOM.map(p => p.fecha_pago).sort()[0] : null, est = nominaEstimada();
+    [new Date(y, m, 15), new Date(y, m + 1, 0)].forEach(d => {
+      const k = isoD(d); if (desde && k < desde) return;
+      const real = nominaTotal(k), dd = diasA(k);
+      add(k, { k: 'nom', s: real !== null ? 'v' : dd < 0 ? 'r' : dd <= 3 ? 'a' : 'p', monto: real ?? est, real: real !== null });
+    });
+  }
+  if (conCobros && niv('cxc') >= 1) abiertas('ingreso').filter(f => f.fecha_vencimiento).forEach(f => { const k = f.fecha_vencimiento.slice(0, 10); add(k, { k: 'cxc', s: sDe(k), f, monto: saldo(f) }); });
+  return ev;
+}
+const peorS = L => L.reduce((w, e) => ORD_S[e.s] < ORD_S[w] ? e.s : w, 'v');
+function calSemaforo(tareas, conCobros) {
   const hoy = hoyISO();
   if (VIEW.cY === null) { const n = new Date(); VIEW.cY = n.getFullYear(); VIEW.cM = n.getMonth(); }
   const y = VIEW.cY, m = VIEW.cM, ini = new Date(y, m, 1), dow = (ini.getDay() + 6) % 7, dim = new Date(y, m + 1, 0).getDate();
-  const sel = VIEW.cDia || hoy;
-  const por = {};
-  tareas.filter(t => t.estado !== 'cancelada').forEach(t => { const k = fT(t); if (k) (por[k] = por[k] || []).push(t); });
-  let cells = '';
+  const sel = VIEW.cDia || hoy, ev = eventosCal(y, m, tareas, conCobros);
+  window._calEvs = ev;
+  let cells = '', totMes = 0;
   for (let i = 0; i < dow; i++) cells += '<div class="ccal-d vac"></div>';
   for (let d = 1; d <= dim; d++) {
-    const k = isoD(new Date(y, m, d)), L = por[k] || [], c = { r: 0, a: 0, p: 0, v: 0 };
-    L.forEach(t => c[semT(t)]++);
-    const peor = c.r ? 'r' : c.a ? 'a' : c.p ? 'p' : c.v ? 'v' : '';
-    const crit = L.some(t => abiertaT(t) && t.prioridad === 'critico');
+    const k = isoD(new Date(y, m, d)), L = ev[k] || [], T = L.filter(e => e.k === 'tar'), c = { r: 0, a: 0, p: 0, v: 0 };
+    T.forEach(e => c[e.s]++);
+    const peor = L.length ? peorS(L) : '';
+    const crit = T.some(e => abiertaT(e.t) && e.t.prioridad === 'critico');
+    const pagar = L.filter(e => e.k === 'cxp' || e.k === 'rec' || e.k === 'nom'), monto = pagar.filter(e => e.s !== 'v').reduce((s, e) => s + (e.monto || 0), 0);
+    totMes += monto;
+    const ico = (kk, txt, cls) => { const X = L.filter(e => e.k === kk); return X.length ? `<span class="cico ${cls || peorS(X)}" title="${txt}">${kk === 'nom' ? 'Nómina' : (kk === 'cxp' ? '$' : kk === 'rec' ? '↻' : '↑') + (X.length > 1 ? X.length : '')}</span>` : ''; };
     const finde = new Date(y, m, d).getDay() === 0;
     cells += `<div class="ccal-d ${peor} ${k === hoy ? 'hoy' : ''} ${k === sel ? 'sel' : ''} ${finde ? 'dom' : ''}" onclick="VIEW.cDia='${k}';renderTab()">
       <div class="ccal-n">${d}${k === hoy ? '<span class="ccal-hoy">HOY</span>' : ''}${crit ? '<span class="ccal-crit" title="Crítico">!</span>' : ''}</div>
-      <div class="ccal-ch">${['r', 'a', 'p', 'v'].filter(s => c[s]).map(s => `<span class="cchip ${s}" title="${SEMT[s]}">${c[s]}</span>`).join('')}</div></div>`;
+      <div class="ccal-ch">${['r', 'a', 'p', 'v'].filter(s => c[s]).map(s => `<span class="cchip ${s}" title="Pendientes: ${SEMT[s]}">${c[s]}</span>`).join('')}${ico('cxp', 'Cuentas por pagar')}${ico('rec', 'Pagos recurrentes')}${ico('nom', 'Pago de nómina', 'nom')}${ico('cxc', 'Cobros')}</div>
+      ${monto ? `<div class="ccal-m">${$$(monto).replace(/\.\d\d$/, '')}</div>` : ''}</div>`;
   }
-  const mesTxt = MESES[m] + ' ' + y;
   return `<div class="cfg-section ccal-box"><h3 style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-      <span>Calendario de pendientes</span>
-      <span style="display:flex;gap:6px;align-items:center"><button class="btn btn-s btn-sm" onclick="VIEW.cM--;if(VIEW.cM<0){VIEW.cM=11;VIEW.cY--};renderTab()">‹</button><b style="min-width:130px;text-align:center;text-transform:capitalize">${mesTxt}</b><button class="btn btn-s btn-sm" onclick="VIEW.cM++;if(VIEW.cM>11){VIEW.cM=0;VIEW.cY++};renderTab()">›</button><button class="btn btn-s btn-sm" onclick="VIEW.cDia=null;VIEW.cY=null;renderTab()">Hoy</button></span></h3>
+      <span>Calendario${totMes ? ` <span class="mini" style="font-weight:600">· por pagar en el mes ${$$(totMes)}</span>` : ''}</span>
+      <span style="display:flex;gap:6px;align-items:center"><button class="btn btn-s btn-sm" onclick="VIEW.cM--;if(VIEW.cM<0){VIEW.cM=11;VIEW.cY--};renderTab()">‹</button><b style="min-width:130px;text-align:center;text-transform:capitalize">${MESES[m]} ${y}</b><button class="btn btn-s btn-sm" onclick="VIEW.cM++;if(VIEW.cM>11){VIEW.cM=0;VIEW.cY++};renderTab()">›</button><button class="btn btn-s btn-sm" onclick="VIEW.cDia=null;VIEW.cY=null;renderTab()">Hoy</button></span></h3>
     <div class="body"><div class="ccal">${['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map(d => `<div class="ccal-h">${d}</div>`).join('')}${cells}</div>
-    <div class="ccal-ley"><span><i class="cchip r">n</i> Vencido sin cumplir</span><span><i class="cchip a">n</i> Vence en 3 días o menos</span><span><i class="cchip p">n</i> Programado</span><span><i class="cchip v">n</i> Cumplido</span><span><b class="ccal-crit">!</b> Hay un crítico</span></div></div></div>`;
+    <div class="ccal-ley"><b>Color:</b><span><i class="cchip r">&nbsp;</i> Vencido</span><span><i class="cchip a">&nbsp;</i> Vence en 3 días o menos</span><span><i class="cchip p">&nbsp;</i> Programado</span><span><i class="cchip v">&nbsp;</i> Cumplido / pagado</span></div>
+    <div class="ccal-ley"><b>Qué hay:</b><span><i class="cchip p">2</i> Pendientes</span><span><i class="cico p">$</i> Cuenta por pagar</span><span><i class="cico p">↻</i> Pago recurrente</span><span><i class="cico nom">Nómina</i> Pago de nómina</span>${conCobros ? '<span><i class="cico p">↑</i> Cobro</span>' : ''}<span><b class="ccal-crit">!</b> Pendiente crítico</span></div></div></div>`;
 }
 function tablaDia(tareas) {
   const hoy = hoyISO(), k = VIEW.cDia || hoy, esHoy = k === hoy;
@@ -1926,8 +1948,7 @@ function tablaDia(tareas) {
   let arr = [];
   if (esHoy) {
     arr = tareas.filter(t => vencidaT(t)).sort(ordenPend);
-    const hechasHoy = tareas.filter(t => t.estado === 'cumplida' && String(t.cumplida_at || '').slice(0, 10) === hoy && fT(t) !== hoy);
-    L = L.concat(hechasHoy);
+    L = L.concat(tareas.filter(t => t.estado === 'cumplida' && String(t.cumplida_at || '').slice(0, 10) === hoy && fT(t) !== hoy));
   }
   L.sort((a, b) => (a.estado === 'cumplida') - (b.estado === 'cumplida') || ordenPend(a, b));
   const fila = (t, arrastre) => {
@@ -1941,12 +1962,31 @@ function tablaDia(tareas) {
       <td onclick="event.stopPropagation()" style="text-align:right;white-space:nowrap">${ok ? (t.evidencia_url ? `<a class="btn btn-s btn-sm" href="${esc(t.evidencia_url)}" target="_blank">📎 Evidencia</a>` : '<span class="mini">sin evidencia</span>')
         : puede('tareas') ? `<button class="btn btn-s btn-sm" onclick="avancePendiente('${t.id}')">Avance</button> <button class="btn btn-p btn-sm" onclick="cumplirTarea('${t.id}')">✓ Hecho</button>` : ''}</td></tr>`;
   };
-  const tit = esHoy ? 'Hoy · ' + new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' }) : 'Pendientes del ' + new Date(k + 'T12:00:00').toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
-  const cuerpo = (L.length || arr.length) ? `<div class="tc" style="border:none"><table><thead><tr><th></th><th>Pendiente</th><th>Vence / atraso</th><th>Estado</th><th></th></tr></thead><tbody>
+  // Pagos y compromisos del día
+  const E = ((window._calEvs || {})[k] || []).filter(e => e.k !== 'tar').sort((a, b) => ORD_S[a.s] - ORD_S[b.s]);
+  window._calRec = E.filter(e => e.k === 'rec').map(e => e.o);
+  const TIPO = { cxp: 'Cuenta por pagar', rec: 'Pago recurrente', nom: 'Nómina', cxc: 'Cobro' };
+  const filaP = e => {
+    const tit = e.k === 'nom' ? 'Pago de nómina quincenal' : e.k === 'rec' ? e.o.rec.descripcion : nomEnt(e.f.entidad_id);
+    const sub = e.k === 'nom' ? (e.real ? 'Calculada en COE Nómina' : 'Estimado con la última quincena · aún no calculada') : e.k === 'rec' ? nomEnt(e.o.rec.entidad_id) + ' · ' + (FREC[e.o.rec.frecuencia] || '') : e.f.descripcion;
+    const est = e.s === 'v' ? '<span class="bdg bdg-apr">' + (e.k === 'nom' ? 'Calculada' : 'Pagado') + '</span>' : e.s === 'r' ? '<span class="bdg bdg-ven">Vencido</span>' : e.s === 'a' ? '<span class="bdg bdg-pnd">Por vencer</span>' : '<span class="bdg bdg-pro">Programado</span>';
+    const ri = window._calRec.indexOf(e.o);
+    const acc = e.k === 'cxp' || e.k === 'cxc' ? `<button class="btn btn-s btn-sm" onclick="verCuenta('${e.f.id}')">Ver</button>${e.k === 'cxp' && puedePagar(e.f) ? ` <button class="btn btn-p btn-sm" onclick="pagarCuenta('${e.f.id}')">Pagar</button>` : ''}`
+      : e.k === 'rec' ? (e.s === 'v' ? `<button class="btn btn-s btn-sm" onclick="verCuenta('${e.o.factura.id}')">Ver</button>` : puede('cxp') ? `<button class="btn btn-p btn-sm" onclick="window._recOc=_calRec;pagarRecurrente(${ri})">Pagar</button>` : '') : '';
+    return `<tr class="trs ${e.s}"><td style="width:22px"><span class="semd ${e.s}"></span></td><td><div style="display:flex;gap:6px;align-items:center"><span class="cico ${e.k === 'nom' ? 'nom' : e.s}">${e.k === 'nom' ? 'Nómina' : e.k === 'cxp' ? '$' : e.k === 'rec' ? '↻' : '↑'}</span><b>${esc(tit)}</b></div><div class="mini" style="margin-top:3px">${TIPO[e.k]} · ${esc(sub)}</div></td>
+      <td class="amt" style="text-align:right;white-space:nowrap">${e.monto !== null && e.monto !== undefined ? $$(e.monto) : '<span class="mini">sin monto</span>'}</td><td>${est}</td><td style="text-align:right;white-space:nowrap">${acc}</td></tr>`;
+  };
+  const vencP = esHoy && niv('cxp') >= 1 ? abiertas('egreso').filter(f => f.fecha_vencimiento && f.fecha_vencimiento.slice(0, 10) < hoy) : [];
+  const fecTxt = new Date(k + 'T12:00:00').toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
+  const tit = esHoy ? 'Hoy · ' + fecTxt : fecTxt.charAt(0).toUpperCase() + fecTxt.slice(1);
+  const tPend = (L.length || arr.length) ? `<table><thead><tr><th></th><th>Pendiente</th><th>Vence / atraso</th><th>Estado</th><th></th></tr></thead><tbody>
       ${L.map(t => fila(t, false)).join('')}
-      ${arr.length ? `<tr class="trsep"><td colspan="5">Arrastrados de días anteriores (${arr.length})</td></tr>${arr.map(t => fila(t, true)).join('')}` : ''}
-    </tbody></table></div>` : `<div class="emp" style="padding:24px"><div class="ic">✓</div><p>Sin pendientes ${esHoy ? 'para hoy' : 'este día'}</p></div>`;
-  return caja(tit.charAt(0).toUpperCase() + tit.slice(1), cuerpo, puede('tareas') ? `<button class="btn btn-s btn-sm" onclick="nuevoPendiente()">+ Pendiente</button>` : '');
+      ${arr.length ? `<tr class="trsep"><td colspan="5">Arrastrados de días anteriores (${arr.length})</td></tr>${arr.map(t => fila(t, true)).join('')}` : ''}</tbody></table>` : `<div class="mini" style="padding:10px 2px">✓ Sin pendientes ${esHoy ? 'para hoy' : 'este día'}</div>`;
+  const tPag = E.length ? `<table><thead><tr><th></th><th>Pago / compromiso</th><th style="text-align:right">Monto</th><th>Estado</th><th></th></tr></thead><tbody>${E.map(filaP).join('')}</tbody></table>` : `<div class="mini" style="padding:10px 2px">✓ Sin pagos ni compromisos ${esHoy ? 'hoy' : 'este día'}</div>`;
+  const cuerpo = `<div class="dsec">Pendientes</div><div class="tc" style="border:none">${tPend}</div>
+    ${niv('cxp') >= 1 ? `<div class="dsec" style="margin-top:16px">Pagos y compromisos</div><div class="tc" style="border:none">${tPag}</div>
+    ${vencP.length ? `<div class="aitem r" style="margin-top:10px;cursor:pointer" onclick="VIEW.cxpF='r';goTab('cxp')"><div style="flex:1"><div class="at">${vencP.length} cuentas por pagar vencidas · ${$$(sumS(vencP))}</div><div class="am">De días anteriores, sin pagar · ver en Por pagar</div></div></div>` : ''}` : ''}`;
+  return caja(tit, cuerpo, puede('tareas') ? `<button class="btn btn-s btn-sm" onclick="nuevoPendiente()">+ Pendiente</button>` : '');
 }
 function ladoMisTareas(misP) {
   return `<aside class="cdash-side"><div class="cfg-section"><h3 style="display:flex;justify-content:space-between;align-items:center">Mis tareas (${misP.length})${puede('tareas') ? `<button class="btn btn-s btn-sm" onclick="nuevoPendiente()">+</button>` : ''}</h3>
