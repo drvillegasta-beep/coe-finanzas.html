@@ -508,6 +508,47 @@ input[type=email],input[type=tel]{background:var(--sf2);border:1px solid var(--b
 .atr.cron{background:var(--dg);color:#fff;animation:pulse 2.5s infinite;}
 .opt.optp{text-transform:none;letter-spacing:0;font-size:13px;font-weight:500;color:var(--tx);}
 .opt.optp .mini{font-size:12px;}
+/* Tablero contadora: calendario semáforo */
+.dg6{grid-template-columns:repeat(6,1fr)}
+.cdash{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:20px;align-items:start}
+.cdash-main{display:flex;flex-direction:column;gap:20px;min-width:0}
+.cdash-main .cfg-section,.cdash-side .cfg-section{margin:0}
+.cdash-side{position:sticky;top:72px}
+.mtl{max-height:calc(100vh - 240px);overflow:auto;display:flex;flex-direction:column;gap:6px}
+.mt{display:flex;gap:10px;align-items:flex-start;padding:9px 10px;border-radius:8px;background:var(--sf2);border-left:4px solid var(--br2);cursor:pointer}
+.mt:hover{background:var(--sf3)}
+.mt.r{border-left-color:var(--dg)}.mt.a{border-left-color:var(--wn)}.mt.p{border-left-color:#58A6FF}
+.mtt{font-size:13px;font-weight:600;line-height:1.3;margin-bottom:3px}
+.mtchk{flex:none;width:20px;height:20px;margin-top:1px;border-radius:6px;border:2px solid var(--br2);background:transparent;cursor:pointer}
+.mtchk:hover{border-color:var(--sc);background:var(--sd)}
+.ccal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.ccal-h{text-align:center;font-size:11px;font-weight:700;color:var(--tm);padding:2px 0 4px;text-transform:uppercase;letter-spacing:.5px}
+.ccal-d{min-height:78px;border-radius:10px;background:var(--sf2);border:2px solid transparent;padding:7px 8px;cursor:pointer;display:flex;flex-direction:column;justify-content:space-between;transition:transform .1s}
+.ccal-d:hover{transform:translateY(-1px);border-color:var(--br2)}
+.ccal-d.vac{background:transparent;cursor:default}.ccal-d.vac:hover{transform:none;border-color:transparent}
+.ccal-d.dom{opacity:.55}
+.ccal-d.r{background:rgba(248,81,73,.22);border-color:rgba(248,81,73,.55)}
+.ccal-d.a{background:rgba(227,179,65,.2);border-color:rgba(227,179,65,.5)}
+.ccal-d.p{background:rgba(88,166,255,.12)}
+.ccal-d.v{background:rgba(63,185,80,.16)}
+.ccal-d.hoy{border-color:var(--tx);box-shadow:0 0 0 2px var(--pr)}
+.ccal-d.sel{outline:2px dashed var(--tx);outline-offset:2px}
+.ccal-n{font-size:15px;font-weight:800;display:flex;align-items:center;gap:5px}
+.ccal-hoy{font-size:9px;font-weight:800;background:var(--pr);color:#000;padding:1px 6px;border-radius:10px;letter-spacing:.5px}
+.ccal-crit{display:inline-grid;place-items:center;width:16px;height:16px;border-radius:50%;background:var(--dg);color:#fff;font-size:11px;font-weight:900;font-style:normal}
+.ccal-ch{display:flex;gap:4px;flex-wrap:wrap}
+.cchip{display:inline-grid;place-items:center;min-width:22px;height:20px;padding:0 6px;border-radius:10px;font-size:11px;font-weight:800;font-style:normal;color:#000}
+.cchip.r{background:var(--dg);color:#fff}.cchip.a{background:var(--wn)}.cchip.p{background:#58A6FF}.cchip.v{background:var(--sc)}
+.ccal-ley{display:flex;flex-wrap:wrap;gap:14px;margin-top:12px;font-size:11px;color:var(--tm);align-items:center}
+.ccal-ley span{display:flex;align-items:center;gap:5px}
+.semd{display:inline-block;width:12px;height:12px;border-radius:50%}
+.semd.r{background:var(--dg);box-shadow:0 0 0 3px var(--dd)}.semd.a{background:var(--wn);box-shadow:0 0 0 3px var(--wd)}.semd.p{background:#58A6FF}.semd.v{background:var(--sc)}
+tr.trs.r td:first-child{box-shadow:inset 4px 0 0 var(--dg)}tr.trs.a td:first-child{box-shadow:inset 4px 0 0 var(--wn)}
+tr.trs.v td{opacity:.7}
+tr.trsep td{background:var(--dd);color:var(--dg);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;padding:7px 14px}
+@media(max-width:1250px){.dg6{grid-template-columns:repeat(3,1fr)!important}}
+@media(max-width:1100px){.cdash{grid-template-columns:1fr}.cdash-side{position:static}.mtl{max-height:none}}
+@media(max-width:700px){.dg6{grid-template-columns:1fr 1fr!important}.ccal{gap:3px}.ccal-d{min-height:54px;padding:4px}.ccal-n{font-size:12px}.ccal-hoy{display:none}.cchip{min-width:16px;height:16px;font-size:10px;padding:0 3px}}
 </style>
 </head>
 <body>
@@ -986,6 +1027,11 @@ async function tick() {
 let ALR = [];
 const vivas = () => FAC.filter(f => !f.anulado && f.estado !== 'cancelado' && enMiSede(f));
 const saldo = f => Math.max(0, num(f.monto_total) - num(f.monto_pagado));
+// Factura por solicitar: pagada (total o parcial) sin XML, salvo proveedores que no facturan
+const tieneXML = f => !!(f.xml_url || f.uuid_cfdi || DOCS.some(d => d.registro_id === f.id && d.tipo === 'xml'));
+const finMesISO = () => isoD(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0));
+const porSolicitar = f => f.tipo === 'egreso' && !f.anulado && f.estado !== 'cancelado' && (f.factura_pendiente || (num(f.monto_pagado) > 0.009 && !tieneXML(f) && !ent(f.entidad_id)?.no_factura));
+const limFps = f => f.factura_limite || finMesISO();
 const abiertas = tipo => vivas().filter(f => f.tipo === tipo && f.estado !== 'pagado' && saldo(f) > 0.01);
 function semaforo(f) {
   if (f.revision === 'observado') return 'g';
@@ -1012,8 +1058,10 @@ function calcAlertas() {
   });
   if (puede('pedidos', 3)) PED.filter(p => p.estado === 'solicitado' && enMiSede(p)).forEach(p => A.push({ n: p.urgente ? 'r' : 'i', t: `${p.urgente ? 'URGENTE · ' : ''}Pedido por autorizar ${p.folio}`, m: `${p.area} · ${p.descripcion} · ${$$(p.monto_estimado)}`, go: () => verPedido(p.id) }));
   PED.filter(p => p.estado === 'autorizado' && enMiSede(p)).forEach(p => A.push({ n: 'i', t: `Pedido autorizado sin enviar ${p.folio}`, m: `${nomEnt(p.entidad_id)} · enviar al proveedor`, go: () => verPedido(p.id) }));
-  const fps = vivas().filter(f => f.factura_pendiente);
-  fps.forEach(f => { const d = diasA(f.factura_limite); if (d !== null && d <= 5) A.push({ n: d < 0 ? 'r' : 'a', t: `${d < 0 ? 'Factura no conseguida' : 'Factura por solicitar'}: ${nomEnt(f.entidad_id)}`, m: `${f.descripcion} · límite ${fmtD(f.factura_limite)}`, go: () => goTab('fps') }); });
+  const fps = vivas().filter(porSolicitar);
+  const fpsU = fps.filter(f => diasA(limFps(f)) <= 5);
+  if (fpsU.length > 3) { const v = fpsU.filter(f => diasA(limFps(f)) < 0).length; A.push({ n: v ? 'r' : 'a', t: `Facturas por solicitar: ${fpsU.length} con límite próximo`, m: `${v ? v + ' ya vencidas · ' : ''}${$$(fpsU.reduce((s, f) => s + num(f.monto_pagado), 0))} pagados sin factura`, go: () => goTab('fps') }); }
+  else fpsU.forEach(f => { const d = diasA(limFps(f)); A.push({ n: d < 0 ? 'r' : 'a', t: `${d < 0 ? 'Factura no conseguida' : 'Factura por solicitar'}: ${nomEnt(f.entidad_id)}`, m: `${f.descripcion} · límite ${fmtD(limFps(f))}`, go: () => goTab('fps') }); });
   TAR.filter(t => abiertaT(t) && (esMia(t) || (veEquipo() && t.prioridad === 'critico'))).forEach(t => {
     const d = diasA(t.fecha_limite), P = PRI[t.prioridad] || PRI.moderado, quien = esMia(t) ? '' : ' · ' + respNom(respKey(t));
     if (d < 0) A.push({ n: P.c === 'r' ? 'r' : P.c === 'a' ? 'a' : 'i', t: `Pendiente ${P.t.toLowerCase()} vencido hace ${-d} d: ${t.titulo}`, m: `Atraso real ${atraso(t)} d${quien} · ${t.ultimo_avance || 'sin avance'}`, go: () => verPendiente(t.id) });
@@ -1146,7 +1194,7 @@ function verCuenta(id) {
   <div class="kv">
     <b>${egr ? 'Proveedor' : 'Deudor'}</b><div>${esc(e.nombre || '—')} ${e.rfc ? `<span class="mini">${esc(e.rfc)}</span>` : ''}</div>
     <b>Concepto</b><div>${esc(f.descripcion)}</div>
-    <b>Factura</b><div>${esc(f.numero_factura || '—')} ${f.uuid_cfdi ? `<div class="mini">UUID ${esc(f.uuid_cfdi)}</div>` : ''}${f.factura_pendiente ? `<div class="mini" style="color:var(--or)">Factura por solicitar · límite ${fmtD(f.factura_limite)}</div>` : ''}</div>
+    <b>Factura</b><div>${esc(f.numero_factura || '—')} ${f.uuid_cfdi ? `<div class="mini">UUID ${esc(f.uuid_cfdi)}</div>` : ''}${porSolicitar(f) ? `<div class="mini" style="color:var(--or)">Factura por solicitar · límite ${fmtD(limFps(f))}</div>` : ''}</div>
     <b>Montos</b><div>Total <span class="amt">${$$(f.monto_total)}</span> · Pagado <span class="amt">${$$(f.monto_pagado)}</span> · Saldo <span class="amt" style="font-weight:800">${$$(saldo(f))}</span></div>
     <b>Vencimiento</b><div>${fmtD(f.fecha_vencimiento)} ${f.fecha_pago ? ' · pagado ' + fmtD(f.fecha_pago) : ''}</div>
     <b>Categoría · sede</b><div>${esc(f.categoria || '—')} · ${esc(f.sede || 'Tacámbaro')}</div>
@@ -1475,7 +1523,7 @@ function plantillaCorreo(motivo, e, p, f) {
 function correoProveedor(entidadId, facturaId, pedidoId, motivo) {
   const e = ent(entidadId) || {};
   const p = pedidoId ? PED.find(x => x.id === pedidoId) : null, f = facturaId ? FAC.find(x => x.id === facturaId) : null;
-  motivo = motivo || (f && f.factura_pendiente ? 'factura' : 'general');
+  motivo = motivo || (f && porSolicitar(f) ? 'factura' : 'general');
   const t = plantillaCorreo(motivo, e, p, f);
   window._mail = { entidad_id: entidadId, pedido_id: pedidoId || '', factura_id: facturaId || '', motivo };
   modal('Correo a ' + (e.nombre || 'proveedor'), `
@@ -1533,10 +1581,10 @@ async function guardarProv(id) {
 
 // ══ FACTURAS POR SOLICITAR ═════════════════════
 function rFps() {
-  const L = vivas().filter(f => f.factura_pendiente).sort((a, b) => String(a.factura_limite).localeCompare(String(b.factura_limite)));
+  const L = vivas().filter(porSolicitar).sort((a, b) => limFps(a).localeCompare(limFps(b)));
   return `<div class="ph"><div><div class="ptit">Facturas por solicitar</div><div class="psub">Pagos hechos sin factura · la contadora las consigue antes de fin de mes · al subir el XML se cierran solas</div></div><button class="btn btn-p btn-sm" onclick="openUpload()">⬆ Subir factura</button></div>
   <div class="pad"><div class="tc">${L.length ? `<table><thead><tr><th></th><th>Proveedor</th><th>Concepto</th><th>Pagado</th><th style="text-align:right">Monto</th><th>Límite</th><th>Último correo</th><th></th></tr></thead><tbody>
-  ${L.map(f => { const d = diasA(f.factura_limite), c = CORR.find(x => x.factura_id === f.id); return `<tr><td><span class="sem ${d === null ? 'a' : d < 0 ? 'r' : d <= 5 ? 'a' : 'v'}"></span></td><td>${esc(nomEnt(f.entidad_id))}</td><td>${esc(f.descripcion)}</td><td>${fmtD(f.fecha_pago)}</td><td class="amt" style="text-align:right">${$$(f.monto_total)}</td><td>${fmtD(f.factura_limite)}</td><td class="mini">${c ? fmtDT(c.enviado_at) : '—'}</td><td>${puede('fps') ? `<div class="rowact"><button class="btn btn-s btn-sm" onclick="correoProveedor('${f.entidad_id}','${f.id}',null,'factura')">✉ Pedir</button><button class="btn btn-p btn-sm" onclick="openUpload('${f.id}')">⬆ XML/PDF</button></div>` : ''}</td></tr>`; }).join('')}</tbody></table>`
+  ${L.map(f => { const d = diasA(limFps(f)), c = CORR.find(x => x.factura_id === f.id); return `<tr><td><span class="sem ${d === null ? 'a' : d < 0 ? 'r' : d <= 5 ? 'a' : 'v'}"></span></td><td>${esc(nomEnt(f.entidad_id))}</td><td>${esc(f.descripcion)}</td><td>${fmtD(f.fecha_pago)}</td><td class="amt" style="text-align:right">${$$(f.monto_total)}</td><td>${fmtD(limFps(f))}</td><td class="mini">${c ? fmtDT(c.enviado_at) : '—'}</td><td>${puede('fps') ? `<div class="rowact"><button class="btn btn-s btn-sm" onclick="correoProveedor('${f.entidad_id}','${f.id}',null,'factura')">✉ Pedir</button><button class="btn btn-p btn-sm" onclick="openUpload('${f.id}')">⬆ XML/PDF</button></div>` : ''}</td></tr>`; }).join('')}</tbody></table>`
       : '<div class="emp"><div class="ic">✓</div><p>Lista en cero. No hay facturas por solicitar.</p></div>'}</div>
   ${(() => { const C = complementosPendientes(); return `<h3 style="margin:24px 0 10px;font-size:15px">Complementos de pago por solicitar (${C.length})</h3><div class="tc">${C.length ? `<table><thead><tr><th>Proveedor</th><th>Factura</th><th style="text-align:right">Total</th><th style="text-align:right">Pagado</th><th>Faltan</th><th></th></tr></thead><tbody>${C.map(x => `<tr><td>${esc(nomEnt(x.f.entidad_id))}</td><td>${esc(x.f.numero_factura || x.f.descripcion)}</td><td class="amt" style="text-align:right">${$$(x.f.monto_total)}</td><td class="amt" style="text-align:right">${$$(x.f.monto_pagado)}</td><td><span class="dtag no">${x.falta} de ${x.pg}</span></td><td>${puede('fps') ? `<div class="rowact"><button class="btn btn-s btn-sm" onclick="correoProveedor('${x.f.entidad_id}','${x.f.id}',null,'aclaracion')">✉ Pedir</button><button class="btn btn-p btn-sm" onclick="openUpload('${x.f.id}')">⬆ Complemento</button></div>` : ''}</td></tr>`).join('')}</tbody></table>` : '<div class="emp">Sin complementos pendientes</div>'}</div>`; })()}
   </div>`;
@@ -1835,37 +1883,116 @@ function dashDirector(sel) {
 }
 
 // ── Contadora ──
+// Tablero: resumen de pendientes · calendario semáforo + tabla del día · Mis tareas a la derecha · lo demás abajo
+VIEW.cDia = null; VIEW.cY = null; VIEW.cM = null;
+const fT = t => String(t.fecha_limite || '').slice(0, 10);
+// Semáforo de un pendiente: v cumplido · r vencido · a por vencer (≤3 días) · p programado
+function semT(t) {
+  if (t.estado === 'cumplida') return 'v';
+  if (t.estado === 'cancelada') return 'x';
+  const d = diasA(t.fecha_limite);
+  return d === null ? 'p' : d < 0 ? 'r' : d <= 3 ? 'a' : 'p';
+}
+const SEMT = { r: 'Vencido', a: 'Por vencer', p: 'Programado', v: 'Cumplido' };
+function calSemaforo(tareas) {
+  const hoy = hoyISO();
+  if (VIEW.cY === null) { const n = new Date(); VIEW.cY = n.getFullYear(); VIEW.cM = n.getMonth(); }
+  const y = VIEW.cY, m = VIEW.cM, ini = new Date(y, m, 1), dow = (ini.getDay() + 6) % 7, dim = new Date(y, m + 1, 0).getDate();
+  const sel = VIEW.cDia || hoy;
+  const por = {};
+  tareas.filter(t => t.estado !== 'cancelada').forEach(t => { const k = fT(t); if (k) (por[k] = por[k] || []).push(t); });
+  let cells = '';
+  for (let i = 0; i < dow; i++) cells += '<div class="ccal-d vac"></div>';
+  for (let d = 1; d <= dim; d++) {
+    const k = isoD(new Date(y, m, d)), L = por[k] || [], c = { r: 0, a: 0, p: 0, v: 0 };
+    L.forEach(t => c[semT(t)]++);
+    const peor = c.r ? 'r' : c.a ? 'a' : c.p ? 'p' : c.v ? 'v' : '';
+    const crit = L.some(t => abiertaT(t) && t.prioridad === 'critico');
+    const finde = new Date(y, m, d).getDay() === 0;
+    cells += `<div class="ccal-d ${peor} ${k === hoy ? 'hoy' : ''} ${k === sel ? 'sel' : ''} ${finde ? 'dom' : ''}" onclick="VIEW.cDia='${k}';renderTab()">
+      <div class="ccal-n">${d}${k === hoy ? '<span class="ccal-hoy">HOY</span>' : ''}${crit ? '<span class="ccal-crit" title="Crítico">!</span>' : ''}</div>
+      <div class="ccal-ch">${['r', 'a', 'p', 'v'].filter(s => c[s]).map(s => `<span class="cchip ${s}" title="${SEMT[s]}">${c[s]}</span>`).join('')}</div></div>`;
+  }
+  const mesTxt = MESES[m] + ' ' + y;
+  return `<div class="cfg-section ccal-box"><h3 style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      <span>Calendario de pendientes</span>
+      <span style="display:flex;gap:6px;align-items:center"><button class="btn btn-s btn-sm" onclick="VIEW.cM--;if(VIEW.cM<0){VIEW.cM=11;VIEW.cY--};renderTab()">‹</button><b style="min-width:130px;text-align:center;text-transform:capitalize">${mesTxt}</b><button class="btn btn-s btn-sm" onclick="VIEW.cM++;if(VIEW.cM>11){VIEW.cM=0;VIEW.cY++};renderTab()">›</button><button class="btn btn-s btn-sm" onclick="VIEW.cDia=null;VIEW.cY=null;renderTab()">Hoy</button></span></h3>
+    <div class="body"><div class="ccal">${['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map(d => `<div class="ccal-h">${d}</div>`).join('')}${cells}</div>
+    <div class="ccal-ley"><span><i class="cchip r">n</i> Vencido sin cumplir</span><span><i class="cchip a">n</i> Vence en 3 días o menos</span><span><i class="cchip p">n</i> Programado</span><span><i class="cchip v">n</i> Cumplido</span><span><b class="ccal-crit">!</b> Hay un crítico</span></div></div></div>`;
+}
+function tablaDia(tareas) {
+  const hoy = hoyISO(), k = VIEW.cDia || hoy, esHoy = k === hoy;
+  let L = tareas.filter(t => t.estado !== 'cancelada' && fT(t) === k);
+  let arr = [];
+  if (esHoy) {
+    arr = tareas.filter(t => vencidaT(t)).sort(ordenPend);
+    const hechasHoy = tareas.filter(t => t.estado === 'cumplida' && String(t.cumplida_at || '').slice(0, 10) === hoy && fT(t) !== hoy);
+    L = L.concat(hechasHoy);
+  }
+  L.sort((a, b) => (a.estado === 'cumplida') - (b.estado === 'cumplida') || ordenPend(a, b));
+  const fila = (t, arrastre) => {
+    const s = semT(t), ok = t.estado === 'cumplida';
+    return `<tr class="trs ${s}" onclick="verPendiente('${t.id}')" style="cursor:pointer">
+      <td style="width:22px"><span class="semd ${s}" title="${SEMT[s] || ''}"></span></td>
+      <td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${priBdg(t.prioridad)}<b style="${ok ? 'text-decoration:line-through;color:var(--tm)' : ''}">${esc(t.titulo)}</b></div>
+        <div class="mini" style="margin-top:3px">${esc(t.categoria || '')}${t.ultimo_avance ? ' · último avance: ' + esc(t.ultimo_avance) : ''}</div></td>
+      <td class="mini" style="white-space:nowrap">${arrastre ? `<span style="color:var(--dg);font-weight:700">venció ${fmtD(t.fecha_limite)}</span>` : fmtD(t.fecha_limite)}<div style="margin-top:4px">${atraso(t) ? atrasoBdg(t) : ''}</div></td>
+      <td>${estBdg(t.estado)}</td>
+      <td onclick="event.stopPropagation()" style="text-align:right;white-space:nowrap">${ok ? (t.evidencia_url ? `<a class="btn btn-s btn-sm" href="${esc(t.evidencia_url)}" target="_blank">📎 Evidencia</a>` : '<span class="mini">sin evidencia</span>')
+        : puede('tareas') ? `<button class="btn btn-s btn-sm" onclick="avancePendiente('${t.id}')">Avance</button> <button class="btn btn-p btn-sm" onclick="cumplirTarea('${t.id}')">✓ Hecho</button>` : ''}</td></tr>`;
+  };
+  const tit = esHoy ? 'Hoy · ' + new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' }) : 'Pendientes del ' + new Date(k + 'T12:00:00').toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
+  const cuerpo = (L.length || arr.length) ? `<div class="tc" style="border:none"><table><thead><tr><th></th><th>Pendiente</th><th>Vence / atraso</th><th>Estado</th><th></th></tr></thead><tbody>
+      ${L.map(t => fila(t, false)).join('')}
+      ${arr.length ? `<tr class="trsep"><td colspan="5">Arrastrados de días anteriores (${arr.length})</td></tr>${arr.map(t => fila(t, true)).join('')}` : ''}
+    </tbody></table></div>` : `<div class="emp" style="padding:24px"><div class="ic">✓</div><p>Sin pendientes ${esHoy ? 'para hoy' : 'este día'}</p></div>`;
+  return caja(tit.charAt(0).toUpperCase() + tit.slice(1), cuerpo, puede('tareas') ? `<button class="btn btn-s btn-sm" onclick="nuevoPendiente()">+ Pendiente</button>` : '');
+}
+function ladoMisTareas(misP) {
+  return `<aside class="cdash-side"><div class="cfg-section"><h3 style="display:flex;justify-content:space-between;align-items:center">Mis tareas (${misP.length})${puede('tareas') ? `<button class="btn btn-s btn-sm" onclick="nuevoPendiente()">+</button>` : ''}</h3>
+    <div class="body mtl">${misP.length ? misP.map(t => { const s = semT(t); return `<div class="mt ${s}" onclick="verPendiente('${t.id}')">
+      ${puede('tareas') ? `<button class="mtchk" title="Marcar hecho con evidencia" onclick="event.stopPropagation();cumplirTarea('${t.id}')"></button>` : ''}
+      <div style="flex:1;min-width:0"><div class="mtt">${esc(t.titulo)}</div><div class="mini">${priBdg(t.prioridad)} ${s === 'r' ? `<b style="color:var(--dg)">venció ${fmtD(t.fecha_limite)}</b>` : 'vence ' + fmtD(t.fecha_limite)}${t.estado === 'bloqueado' ? ' · <b style="color:var(--dg)">bloqueado</b>' : ''}</div></div></div>`; }).join('') : '<div class="mini">✓ Sin tareas abiertas</div>'}</div>
+    <div style="padding:0 16px 14px"><button class="btn btn-s btn-sm" style="width:100%" onclick="VIEW.pAmb='mios';goTab('tar')">Ver todos mis pendientes</button></div></div></aside>`;
+}
 function dashContadora(sel) {
-  const hoy = isoD(new Date()), finMes = isoD(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0));
-  const misP = TAR.filter(t => esMia(t) && abiertaT(t)).sort(ordenPend);
-  const tarV = misP.filter(vencidaT), tarH = misP.filter(t => !vencidaT(t) && diasA(t.fecha_limite) <= 7);
-  const fps = vivas().filter(f => f.factura_pendiente);
+  const hoy = hoyISO(), finMes = finMesISO();
+  const misT = TAR.filter(esMia), misP = misT.filter(abiertaT).sort(ordenPend);
+  const venc = misP.filter(vencidaT), paraHoy = misP.filter(t => fT(t) === hoy), semana = misP.filter(t => { const d = diasA(t.fecha_limite); return d > 0 && d <= 7; });
+  const crit = misP.filter(t => t.prioridad === 'critico'), bloq = misP.filter(t => t.estado === 'bloqueado');
+  const fps = vivas().filter(porSolicitar).sort((a, b) => limFps(a).localeCompare(limFps(b)) || num(b.monto_pagado) - num(a.monto_pagado));
   const hace60 = isoD(new Date(Date.now() - 60 * 86400000));
   const sinRev = vivas().filter(f => !f.revision && String(f.created_at || '').slice(0, 10) >= hace60);
-  const faltan = abiertas('egreso').concat(vivas().filter(f => f.tipo === 'egreso' && f.estado === 'pagado' && String(f.fecha_pago || '') >= hace60))
-    .filter(f => f.documento_tipo !== 'sin_factura' && (!(f.xml_url || DOCS.some(d => d.registro_id === f.id && d.tipo === 'xml')) || !(f.pdf_url || DOCS.some(d => d.registro_id === f.id && d.tipo === 'pdf'))));
+  const tienePDF = f => !!(f.pdf_url || DOCS.some(d => d.registro_id === f.id && d.tipo === 'pdf'));
+  const faltan = abiertas('egreso').filter(f => f.documento_tipo !== 'sin_factura' && !ent(f.entidad_id)?.no_factura && (!tieneXML(f) || !tienePDF(f)));
   const porProp = abiertas('egreso').filter(f => !f.propuesta_pago && diasA(f.fecha_vencimiento) !== null && diasA(f.fecha_vencimiento) <= 10).sort((a, b) => a.fecha_vencimiento.localeCompare(b.fecha_vencimiento));
   const prop = propuestas();
   const cobV = abiertas('ingreso').filter(f => semaforo(f) === 'r');
   const d = datosCumplimiento('mensual'), pct = d.tar.length ? Math.round(d.aTiempo.length / d.tar.length * 100) : 100;
   window._pp = new Set();
+  const irDia = k => `VIEW.cDia='${k}';VIEW.cY=null;renderTab()`;
   return cabDash('Mi día · Contadora', `faltan ${diasA(finMes)} días para fin de mes`, sel + botonCierre() + (puede('cxp') ? `<button class="btn btn-p btn-sm" onclick="openUpload()">⬆ Subir factura de proveedor</button>` : '')) + `<div class="pad">
-    <div class="dg">
-      ${kpi('Pendientes vencidos', String(tarV.length), `${tarV.filter(t => t.prioridad === 'critico').length} críticos · ${tarH.length} próximos 7 días`, tarV.length ? 'var(--dg)' : 'var(--sc)', "goTab('tar')")}
-      ${kpi('Facturas por solicitar', String(fps.length), `límite ${fmtD(finMes)}`, fps.length ? 'var(--wn)' : 'var(--sc)', "goTab('fps')")}
-      ${kpi('Por revisar', String(sinRev.length), 'movimientos de 60 días sin revisión', sinRev.length ? 'var(--wn)' : '')}
-      ${kpi('Mi cumplimiento', pct + '%', `${d.aTiempo.length} de ${d.tar.length} a tiempo este mes`, pct >= 90 ? 'var(--sc)' : 'var(--wn)', "goTab('rep')")}
+    <div class="dg dg6">
+      ${kpi('Vencidos', String(venc.length), venc.length ? `${venc.filter(t => t.prioridad === 'critico').length} críticos · atraso máx ${Math.max(0, ...venc.map(atraso))} d` : 'al corriente', venc.length ? 'var(--dg)' : 'var(--sc)', irDia(hoy))}
+      ${kpi('Para hoy', String(paraHoy.length), paraHoy.length ? paraHoy.filter(t => t.prioridad === 'critico').length + ' críticos' : 'nada vence hoy', paraHoy.length ? 'var(--wn)' : 'var(--sc)', irDia(hoy))}
+      ${kpi('Próximos 7 días', String(semana.length), semana.length ? 'siguiente: ' + fmtD(semana.slice().sort((a, b) => fT(a).localeCompare(fT(b)))[0].fecha_limite) : 'semana libre', '', "VIEW.pAmb='mios';goTab('tar')")}
+      ${kpi('Críticos abiertos', String(crit.length), bloq.length ? `${bloq.length} bloqueados` : 'ninguno bloqueado', crit.length ? 'var(--dg)' : 'var(--sc)', "VIEW.pAmb='mios';VIEW.pPri='critico';goTab('tar')")}
+      ${kpi('Facturas por solicitar', String(fps.length), fps.length ? `${$$(fps.reduce((s, f) => s + num(f.monto_pagado), 0))} pagados sin XML` : 'lista en cero', fps.length ? 'var(--or)' : 'var(--sc)', "goTab('fps')")}
+      ${kpi('Mi cumplimiento', pct + '%', `${d.aTiempo.length} de ${d.tar.length} a tiempo este mes`, pct >= 90 ? 'var(--sc)' : pct >= 70 ? 'var(--wn)' : 'var(--dg)', "goTab('rep')")}
     </div>
-    <div class="cfgg">
-      ${cajaMisPendientes()}
-      ${caja(`Armar propuesta de pagos (${porProp.length})`, porProp.length ? `<div class="mini" style="margin-bottom:8px">Vencen en los próximos 10 días. Marca las que propones pagar y la fecha; el Director las ve en su tablero.</div>
+    <div class="cdash">
+      <div class="cdash-main">${calSemaforo(misT)}${tablaDia(misT)}</div>
+      ${ladoMisTareas(misP)}
+    </div>
+    <div class="cfgg" style="margin-top:20px">
+      ${caja(`Facturas por solicitar (${fps.length})`, lista(fps.slice(0, 8), f => `<div class="aitem ${diasA(limFps(f)) < 0 ? 'r' : 'a'}" onclick="verCuenta('${f.id}')"><div style="flex:1"><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(f.monto_pagado)}</div><div class="am">${esc(f.descripcion)} · pagado ${fmtD(f.fecha_pago)} · límite ${fmtD(limFps(f))}</div></div><div class="rowact" onclick="event.stopPropagation()"><button class="btn btn-s btn-sm" onclick="correoProveedor('${f.entidad_id}','${f.id}',null,'factura')">✉</button><button class="btn btn-p btn-sm" onclick="openUpload('${f.id}')">⬆ XML</button></div></div>`, 'Lista en cero'), `<button class="btn btn-s btn-sm" onclick="goTab('fps')">Ver todas</button>`)}
+      ${caja(`Documentos faltantes · por pagar (${faltan.length})`, lista(faltan.slice(0, 8), f => `<div class="aitem a" onclick="openUpload('${f.id}')"><div style="flex:1"><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(f.monto_total)}</div><div class="am">${esc(f.descripcion)}</div></div>${docsDe(f)}</div>`, 'Las cuentas por pagar tienen XML y PDF'))}
+      ${caja(`Por revisar (${sinRev.length})`, lista(sinRev.slice(0, 8), f => `<div class="aitem" onclick="verCuenta('${f.id}')"><div style="flex:1"><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(f.monto_total)}</div><div class="am">${esc(f.descripcion)} · ${fmtD(String(f.created_at).slice(0, 10))}</div></div>${puede('revision') ? `<button class="btn btn-s btn-sm" onclick="event.stopPropagation();revisar('${f.id}','revisado')">✓</button>` : ''}</div>`, 'Todo revisado'))}
+      ${caja(`Cobros vencidos (${cobV.length})`, lista(cobV, f => `<div class="aitem r" onclick="verCuenta('${f.id}')"><div><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(saldo(f))}</div><div class="am">${esc(f.descripcion)} · venció ${fmtD(f.fecha_vencimiento)}</div></div></div>`, 'Sin cobros vencidos'))}
+      ${caja(`Armar propuesta de pagos (${porProp.length})`, porProp.length ? `<div class="mini" style="margin-bottom:8px">Vencen en los próximos 10 días o ya vencieron. Marca las que propones pagar y la fecha; el Director las ve en su tablero.</div>
         ${porProp.map(f => `<label class="opt"><input type="checkbox" onchange="this.checked?_pp.add('${f.id}'):_pp.delete('${f.id}')"><span style="flex:1"><b>${esc(nomEnt(f.entidad_id))}</b> · ${$$(saldo(f))}<br><span class="mini">${esc(f.descripcion)} · vence ${fmtD(f.fecha_vencimiento)} ${docsDe(f)}</span></span></label>`).join('')}
         <div style="display:flex;gap:8px;margin-top:10px;align-items:center"><input type="date" id="ppF" value="${hoy}" style="max-width:170px"><button class="btn btn-p btn-sm" onclick="proponer()">Firmar propuesta</button></div>` : '<div class="mini">✓ Nada por vencer sin proponer</div>')}
       ${caja(`Propuesta enviada al Director (${prop.length} · ${$$(sumS(prop))})`, lista(prop, f => `<div class="aitem i"><div style="flex:1"><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(saldo(f))}</div><div class="am">Pagar el ${fmtD(f.propuesta_pago)} · ${esc(f.descripcion)}</div></div><button class="btn btn-s btn-sm" onclick="quitarPropuesta('${f.id}')">Quitar</button></div>`, 'Sin propuesta activa'))}
-      ${caja(`Documentos faltantes (${faltan.length})`, lista(faltan.slice(0, 10), f => `<div class="aitem a" onclick="openUpload('${f.id}')"><div style="flex:1"><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(f.monto_total)}</div><div class="am">${esc(f.descripcion)}</div></div>${docsDe(f)}</div>`, 'Todos los movimientos tienen XML y PDF'))}
-      ${caja(`Facturas por solicitar (${fps.length})`, lista(fps.slice(0, 8), f => `<div class="aitem ${diasA(f.factura_limite) < 0 ? 'r' : 'a'}"><div style="flex:1"><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(f.monto_total)}</div><div class="am">${esc(f.descripcion)} · límite ${fmtD(f.factura_limite)}</div></div><button class="btn btn-s btn-sm" onclick="correoProveedor('${f.entidad_id}','${f.id}',null,'factura')">✉ Pedir</button></div>`, 'Lista en cero'), `<button class="btn btn-s btn-sm" onclick="goTab('fps')">Ver todas</button>`)}
-      ${caja(`Por revisar (${sinRev.length})`, lista(sinRev.slice(0, 8), f => `<div class="aitem" onclick="verCuenta('${f.id}')"><div style="flex:1"><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(f.monto_total)}</div><div class="am">${esc(f.descripcion)} · ${fmtD(String(f.created_at).slice(0, 10))}</div></div>${puede('revision') ? `<button class="btn btn-s btn-sm" onclick="event.stopPropagation();revisar('${f.id}','revisado')">✓</button>` : ''}</div>`, 'Todo revisado'))}
-      ${caja(`Cobros vencidos (${cobV.length})`, lista(cobV, f => `<div class="aitem r" onclick="verCuenta('${f.id}')"><div><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(saldo(f))}</div><div class="am">${esc(f.descripcion)} · venció ${fmtD(f.fecha_vencimiento)}</div></div></div>`, 'Sin cobros vencidos'))}
     </div></div>`;
 }
 async function proponer() {
@@ -1891,7 +2018,7 @@ function dashSede(sel) {
   const sede = (DASH_VER && esAdmin()) ? 'Morelia' : (cu.sede || 'todas las sedes');
   const deSede = r => (DASH_VER && esAdmin()) ? r.sede === 'Morelia' : enMiSede(r);
   const pAut = PED.filter(p => deSede(p) && p.estado === 'solicitado'), pTr = PED.filter(p => deSede(p) && ['autorizado', 'enviado'].includes(p.estado)), pRec = PED.filter(p => deSede(p) && p.estado === 'recibido');
-  const cxp = abiertas('egreso').filter(deSede), fps = vivas().filter(f => f.factura_pendiente && deSede(f));
+  const cxp = abiertas('egreso').filter(deSede), fps = vivas().filter(f => porSolicitar(f) && deSede(f));
   return cabDash('Tablero de Administración · ' + esc(sede), 'pedidos, cuentas y facturas de la sede', sel + botonCierre() + (puede('pedidos') ? `<button class="btn btn-p btn-sm" onclick="nuevoPedido()">+ Pedido</button>` : '')) + `<div class="pad">
     <div class="dg">
       ${kpi('Por autorizar', String(pAut.length), `${pAut.filter(p => p.urgente).length} urgentes`, pAut.length ? 'var(--wn)' : '', "goTab('ped')")}
@@ -2095,13 +2222,13 @@ function cumplirTarea(id) {
   const t = TAR.find(x => x.id === id);
   window._pgFile = null;
   modal('Cumplir: ' + t.titulo, `${t.entregable ? `<div class="mini" style="margin-bottom:10px">Entregable: <b>${esc(t.entregable)}</b></div>` : ''}
-    <div class="drop"><input type="file" onchange="_pgFile=this.files[0];document.getElementById('tfN').textContent=this.files[0]?.name||''"><div class="big">⬆</div><div>Evidencia</div><div class="mini" id="tfN">Archivo o foto · si no hay, describe abajo cómo se resolvió</div></div>
-    <div class="fld" style="margin-top:12px"><label>Cómo se resolvió</label><input type="text" id="tfNota"></div>`,
+    <div class="drop"><input type="file" onchange="_pgFile=this.files[0];document.getElementById('tfN').textContent=this.files[0]?.name||''"><div class="big">⬆</div><div>Evidencia de realizado</div><div class="mini" id="tfN">Obligatoria · foto, PDF, captura de pantalla o acuse</div></div>
+    <div class="fld" style="margin-top:12px"><label>Comentario (opcional)</label><input type="text" id="tfNota" placeholder="Ej. enviado por correo al contador externo"></div>`,
     `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="confirmarTarea('${id}')">Firmar cumplido</button>`, 'sm');
 }
 async function confirmarTarea(id) {
   const nota = tfNota.value.trim();
-  if (!_pgFile && !nota) { toast('Sube la evidencia o describe cómo se resolvió', 'warning'); return; }
+  if (!_pgFile) { toast('Anexa la evidencia de que quedó hecho', 'warning'); return; }
   let url = '';
   if (_pgFile) { try { url = (await subirArchivo(_pgFile, 'tareas')).url; } catch (e) { toast(e.message, 'error'); return; } }
   const r = await rpcFirmado('fin_tarea_cumplir', { p_tarea: id, p_evidencia: url, p_nota: nota }, { titulo: 'Firmar pendiente cumplido' });
@@ -2223,7 +2350,7 @@ function datosCumplimiento(per) {
   const tarde = tar.filter(t => t.estado === 'cumplida' && String(t.cumplida_at).slice(0, 10) > fOrig(t));
   const noCump = tar.filter(t => abiertaT(t) && diasA(fOrig(t)) < 0);
   const enPlazo = tar.filter(t => abiertaT(t) && diasA(fOrig(t)) >= 0);
-  const fpsV = vivas().filter(f => f.factura_pendiente && diasA(f.factura_limite) < 0);
+  const fpsV = vivas().filter(f => porSolicitar(f) && diasA(limFps(f)) < 0);
   const cxpV = abiertas('egreso').filter(f => semaforo(f) === 'r');
   const sinRev = vivas().filter(f => en(String(f.created_at)) && !f.revision);
   const pag = ABO.filter(x => !x.anulado && en(x.fecha_pago));
@@ -2578,9 +2705,9 @@ function upProponer() {
         P.opciones.push({ k: 'ligar', f: yaUuid, txt: `Ya registrada: ${yaUuid.descripcion}. Solo completar documentos.` });
       } else {
         const cand = e ? vivas().filter(f => f.entidad_id === e.id && f.tipo === tipo && !f.uuid_cfdi) : [];
-        cand.filter(f => f.factura_pendiente && (casi(f.monto_total, c.total, 1) || casi(f.monto_pagado, c.total, 1)))
+        cand.filter(f => porSolicitar(f) && (casi(f.monto_total, c.total, 1) || casi(f.monto_pagado, c.total, 1)))
           .forEach(f => P.opciones.push({ k: 'ligar', f, txt: `Completa la factura pendiente del pago del ${fmtD(f.fecha_pago)}: ${f.descripcion} · ${$$(f.monto_total)}`, top: 1 }));
-        cand.filter(f => !f.factura_pendiente && f.estado !== 'pagado' && casi(f.monto_total, c.total, 1))
+        cand.filter(f => !porSolicitar(f) && f.estado !== 'pagado' && casi(f.monto_total, c.total, 1))
           .forEach(f => P.opciones.push({ k: 'ligar', f, txt: `Liga a la cuenta abierta: ${f.descripcion} · vence ${fmtD(f.fecha_vencimiento)}` }));
         // Comprobante del mismo pago: monto igual, o mismo proveedor / único comprobante como abono parcial
         let pg = pagos.find(p => !usados.has(p.id) && p.pago?.monto && casi(p.pago.monto, c.total, 1));
