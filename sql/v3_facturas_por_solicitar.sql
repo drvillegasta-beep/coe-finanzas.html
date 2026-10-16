@@ -69,7 +69,8 @@ end $function$;
 -- insert into fin_config (clave,valor) values ('nomina_excluir','<ilse>,<dora>');
 
 -- 6) (16/10/2026) Honorarios: pendiente crítico automático para la Contadora por prestador y mes
---    Se crea al registrar la primera transferencia; límite = último día del mes de la quincena;
+--    Título «Solicitar facturas de nómina · <prestador> · <mes>»; se crea al registrar la primera transferencia; límite = día 30 del mes (o último día si el mes es más corto);
 --    se cierra solo cuando las 2 transferencias del mes tienen XML. Ver funciones en la base:
 --    public.fin__honorarios_tarea() + trigger trg_honorarios_tarea (after insert/update en fin_facturas)
 --    y public.fin__fps_regla() (límite de factura de honorarios = fin del mes de la quincena).
+-- 7) (16/10/2026) Índice único fin_facturas_recurrente_periodo_uq (recurrente_id, recurrente_periodo) para evitar dobles registros por doble clic.

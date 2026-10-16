@@ -1690,7 +1690,13 @@ function pagarRecurrente(i) {
       <div class="fgrp"><label>Referencia</label><input type="text" id="pgR"></div></div>`,
     `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="confirmarRecurrente(${i})">Firmar pago</button>`);
 }
+let _pagando = false;
 async function confirmarRecurrente(i) {
+  if (_pagando) return;
+  _pagando = true;
+  try { await _confirmarRecurrente(i); } finally { _pagando = false; }
+}
+async function _confirmarRecurrente(i) {
   const o = window._recOc[i], r = o.rec, monto = num(pgM.value), file = _pgFile;
   if (!file) { toast('Sube el comprobante', 'warning'); return; }
   if (monto <= 0) { toast('Escribe el monto', 'warning'); return; }
@@ -1700,18 +1706,18 @@ async function confirmarRecurrente(i) {
   let fid = o.factura?.id;
   if (!fid) {
     const c = await rpcConPin('fin_crear_cxp', { p_datos: { tipo: 'egreso', entidad_id: r.entidad_id, descripcion: `${r.descripcion} — ${fmtD(isoD(o.fecha))}`, monto_total: monto, fecha_vencimiento: isoD(o.fecha), categoria: r.categoria, documento_tipo: 'sin_factura', recurrente_id: r.id, recurrente_periodo: isoD(o.fecha), origen: 'recurrente' } }, pin, pinDir);
-    if (!c.ok) { toast(ERR[c.error] || c.error, 'error'); return; }
+    if (!c.ok) { toast(/duplicate|fin_facturas_recurrente_periodo_uq/.test(c.error || '') ? 'Esta quincena ya está registrada' : (ERR[c.error] || c.error), 'error'); await cargarTodo(); if (window._volverTransf) openTransferencias(); return; }
     fid = c.id;
   }
   const p = await rpcConPin('fin_pagar', { p_factura: fid, p_monto: monto, p_fecha: pgF.value, p_metodo: pgMet.value, p_referencia: pgR.value, p_comprobante_url: up.url, p_sha256: up.sha }, pin, pinDir);
   if (!p.ok) { toast(ERR[p.error] || p.error, 'error'); return; }
-  CM('mGen'); toast(nomRef(r) === 'fijo' ? 'Transferencia de nómina registrada con su comprobante' : nomRef(r) ? 'Transferencia registrada · la Contadora ya tiene el pendiente crítico de recabar la factura' : 'Pago registrado · la factura queda por solicitar', 'success'); await cargarTodo(); if (window._volverTransf) openTransferencias();
+  CM('mGen'); toast(nomRef(r) === 'fijo' ? 'Transferencia de nómina registrada con su comprobante' : nomRef(r) ? 'Transferencia registrada · la Contadora ya tiene el pendiente crítico «Solicitar facturas de nómina»' : 'Pago registrado · la factura queda por solicitar', 'success'); await cargarTodo(); if (window._volverTransf) openTransferencias();
 }
 // ══ TRANSFERENCIAS DE HONORARIOS Y NÓMINA (botón directo) ══
 VIEW.trOff = 0;
 function openTransferencias() {
   const base = new Date(); base.setDate(1); base.setMonth(base.getMonth() + VIEW.trOff);
-  const y = base.getFullYear(), m = base.getMonth(), fin = new Date(y, m + 1, 0), finISO = isoD(fin), mesTxt = MESES[m] + ' ' + y;
+  const y = base.getFullYear(), m = base.getMonth(), fin = new Date(y, m + 1, 0), finISO = isoD(new Date(y, m, Math.min(30, fin.getDate()))), mesTxt = MESES[m] + ' ' + y;
   const dias = Math.max(1, Math.ceil((fin - hoyD()) / 86400000) + 1);
   const oc = buildRecOcurrencias(dias).filter(o => nomRef(o.rec) && o.fecha.getFullYear() === y && o.fecha.getMonth() === m);
   window._recOc = oc; window._volverTransf = true;
@@ -1729,11 +1735,11 @@ function openTransferencias() {
     const d = diasA(finISO);
     const fac = fijo ? '<span class="mini">No aplica · comprobante de nómina</span>'
       : !pag.length ? '<span class="mini">Se pide al subir la transferencia</span>'
-      : `<span class="bdg ${conXml.length === pag.length && pag.length >= 2 ? 'bdg-apr' : d < 0 ? 'bdg-ven' : 'bdg-pnd'}">${conXml.length} de ${Math.max(2, pag.length)} facturas</span><div class="mini" style="margin-top:3px">límite ${fmtD(finISO)} · la Contadora la recaba</div>`;
+      : `<span class="bdg ${conXml.length === pag.length && pag.length >= 2 ? 'bdg-apr' : d < 0 ? 'bdg-ven' : 'bdg-pnd'}">${conXml.length} de ${Math.max(2, pag.length)} facturas</span><div class="mini" style="margin-top:3px">límite ${fmtD(finISO)} · la Contadora las solicita</div>`;
     return `<tr><td><b>${esc(fijo ? 'Nómina · personal fijo' : nomEnt(r.entidad_id))}</b><div class="mini">${fijo ? 'Plantilla bancaria · sin factura' : 'Honorarios · factura obligatoria'}</div></td>${celda(q1)}${celda(q2)}<td>${fac}</td></tr>`;
   }).join('');
   modal('Transferencias de honorarios y nómina', `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px;flex-wrap:wrap">
-      <div class="mini" style="max-width:520px">Sube aquí el comprobante de cada transferencia. En honorarios, la Contadora recibe en automático un <b>pendiente crítico</b> para recabar las facturas del 15 y del fin de mes, con límite el <b>${fmtD(finISO)}</b>; se cierra solo al subir los XML.</div>
+      <div class="mini" style="max-width:520px">Sube aquí el comprobante de cada transferencia. En honorarios, la Contadora recibe en automático el <b>pendiente crítico</b> «Solicitar facturas de nómina» por las transferencias del 15 y del fin de mes, con límite el <b>${fmtD(finISO)}</b>; se cierra solo al subir los XML.</div>
       <div style="display:flex;gap:6px;align-items:center"><button class="btn btn-s btn-sm" onclick="VIEW.trOff--;openTransferencias()">‹</button><b style="text-transform:capitalize;min-width:120px;text-align:center">${mesTxt}</b><button class="btn btn-s btn-sm" onclick="VIEW.trOff++;openTransferencias()">›</button></div></div>
     ${filas ? `<div class="tc"><table><thead><tr><th>Prestador</th><th>Quincena 15</th><th>Quincena fin de mes</th><th>Factura</th></tr></thead><tbody>${filas}</tbody></table></div>` : '<div class="emp">Sin pagos de nómina u honorarios en este mes</div>'}`, '', 'lg');
 }
