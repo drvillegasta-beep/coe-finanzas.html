@@ -67,3 +67,9 @@ end $function$;
 -- update nom_empleados e set entidad_id=f.id from fin_entidades f where f.notas like 'nom:'||e.id||'%' and e.entidad_id is null;
 -- update fin_entidades set nombre='NÓMINA COE' where id='7dd6fae7-5c4d-47c7-b48e-90b86d95119c';
 -- insert into fin_config (clave,valor) values ('nomina_excluir','<ilse>,<dora>');
+
+-- 6) (16/10/2026) Honorarios: pendiente crítico automático para la Contadora por prestador y mes
+--    Se crea al registrar la primera transferencia; límite = último día del mes de la quincena;
+--    se cierra solo cuando las 2 transferencias del mes tienen XML. Ver funciones en la base:
+--    public.fin__honorarios_tarea() + trigger trg_honorarios_tarea (after insert/update en fin_facturas)
+--    y public.fin__fps_regla() (límite de factura de honorarios = fin del mes de la quincena).

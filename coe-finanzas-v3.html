@@ -558,6 +558,7 @@ tr.trsep td{background:var(--dd);color:var(--dg);font-size:11px;font-weight:800;
 .ccal-ley b{color:var(--tx);font-size:11px}
 @media(max-width:700px){.ccal-m{display:none}.cico{min-width:14px;height:15px;font-size:9px;padding:0 2px}.cico.nom{font-size:0;width:10px;min-width:10px}.ccal-d{min-height:62px}}
 .cico.nom.r{box-shadow:0 0 0 2px var(--dg)}.cico.nom.a{box-shadow:0 0 0 2px var(--wn)}.cico.nom.v{background:var(--sc);border-color:var(--sc)}
+.trok{color:var(--sc);font-weight:700;cursor:pointer}.trok a{color:var(--tm)}
 </style>
 </head>
 <body>
@@ -1659,12 +1660,12 @@ function rRec() {
     const L = buildRecOcurrencias(35).filter(o => o.diasDiff <= 35 && (o.estado !== 'pagado' || o.diasDiff >= -31));
     const sem = { pagado: 'v', vencido: 'r', proximo: 'a', futuro: 'g' }, txt = { pagado: 'Pagado', vencido: 'Vencido', proximo: 'Por vencer', futuro: 'Programado' };
     window._recOc = L;
-    body = L.length ? `<table><thead><tr><th>Estatus</th><th>Fecha</th><th>Pago</th><th>Proveedor</th><th>Frecuencia</th><th></th></tr></thead><tbody>${L.map((o, i) => `<tr><td><span class="sem ${sem[o.estado]}"></span><span class="mini">${txt[o.estado]}</span></td><td>${fmtD(isoD(o.fecha))}</td><td><b>${esc(o.rec.descripcion)}</b><div class="mini">${esc(o.rec.categoria || '')}</div></td><td>${esc(nomEnt(o.rec.entidad_id))}</td><td class="mini">${FREC[o.rec.frecuencia] || ''}</td><td>${o.estado === 'pagado' ? `<button class="btn btn-s btn-sm" onclick="verCuenta('${o.factura.id}')">Ver</button>` : (puede('cxp') ? `<button class="btn btn-p btn-sm" onclick="pagarRecurrente(${i})">Pagar</button>` : '')}</td></tr>`).join('')}</tbody></table>` : '<div class="emp">Sin pagos recurrentes próximos</div>';
+    body = L.length ? `<table><thead><tr><th>Estatus</th><th>Fecha</th><th>Pago</th><th>Proveedor</th><th>Frecuencia</th><th></th></tr></thead><tbody>${L.map((o, i) => `<tr><td><span class="sem ${sem[o.estado]}"></span><span class="mini">${txt[o.estado]}</span></td><td>${fmtD(isoD(o.fecha))}</td><td><b>${esc(o.rec.descripcion)}</b><div class="mini">${esc(o.rec.categoria || '')}</div></td><td>${esc(nomEnt(o.rec.entidad_id))}</td><td class="mini">${FREC[o.rec.frecuencia] || ''}</td><td>${o.estado === 'pagado' ? `<button class="btn btn-s btn-sm" onclick="verCuenta('${o.factura.id}')">Ver</button>` : (puede('cxp') ? `<button class="btn btn-p btn-sm" onclick="pagarRecurrenteDesde(${i})">Pagar</button>` : '')}</td></tr>`).join('')}</tbody></table>` : '<div class="emp">Sin pagos recurrentes próximos</div>';
   } else {
     body = `<table><thead><tr><th>Plantilla</th><th>Proveedor</th><th>Frecuencia</th><th>Día</th><th>Aviso</th><th></th></tr></thead><tbody>${REC.map(r => `<tr><td><b>${esc(r.descripcion)}</b><div class="mini">${esc(r.categoria || '')}</div></td><td>${esc(nomEnt(r.entidad_id))}</td><td>${FREC[r.frecuencia] || r.frecuencia}</td><td>${r.dia_vencimiento || ''}${r.dia_vencimiento_2 ? ' y ' + r.dia_vencimiento_2 : ''}${r.mes_vencimiento ? ' / mes ' + r.mes_vencimiento : ''}</td><td>${r.dias_alerta || 3} días antes</td><td>${puede('recurrentes') ? `<button class="btn btn-s btn-sm" onclick="editarRec('${r.id}')">Editar</button>` : ''}</td></tr>`).join('')}</tbody></table>`;
   }
   return `<div class="ph"><div><div class="ptit">Pagos recurrentes</div><div class="psub">Servicios y pagos fijos · avisos antes del vencimiento · hoja imprimible del mes</div></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">${tg}<button class="btn btn-s btn-sm" onclick="imprimirRecurrentes()">🖨 Hoja del mes</button>${puede('recurrentes') ? `<button class="btn btn-p btn-sm" onclick="editarRec()">+ Plantilla</button>` : ''}</div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${tg}<button class="btn btn-p btn-sm" onclick="openTransferencias()">⬆ Transferencias de honorarios y nómina</button><button class="btn btn-s btn-sm" onclick="imprimirRecurrentes()">🖨 Hoja del mes</button>${puede('recurrentes') ? `<button class="btn btn-p btn-sm" onclick="editarRec()">+ Plantilla</button>` : ''}</div></div>
   <div class="pad"><div class="tc">${body}</div></div>`;
 }
 // Recurrentes ligados a COE Nómina (notas 'nom:<empleado>' o 'nom:fijo')
@@ -1674,6 +1675,7 @@ function montoNomina(r, fecha) {
   const P = NOM.filter(p => p.fecha_pago === fecha && nomCuenta(p) && (ref === 'fijo' ? NOM_EMP.find(e => e.id === p.empleado_id)?.esquema === 'fijo' : p.empleado_id === ref));
   return P.length ? P.reduce((s, p) => s + num(p.salario_neto), 0) : null;
 }
+function pagarRecurrenteDesde(i) { window._volverTransf = false; pagarRecurrente(i); }
 function pagarRecurrente(i) {
   const o = window._recOc[i], r = o.rec, ref = nomRef(r), mn = montoNomina(r, isoD(o.fecha));
   window._pgFile = null;
@@ -1703,7 +1705,37 @@ async function confirmarRecurrente(i) {
   }
   const p = await rpcConPin('fin_pagar', { p_factura: fid, p_monto: monto, p_fecha: pgF.value, p_metodo: pgMet.value, p_referencia: pgR.value, p_comprobante_url: up.url, p_sha256: up.sha }, pin, pinDir);
   if (!p.ok) { toast(ERR[p.error] || p.error, 'error'); return; }
-  CM('mGen'); toast(nomRef(r) === 'fijo' ? 'Pago de nómina registrado con su comprobante' : 'Pago registrado · la factura queda por solicitar', 'success'); await cargarTodo();
+  CM('mGen'); toast(nomRef(r) === 'fijo' ? 'Transferencia de nómina registrada con su comprobante' : nomRef(r) ? 'Transferencia registrada · la Contadora ya tiene el pendiente crítico de recabar la factura' : 'Pago registrado · la factura queda por solicitar', 'success'); await cargarTodo(); if (window._volverTransf) openTransferencias();
+}
+// ══ TRANSFERENCIAS DE HONORARIOS Y NÓMINA (botón directo) ══
+VIEW.trOff = 0;
+function openTransferencias() {
+  const base = new Date(); base.setDate(1); base.setMonth(base.getMonth() + VIEW.trOff);
+  const y = base.getFullYear(), m = base.getMonth(), fin = new Date(y, m + 1, 0), finISO = isoD(fin), mesTxt = MESES[m] + ' ' + y;
+  const dias = Math.max(1, Math.ceil((fin - hoyD()) / 86400000) + 1);
+  const oc = buildRecOcurrencias(dias).filter(o => nomRef(o.rec) && o.fecha.getFullYear() === y && o.fecha.getMonth() === m);
+  window._recOc = oc; window._volverTransf = true;
+  const recs = [...new Map(oc.map(o => [o.rec.id, o.rec])).values()].sort((a, b) => (nomRef(a) === 'fijo') - (nomRef(b) === 'fijo') || a.descripcion.localeCompare(b.descripcion));
+  const celda = o => {
+    if (!o) return '<td class="mini">—</td>';
+    const i = oc.indexOf(o), k = isoD(o.fecha), f = o.factura;
+    if (f && num(f.monto_pagado) > 0.009) return `<td><div class="trok" onclick="verCuenta('${f.id}')">✓ ${$$(f.monto_pagado)}<div class="mini">pagado ${fmtD(f.fecha_pago)}${f.comprobante_pago_url ? ' · <a href="' + esc(f.comprobante_pago_url) + '" target="_blank" onclick="event.stopPropagation()">comprobante</a>' : ''}</div></div></td>`;
+    const est = f ? saldo(f) : montoNomina(o.rec, k);
+    return `<td>${puede('cxp') ? `<button class="btn ${diasA(k) <= 0 ? 'btn-p' : 'btn-s'} btn-sm" onclick="pagarRecurrente(${i})">⬆ Subir transferencia</button>` : '<span class="mini">pendiente</span>'}<div class="mini" style="margin-top:3px">${est !== null && est !== undefined ? $$(est) + ' según COE Nómina' : 'monto por capturar'} · ${fmtD(k)}</div></td>`;
+  };
+  const filas = recs.map(r => {
+    const O = oc.filter(o => o.rec.id === r.id).sort((a, b) => a.fecha - b.fecha), q1 = O.find(o => o.fecha.getDate() <= 15), q2 = O.find(o => o.fecha.getDate() > 15), fijo = nomRef(r) === 'fijo';
+    const pag = O.filter(o => o.factura && num(o.factura.monto_pagado) > 0.009), conXml = pag.filter(o => tieneXML(o.factura));
+    const d = diasA(finISO);
+    const fac = fijo ? '<span class="mini">No aplica · comprobante de nómina</span>'
+      : !pag.length ? '<span class="mini">Se pide al subir la transferencia</span>'
+      : `<span class="bdg ${conXml.length === pag.length && pag.length >= 2 ? 'bdg-apr' : d < 0 ? 'bdg-ven' : 'bdg-pnd'}">${conXml.length} de ${Math.max(2, pag.length)} facturas</span><div class="mini" style="margin-top:3px">límite ${fmtD(finISO)} · la Contadora la recaba</div>`;
+    return `<tr><td><b>${esc(fijo ? 'Nómina · personal fijo' : nomEnt(r.entidad_id))}</b><div class="mini">${fijo ? 'Plantilla bancaria · sin factura' : 'Honorarios · factura obligatoria'}</div></td>${celda(q1)}${celda(q2)}<td>${fac}</td></tr>`;
+  }).join('');
+  modal('Transferencias de honorarios y nómina', `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px;flex-wrap:wrap">
+      <div class="mini" style="max-width:520px">Sube aquí el comprobante de cada transferencia. En honorarios, la Contadora recibe en automático un <b>pendiente crítico</b> para recabar las facturas del 15 y del fin de mes, con límite el <b>${fmtD(finISO)}</b>; se cierra solo al subir los XML.</div>
+      <div style="display:flex;gap:6px;align-items:center"><button class="btn btn-s btn-sm" onclick="VIEW.trOff--;openTransferencias()">‹</button><b style="text-transform:capitalize;min-width:120px;text-align:center">${mesTxt}</b><button class="btn btn-s btn-sm" onclick="VIEW.trOff++;openTransferencias()">›</button></div></div>
+    ${filas ? `<div class="tc"><table><thead><tr><th>Prestador</th><th>Quincena 15</th><th>Quincena fin de mes</th><th>Factura</th></tr></thead><tbody>${filas}</tbody></table></div>` : '<div class="emp">Sin pagos de nómina u honorarios en este mes</div>'}`, '', 'lg');
 }
 function editarRec(id) {
   const r = id ? REC.find(x => x.id === id) : {};
@@ -1890,7 +1922,7 @@ function dashDirector(sel) {
   const d = datosCumplimiento('mensual'), pct = d.tar.length ? Math.round(d.aTiempo.length / d.tar.length * 100) : 100;
   const topProv = Object.entries(cxp.reduce((o, f) => { o[f.entidad_id] = (o[f.entidad_id] || 0) + saldo(f); return o; }, {})).sort((a, b) => b[1] - a[1]).slice(0, 6);
   const ult = CIE[0];
-  return cabDash('Tablero del Director', esc(RS[0]?.nombre || ''), sel) + `<div class="pad">
+  return cabDash('Tablero del Director', esc(RS[0]?.nombre || ''), sel + (puede('cxp') ? `<button class="btn btn-p btn-sm" onclick="openTransferencias()">⬆ Transferencias de honorarios y nómina</button>` : '')) + `<div class="pad">
     <div class="dg">
       ${kpi('Requiere tu firma', String(pedAut.length + prop.length), `${pedAut.length} pedidos · ${prop.length} pagos propuestos`, (pedAut.length + prop.length) ? 'var(--wn)' : 'var(--sc)')}
       ${kpi('Propuesta de pagos', $$(sumS(prop)), prop.length ? 'preparada por la contadora' : 'sin propuesta', '', "document.getElementById('bxProp').scrollIntoView({behavior:'smooth'})")}
@@ -2014,7 +2046,7 @@ function tablaDia(tareas) {
     const est = e.s === 'v' ? '<span class="bdg bdg-apr">' + (e.k === 'nom' ? (e.nP ? 'Pagada' : 'Calculada') : 'Pagado') + '</span>' : e.s === 'r' ? '<span class="bdg bdg-ven">Vencido</span>' : e.s === 'a' ? '<span class="bdg bdg-pnd">Por vencer</span>' : '<span class="bdg bdg-pro">Programado</span>';
     const ri = window._calRec.indexOf(e.o);
     const acc = e.k === 'cxp' || e.k === 'cxc' ? `<button class="btn btn-s btn-sm" onclick="verCuenta('${e.f.id}')">Ver</button>${e.k === 'cxp' && puedePagar(e.f) ? ` <button class="btn btn-p btn-sm" onclick="pagarCuenta('${e.f.id}')">Pagar</button>` : ''}`
-      : e.k === 'rec' || e.k === 'nomp' ? (e.s === 'v' ? `<button class="btn btn-s btn-sm" onclick="verCuenta('${e.o.factura.id}')">Ver</button>` : puede('cxp') ? `<button class="btn btn-p btn-sm" onclick="window._recOc=_calRec;pagarRecurrente(${ri})">${e.k === 'nomp' ? (e.ref === 'fijo' ? '⬆ Comprobante nómina' : '⬆ Transferencia') : 'Pagar'}</button>` : '') : '';
+      : e.k === 'rec' || e.k === 'nomp' ? (e.s === 'v' ? `<button class="btn btn-s btn-sm" onclick="verCuenta('${e.o.factura.id}')">Ver</button>` : puede('cxp') ? `<button class="btn btn-p btn-sm" onclick="window._recOc=_calRec;pagarRecurrenteDesde(${ri})">${e.k === 'nomp' ? (e.ref === 'fijo' ? '⬆ Comprobante nómina' : '⬆ Transferencia') : 'Pagar'}</button>` : '') : '';
     return `<tr class="trs ${e.s}"><td style="width:22px"><span class="semd ${e.s}"></span></td><td><div style="display:flex;gap:6px;align-items:center"><span class="cico ${e.k === 'nom' || e.k === 'nomp' ? 'nom ' + e.s : e.s}">${e.k === 'nom' ? 'Nómina' : e.k === 'nomp' ? (e.ref === 'fijo' ? 'Fijo' : 'Hon') : e.k === 'cxp' ? '$' : e.k === 'rec' ? '↻' : '↑'}</span><b>${esc(tit)}</b></div><div class="mini" style="margin-top:3px">${TIPO[e.k]} · ${esc(sub)}</div></td>
       <td class="amt" style="text-align:right;white-space:nowrap">${e.k === 'nom' ? $$(e.total || 0) : e.monto !== null && e.monto !== undefined ? $$(e.monto) : e.est !== null && e.est !== undefined ? $$(e.est) + '<div class="mini">según COE Nómina</div>' : '<span class="mini">sin monto</span>'}</td><td>${est}</td><td style="text-align:right;white-space:nowrap">${acc}</td></tr>`;
   };
