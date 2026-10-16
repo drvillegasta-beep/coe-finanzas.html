@@ -1671,7 +1671,7 @@ function rRec() {
 const nomRef = r => String(r?.notas || '').startsWith('nom:') ? String(r.notas).slice(4).split(' ')[0] : null;
 function montoNomina(r, fecha) {
   const ref = nomRef(r); if (!ref) return null;
-  const P = NOM.filter(p => p.fecha_pago === fecha && (ref === 'fijo' ? NOM_EMP.find(e => e.id === p.empleado_id)?.esquema === 'fijo' : p.empleado_id === ref));
+  const P = NOM.filter(p => p.fecha_pago === fecha && nomCuenta(p) && (ref === 'fijo' ? NOM_EMP.find(e => e.id === p.empleado_id)?.esquema === 'fijo' : p.empleado_id === ref));
   return P.length ? P.reduce((s, p) => s + num(p.salario_neto), 0) : null;
 }
 function pagarRecurrente(i) {
@@ -1925,7 +1925,11 @@ function semT(t) {
 const SEMT = { r: 'Vencido', a: 'Por vencer', p: 'Programado', v: 'Cumplido / pagado' };
 const ORD_S = { r: 0, a: 1, p: 2, v: 3 };
 // Nómina (COE Nómina): quincenas 15 y fin de mes; monto real si ya está calculada, si no estimado con la última
-function nominaTotal(k) { const P = NOM.filter(p => p.fecha_pago === k); return P.length ? P.reduce((s, p) => s + num(p.salario_neto), 0) : null; }
+// Empleados que no se cuentan en Finanzas (indicación de Dirección): Ilse Segovia y Dora Álvarez. Se puede ajustar en fin_config 'nomina_excluir' (ids separados por coma).
+const NOM_EXCLUIR_DEF = ['43ec829f-956e-428f-8dac-435b45b651b1', '8244502c-3b27-411a-b274-316031465a95'];
+const nomExcluidos = () => CFG.nomina_excluir ? String(CFG.nomina_excluir).split(',').map(x => x.trim()).filter(Boolean) : NOM_EXCLUIR_DEF;
+const nomCuenta = p => { const e = NOM_EMP.find(x => x.id === p.empleado_id); return !nomExcluidos().includes(p.empleado_id) && (!e || e.activo !== false); };
+function nominaTotal(k) { const P = NOM.filter(p => p.fecha_pago === k && nomCuenta(p)); return P.length ? P.reduce((s, p) => s + num(p.salario_neto), 0) : null; }
 function nominaEstimada() { const fs = [...new Set(NOM.filter(p => (p.tipo || 'regular') === 'regular').map(p => p.fecha_pago))].sort(); return fs.length ? nominaTotal(fs[fs.length - 1]) : null; }
 // Todo lo que cae en el calendario del mes y, m
 function eventosCal(y, m, tareas, conCobros) {
