@@ -1986,6 +1986,7 @@ function dashDirector(sel) {
       ${kpi('Por cobrar', $$(sumS(cxc)), `${cxc.filter(f => semaforo(f) === 'r').length} vencidas`, 'var(--sc)', "goTab('cxc')")}
     </div>
     <div class="cfgg">
+      ${cajaConformidad()}
       ${cajaSinPrioridad()}
       <div id="bxProp">${caja(`Pagos propuestos (${prop.length})`, lista(prop, f => `<div class="aitem ${semaforo(f) === 'r' ? 'r' : ''}" onclick="verCuenta('${f.id}')"><div style="flex:1"><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(saldo(f))}</div><div class="am">${esc(f.descripcion)} · pagar el ${fmtD(f.propuesta_pago)} · vence ${fmtD(f.fecha_vencimiento)}</div></div>${puede('pagos', 3) ? `<button class="btn btn-p btn-sm" onclick="event.stopPropagation();pagarCuenta('${f.id}')">Pagar</button>` : ''}</div>`, 'La contadora no ha propuesto pagos'), prop.length ? `<button class="btn btn-s btn-sm" onclick="imprimirPropuesta()">🖨</button>` : '')}</div>
       ${SOLB.some(s => s.estado === 'pendiente') ? caja(`Solicitudes de baja (${SOLB.filter(s => s.estado === 'pendiente').length})`, lista(SOLB.filter(s => s.estado === 'pendiente'), s => { const x = descSolicitud(s); return `<div class="aitem a" onclick="${x.f.id ? `verCuenta('${x.f.id}')` : ''}"><div style="flex:1"><div class="at">${esc(x.txt)}</div><div class="am">${esc(nomUsr(s.solicitado_por))} · ${fmtDT(s.solicitado_at)} · ${esc(s.motivo)}</div></div>${esAdmin() ? `<div class="rowact"><button class="btn btn-d btn-sm" onclick="event.stopPropagation();aprobarBaja('${s.id}')">Autorizar</button><button class="btn btn-s btn-sm" onclick="event.stopPropagation();rechazarBaja('${s.id}')">Rechazar</button></div>` : ''}</div>`; })) : ''}
@@ -2088,7 +2089,7 @@ function tablaDia(tareas) {
       <td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${priBdg(t.prioridad, t.id)}<b style="${ok ? 'text-decoration:line-through;color:var(--tm)' : ''}">${esc(t.titulo)}</b></div>
         <div class="mini" style="margin-top:3px">${esc(t.categoria || '')}${t.ultimo_avance ? ' · último avance: ' + esc(t.ultimo_avance) : ''}</div></td>
       <td class="mini" style="white-space:nowrap">${arrastre ? `<span style="color:var(--dg);font-weight:700">venció ${fmtD(t.fecha_limite)}</span>` : fmtD(t.fecha_limite)}<div style="margin-top:4px">${atraso(t) ? atrasoBdg(t) : ''}</div></td>
-      <td>${estBdg(t.estado)}</td>
+      <td>${estBdgT(t)}</td>
       <td onclick="event.stopPropagation()" style="text-align:right;white-space:nowrap">${ok ? (t.evidencia_url ? `<a class="btn btn-s btn-sm" href="${esc(t.evidencia_url)}" target="_blank">📎 Evidencia</a>` : '<span class="mini">sin evidencia</span>')
         : puede('tareas') ? `<button class="btn btn-s btn-sm" onclick="avancePendiente('${t.id}')">Avance</button> <button class="btn btn-p btn-sm" onclick="cumplirTarea('${t.id}')">✓ Hecho</button>` : ''}</td></tr>`;
   };
@@ -2141,6 +2142,8 @@ function faltantesContadora(U) {
     const d = diasA(t.fecha_limite);
     I.push({ cat: 'pend', d, crit: t.prioridad === 'critico' || (d < 0 && /contab|fiscal/i.test(t.categoria || '')), t: t.titulo, m: `${PRI[t.prioridad]?.t || 'Sin prioridad'} · ${dTxt(d, t.fecha_limite)}${t.estado === 'bloqueado' ? ' · BLOQUEADO' : ''}`, go: `verPendiente('${t.id}')` });
   });
+  // Informes entregados que esperan conformidad (aviso informativo, no la penaliza)
+  TAR.filter(t => esDe(t, U) && t.requiere_conformidad && t.estado === 'cumplida' && !t.conformidad_at).forEach(t => I.push({ cat: 'pend', d: 1, crit: false, t: t.titulo, m: 'Entregado · espera firma de conformidad de un administrativo', go: `verPendiente('${t.id}')` }));
   // Pagos recurrentes (los que la Contadora registra) y cuentas por pagar
   const dias = Math.ceil((new Date(Date.now() + 8 * 864e5) - hoyD()) / 864e5);
   window._recFal = buildRecOcurrencias(dias).filter(o => !nomRef(o.rec) && o.estado !== 'pagado' && isoD(o.fecha) >= segDesde());
@@ -2175,6 +2178,7 @@ function cumplimientoContadora(U) {
     ['Pendientes cumplidos a tiempo y con evidencia', tOk, tTot, 'Se mide contra la fecha original aunque se reprograme.'],
     ['Pagos recurrentes registrados con comprobante en su fecha', rOk, oc.length, 'Efectivo: comprobante firmado · electrónico: transferencia. Desde ' + fmtD(ini) + '.'],
     ['Facturas recabadas (XML) antes de su límite', fOk, fLim.length, 'Cuentan las facturas cuyo límite ya pasó este mes.'],
+    (() => { const inf = TAR.filter(t => esDe(t, U) && t.requiere_conformidad && fOrig(t) >= ini && fOrig(t) < hoy && !(t.estado === 'cumplida' && !t.conformidad_at)); return ['Informes entregados a tiempo y firmados de conformidad', inf.filter(t => t.conformidad_at && String(t.cumplida_at || '').slice(0, 10) <= fOrig(t)).length, inf.length, 'Semanal, quincenal, mensual y trimestral; cada uno es independiente.']; })(),
     ['Cierre del día enviado', Math.min(cie, hab), hab, 'Días hábiles transcurridos (lunes a sábado) desde ' + fmtD(ini) + '.'],
     ['Medicamento e insumos acabados con pedido hecho', 0, sinPed, 'Cada producto acabado sin pedido cuenta como no cumplido.']
   ];
@@ -2294,7 +2298,7 @@ function botonCierre() {
 }
 function cajaMisPendientes() {
   const mis = TAR.filter(t => esMia(t) && abiertaT(t)).sort(ordenPend);
-  return caja(`Mis pendientes (${mis.length})`, lista(mis.slice(0, 8), t => `<div class="aitem ${vencidaT(t) ? (t.prioridad === 'critico' ? 'r' : 'a') : ''}" onclick="verPendiente('${t.id}')"><div style="flex:1"><div class="at">${priBdg(t.prioridad, t.id)} ${esc(t.titulo)}</div><div class="am">${vencidaT(t) ? 'Venció' : 'Vence'} ${fmtD(t.fecha_limite)} ${atraso(t) ? '· atraso ' + atraso(t) + ' d ' : ''}· ${estBdg(t.estado)}</div></div>${puede('tareas') ? `<button class="btn btn-s btn-sm" onclick="event.stopPropagation();avancePendiente('${t.id}')">Avance</button>` : ''}</div>`, 'Sin pendientes abiertos'),
+  return caja(`Mis pendientes (${mis.length})`, lista(mis.slice(0, 8), t => `<div class="aitem ${vencidaT(t) ? (t.prioridad === 'critico' ? 'r' : 'a') : ''}" onclick="verPendiente('${t.id}')"><div style="flex:1"><div class="at">${priBdg(t.prioridad, t.id)} ${esc(t.titulo)}</div><div class="am">${vencidaT(t) ? 'Venció' : 'Vence'} ${fmtD(t.fecha_limite)} ${atraso(t) ? '· atraso ' + atraso(t) + ' d ' : ''}· ${estBdgT(t)}</div></div>${puede('tareas') ? `<button class="btn btn-s btn-sm" onclick="event.stopPropagation();avancePendiente('${t.id}')">Avance</button>` : ''}</div>`, 'Sin pendientes abiertos'),
     `<div style="display:flex;gap:6px">${puede('tareas') ? `<button class="btn btn-s btn-sm" onclick="nuevoPendiente()">+</button>` : ''}<button class="btn btn-s btn-sm" onclick="VIEW.pAmb='mios';goTab('tar')">Ver todos</button></div>`);
 }
 // ══ INVENTARIO EN EL TABLERO DE LA CONTADORA (lee COE Farmacia y COE Quirófano) ══
@@ -2405,6 +2409,8 @@ function cajaSinPrioridad() {
       <select data-prio="${t.id}" style="width:auto;min-width:120px"><option value="">—</option>${Object.entries(PRI).map(([k, P]) => `<option value="${k}">${P.t}</option>`).join('')}</select></div>`).join('')}</div>
     <div style="margin-top:10px"><button class="btn btn-p btn-sm" onclick="firmarPrioridades()">Firmar prioridades</button></div>`);
 }
+const estBdgT = t => t.requiere_conformidad && t.estado === 'cumplida' ? (t.conformidad_at ? '<span class="bdg bdg-apr">Entregado · conforme</span>' : '<span class="bdg bdg-pnd">Entregado · falta conformidad</span>') : estBdg(t.estado);
+const puedeConformidad = t => ['admin', 'direccion', 'administracion'].includes(cu.rol) && t.responsable_id !== cu.id && t.cumplida_por !== cu.id;
 const estBdg = e => `<span class="bdg ${(EST_T[e] || ['', ''])[1]}">${(EST_T[e] || [e])[0]}</span>`;
 function atrasoBdg(t) {
   const d = atraso(t);
@@ -2460,7 +2466,7 @@ function rTareas() {
       ${VIEW.pAmb === 'equipo' ? `<td>${esc(respNom(respKey(t)))}</td>` : ''}
       <td>${fmtD(t.fecha_limite)}${abiertaT(t) ? `<div class="mini" style="${dv < 0 ? 'color:var(--dg)' : ''}">${dv < 0 ? 'venció hace ' + -dv + ' d' : dv === 0 ? 'hoy' : 'en ' + dv + ' d'}</div>` : ''}</td>
       <td>${atrasoBdg(t)}</td>
-      <td>${estBdg(t.estado)}</td>
+      <td>${estBdgT(t)}</td>
       <td class="mini">${t.ultimo_avance ? esc(String(t.ultimo_avance).slice(0, 60)) + '<br>' : ''}${t.ultimo_avance_at ? fmtDT(t.ultimo_avance_at) : ''}${abiertaT(t) && ss >= 3 ? `<div style="color:var(--or)">sin seguimiento ${ss} d</div>` : ''}</td>
       <td onclick="event.stopPropagation()">${abiertaT(t) && puede('tareas') ? `<div class="rowact"><button class="btn btn-s btn-sm" onclick="avancePendiente('${t.id}')">Avance</button><button class="btn btn-p btn-sm" onclick="cumplirTarea('${t.id}')">Cumplir</button></div>` : ''}</td></tr>`; }).join('')}</tbody></table>`
       : `<div class="emp"><div class="ic">✓</div><p>Sin pendientes en este filtro</p></div>`}</div></div>`;
@@ -2471,23 +2477,26 @@ function verPendiente(id) {
   const t = TAR.find(x => x.id === id); if (!t) return;
   const av = AVA.filter(a => a.tarea_id === id).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
   const linea = a => {
-    const txt = { creacion: 'Creado', avance: 'Avance', estado: `Estatus: ${(EST_T[a.estado_ant] || [a.estado_ant || '—'])[0]} → ${(EST_T[a.estado_nuevo] || [a.estado_nuevo])[0]}`, reprogramacion: `Reprogramado: ${fmtD(a.fecha_ant)} → ${fmtD(a.fecha_nueva)}`, cumplida: 'Cumplido', prioridad: 'Prioridad' }[a.tipo] || a.tipo;
-    const cls = a.tipo === 'cumplida' ? 'done' : a.tipo === 'reprogramacion' ? 'warn' : a.estado_nuevo === 'bloqueado' ? 'fail' : 'act';
+    const txt = { creacion: 'Creado', avance: 'Avance', estado: `Estatus: ${(EST_T[a.estado_ant] || [a.estado_ant || '—'])[0]} → ${(EST_T[a.estado_nuevo] || [a.estado_nuevo])[0]}`, reprogramacion: `Reprogramado: ${fmtD(a.fecha_ant)} → ${fmtD(a.fecha_nueva)}`, cumplida: t.requiere_conformidad ? 'Entregado' : 'Cumplido', prioridad: 'Prioridad', conformidad: '✓ Firma de conformidad', no_conforme: '✕ No conforme · regresado' }[a.tipo] || a.tipo;
+    const cls = a.tipo === 'cumplida' || a.tipo === 'conformidad' ? 'done' : a.tipo === 'no_conforme' ? 'fail' : a.tipo === 'reprogramacion' ? 'warn' : a.estado_nuevo === 'bloqueado' ? 'fail' : 'act';
     return `<div class="tl-row ${cls}"><div class="tl-lbl">${esc(txt)}</div><div class="tl-meta">${fmtDT(a.created_at)} · ${esc(nomUsr(a.usuario_id))}${a.nota ? ' — ' + esc(a.nota) : ''}${a.evidencia_url ? ` · <a href="${esc(a.evidencia_url)}" target="_blank" style="color:var(--pr)">evidencia</a>` : ''}</div></div>`;
   };
-  const b = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">${priBdg(t.prioridad, t.id)} ${estBdg(t.estado)} ${atrasoBdg(t)}</div>
+  const b = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">${priBdg(t.prioridad, t.id)} ${estBdgT(t)} ${atrasoBdg(t)}</div>
   <div class="kv">
     <b>Pendiente</b><div><b>${esc(t.titulo)}</b>${t.descripcion ? `<div class="mini">${esc(t.descripcion)}</div>` : ''}</div>
     <b>Responsable</b><div>${esc(respNom(respKey(t)))}${t.creada_por && t.creada_por !== t.responsable_id ? ` <span class="mini">· asignó ${esc(nomUsr(t.creada_por))}</span>` : ''}</div>
     <b>Categoría</b><div>${esc(t.categoria || '—')}${t.sede ? ' · ' + esc(t.sede) : ''}</div>
     <b>Entregable</b><div>${esc(t.entregable || '—')}</div>
     <b>Fechas</b><div>Vence ${fmtD(t.fecha_limite)}${t.fecha_limite_original && t.fecha_limite_original !== t.fecha_limite ? ` · original ${fmtD(t.fecha_limite_original)} · ${t.reprogramaciones || 0} reprogramación(es)` : ''}${t.cumplida_at ? ' · cumplido ' + fmtDT(t.cumplida_at) : ''}</div>
+    ${t.periodo_ini ? `<b>Periodo</b><div>${fmtD(t.periodo_ini)} al ${fmtD(t.periodo_fin)} · <button class="btn btn-s btn-sm" onclick="imprimirInforme('${t.id}')">📄 Generar plantilla del informe</button></div>` : ''}
+    ${t.requiere_conformidad ? `<b>Conformidad</b><div>${t.conformidad_at ? `✓ Firmada por <b>${esc(nomUsr(t.conformidad_por))}</b> · ${fmtDT(t.conformidad_at)}${t.conformidad_nota ? ' — ' + esc(t.conformidad_nota) : ''}` : t.estado === 'cumplida' ? '<span style="color:var(--wn)">Entregado · espera firma de conformidad de un administrativo</span>' : 'Al entregarlo, un administrativo (Dirección General, Dirección o Administración) debe firmarlo de conformidad con su PIN'}</div>` : ''}
     ${t.evidencia_url ? `<b>Evidencia</b><div><a class="docprev" href="${esc(t.evidencia_url)}" target="_blank">Ver</a></div>` : ''}
   </div>
   <h4 style="margin:18px 0 4px">Seguimiento</h4>
   ${av.length ? `<div class="tl-vert">${av.map(linea).join('')}</div>` : '<div class="mini">Sin movimientos registrados</div>'}`;
   const ft = abiertaT(t) && puede('tareas') ? `<button class="btn btn-s" onclick="avancePendiente('${id}')">Registrar avance</button><button class="btn btn-s" onclick="avancePendiente('${id}','reprogramar')">Reprogramar</button><button class="btn btn-p" onclick="cumplirTarea('${id}')">Cumplir</button>` : '';
-  modal('Pendiente', b, ft, 'lg');
+  const fc = t.requiere_conformidad && t.estado === 'cumplida' && !t.conformidad_at && puedeConformidad(t) ? `<button class="btn btn-d" onclick="conformidad('${id}',false)">✕ No conforme</button><button class="btn btn-p" onclick="conformidad('${id}',true)">✓ Firmar conformidad</button>` : '';
+  modal('Pendiente', b, ft + fc, 'lg');
 }
 
 // ── Nuevo pendiente ──
@@ -2538,7 +2547,7 @@ async function guardarAvance(id) {
 function cumplirTarea(id) {
   const t = TAR.find(x => x.id === id);
   window._pgFile = null;
-  modal('Cumplir: ' + t.titulo, `${t.entregable ? `<div class="mini" style="margin-bottom:10px">Entregable: <b>${esc(t.entregable)}</b></div>` : ''}
+  modal((t.plantilla ? 'Entregar: ' : 'Cumplir: ') + t.titulo, `${t.entregable ? `<div class="mini" style="margin-bottom:10px">Entregable: <b>${esc(t.entregable)}</b></div>` : ''}${t.plantilla ? `<div style="margin-bottom:10px"><button class="btn btn-s btn-sm" onclick="imprimirInforme('${id}')">📄 Generar plantilla del informe</button> <span class="mini">Imprímela o guárdala en PDF, complétala y súbela aquí. Después un administrativo la firma de conformidad.</span></div>` : ''}
     <div class="drop"><input type="file" onchange="_pgFile=this.files[0];document.getElementById('tfN').textContent=this.files[0]?.name||''"><div class="big">⬆</div><div>Evidencia de realizado</div><div class="mini" id="tfN">Obligatoria · foto, PDF, captura de pantalla o acuse</div></div>
     <div class="fld" style="margin-top:12px"><label>Comentario (opcional)</label><input type="text" id="tfNota" placeholder="Ej. enviado por correo al contador externo"></div>`,
     `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="confirmarTarea('${id}')">Firmar cumplido</button>`, 'sm');
@@ -2727,6 +2736,20 @@ function imprimirCumplimiento(per) {
     <div class="firmas"><div>Responsable<br>&nbsp;</div><div>Dirección General<br><b>Dr. José Antonio Villegas Ávila</b></div></div>`);
 }
 
+// ── Firma de conformidad de informes (administrativos, con PIN) ──
+async function conformidad(id, ok) {
+  let nota = '';
+  if (!ok) { nota = prompt('Motivo de no conformidad (se regresa a la Contadora para corregir):') || ''; if (!nota.trim()) { toast('Escribe el motivo', 'warning'); return; } }
+  const r = await rpcFirmado('fin_tarea_conformidad', { p_tarea: id, p_conforme: ok, p_nota: nota }, { titulo: ok ? 'Firmar conformidad' : 'Firmar no conformidad' });
+  if (r) { CM('mGen'); toast(ok ? 'Conformidad firmada' : 'Regresado a la Contadora para corrección', 'success'); await cargarTodo(); }
+}
+function cajaConformidad() {
+  if (!['admin', 'direccion', 'administracion'].includes(cu.rol)) return '';
+  const L = TAR.filter(t => t.requiere_conformidad && t.estado === 'cumplida' && !t.conformidad_at && puedeConformidad(t)).sort((a, b) => String(a.cumplida_at).localeCompare(String(b.cumplida_at)));
+  if (!L.length) return '';
+  return caja(`Informes por firmar de conformidad (${L.length})`, lista(L, t => `<div class="aitem a" onclick="verPendiente('${t.id}')"><div style="flex:1"><div class="at">${esc(t.titulo)}</div><div class="am">${esc(respNom(respKey(t)))} · entregado ${fmtDT(t.cumplida_at)}${t.cumplida_at && String(t.cumplida_at).slice(0, 10) > fOrig(t) ? ' · <b style="color:var(--dg)">tarde</b>' : ''}</div></div><div class="rowact" onclick="event.stopPropagation()">${t.evidencia_url ? `<a class="btn btn-s btn-sm" href="${esc(t.evidencia_url)}" target="_blank">Ver</a>` : ''}<button class="btn btn-p btn-sm" onclick="conformidad('${t.id}',true)">✓ Conforme</button></div></div>`));
+}
+
 // ══ DOCUMENTOS IMPRIMIBLES (una página, con logo) ══
 const LOGO_URL = () => new URL('assets/coe-logo.png', location.href).href;
 function imprimir(titulo, cuerpo) {
@@ -2809,6 +2832,56 @@ function imprimirRecurrentes() {
     ${L.map(o => { const e = ent(o.rec.entidad_id) || {}; return `<tr><td>${o.estado === 'pagado' ? '✔' : '<span class="chk"></span>'}</td><td>${fmtD(isoD(o.fecha))}</td><td><b>${esc(o.rec.descripcion)}</b><br><span style="color:#778">${esc(o.rec.categoria || '')}</span></td><td>${esc(e.nombre || '')}</td><td>${esc(e.convenio_cie ? 'CIE ' + e.convenio_cie : e.clabe || '')}</td><td class="r">${o.factura ? $$(o.factura.monto_total) : '__________'}</td><td>${o.factura?.fecha_pago ? fmtD(o.factura.fecha_pago) : '__________'}</td></tr>`; }).join('')}
     <tr class="tot"><td colspan="5">Total registrado</td><td class="r">${$$(tot)}</td><td></td></tr></tbody></table>
     <div class="firmas"><div>Preparó<br><b>Contadora</b></div><div>Autorizó<br><b>Dirección General</b></div></div>`);
+}
+
+// ══ INFORMES RECURRENTES (plantilla imprimible prellenada con datos del sistema) ══
+const PLANT_T = { semanal: 'Informe semanal de avances', quincenal: 'Informe quincenal', mensual: 'Informe mensual de avances y resultados', trimestral: 'Informe trimestral' };
+function datosPeriodo(a, b, uid) {
+  const en = d => d && String(d).slice(0, 10) >= a && String(d).slice(0, 10) <= b;
+  const abo = ABO.filter(x => !x.anulado && en(x.fecha_pago)).map(x => ({ ...x, f: FAC.find(f => f.id === x.factura_id) || {} }));
+  const egr = abo.filter(x => x.f.tipo === 'egreso'), ingC = abo.filter(x => x.f.tipo === 'ingreso');
+  const caja = CIE.filter(c => en(c.fecha)).reduce((s, c) => s + num(c.corte_total), 0);
+  const xml = DOCS.filter(d => d.tipo === 'xml' && en(d.subido_at));
+  const misT = TAR.filter(t => !uid || t.responsable_id === uid || (!t.responsable_id && t.responsable_rol === 'contadora'));
+  const cumpl = misT.filter(t => t.estado === 'cumplida' && en(t.cumplida_at)), venc = misT.filter(t => abiertaT(t) && fOrig(t) <= b && fOrig(t) < hoyISO());
+  const nuevos = misT.filter(t => en(t.created_at));
+  const nom = vivas().filter(f => f.tipo === 'egreso' && /honorarios|nómina|nomina/i.test(f.categoria || '') && en(f.fecha_vencimiento || f.fecha_pago));
+  return { abo, egr, ingC, caja, xml, cumpl, venc, nuevos, nom, totEgr: egr.reduce((s, x) => s + num(x.monto), 0), totIngC: ingC.reduce((s, x) => s + num(x.monto), 0) };
+}
+function imprimirInforme(id) {
+  const t = TAR.find(x => x.id === id); if (!t) return;
+  const a = t.periodo_ini, b = t.periodo_fin, P = t.plantilla, uid = t.responsable_id, D = datosPeriodo(a, b, uid);
+  const fps = vivas().filter(porSolicitar), fpsV = fps.filter(f => diasA(limFps(f)) < 0);
+  const tbl = (cab, filas, vacio) => filas.length ? `<table><thead><tr>${cab.map(c => `<th${/Monto|Total|Ingresos|Egresos/.test(c) ? ' class="r"' : ''}>${c}</th>`).join('')}</tr></thead><tbody>${filas.join('')}</tbody></table>` : `<div class="p" style="color:#778">${vacio}</div>`;
+  const h = s => `<h3 style="font-size:12.5px;margin:14px 0 4px;border-bottom:1px solid #1d2733;padding-bottom:3px">${s}</h3>`;
+  const lineas = n => Array.from({ length: n }, () => '<div style="border-bottom:1px solid #bbb;height:20px"></div>').join('');
+  let cuerpo = `<div class="kv"><b>Periodo</b><div>${fmtD(a)} al ${fmtD(b)}</div><b>Entrega</b><div>${fmtD(t.fecha_limite_original || t.fecha_limite)}</div><b>Elabora</b><div>${esc(respNom(respKey(t)))}</div></div>`;
+  cuerpo += h('1. Resumen') + `<table><tbody>
+    <tr><td>Pagos registrados (egresos)</td><td class="r">${D.egr.length} · ${$$(D.totEgr)}</td></tr>
+    <tr><td>Cobros registrados</td><td class="r">${D.ingC.length} · ${$$(D.totIngC)}</td></tr>
+    <tr><td>Ingreso de cajas (cierres del día)</td><td class="r">${$$(D.caja)}</td></tr>
+    <tr><td>Facturas recabadas (XML subidos)</td><td class="r">${D.xml.length}</td></tr>
+    <tr><td>Facturas por solicitar al cierre · vencidas</td><td class="r">${fps.length} · <span class="${fpsV.length ? 'rojo' : ''}">${fpsV.length}</span></td></tr>
+    <tr><td>Pendientes cumplidos · vencidos sin cumplir</td><td class="r">${D.cumpl.length} · <span class="${D.venc.length ? 'rojo' : ''}">${D.venc.length}</span></td></tr></tbody></table>`;
+  if (P === 'semanal' || P === 'quincenal') {
+    cuerpo += h('2. Pagos del periodo') + tbl(['Fecha', 'Proveedor', 'Concepto', 'Forma', 'Comprobante', 'Monto'], D.egr.sort((x, y) => String(x.fecha_pago).localeCompare(String(y.fecha_pago))).slice(0, 18).map(x => `<tr><td>${fmtD(x.fecha_pago)}</td><td>${esc(nomEnt(x.f.entidad_id))}</td><td>${esc(x.f.descripcion || '')}</td><td>${esc(x.metodo || '')}</td><td>${x.comprobante_url ? '✓' : '<span class="rojo">falta</span>'}</td><td class="r">${$$(x.monto)}</td></tr>`), 'Sin pagos registrados en el periodo.');
+    cuerpo += h('3. Pendientes') + tbl(['Estatus', 'Pendiente', 'Fecha'], D.cumpl.map(x => `<tr><td class="verde">Cumplido</td><td>${esc(x.titulo)}</td><td>${fmtD(String(x.cumplida_at).slice(0, 10))}</td></tr>`).concat(D.venc.map(x => `<tr><td class="rojo">Vencido</td><td>${esc(x.titulo)}</td><td>${fmtD(x.fecha_limite)}</td></tr>`)).slice(0, 16), 'Sin movimiento de pendientes.');
+  }
+  if (P === 'quincenal') {
+    cuerpo += h('4. Nómina y honorarios') + tbl(['Prestador', 'Concepto', 'Pagado', 'Factura', 'Monto'], D.nom.map(f => `<tr><td>${esc(nomEnt(f.entidad_id))}</td><td>${esc(f.descripcion)}</td><td>${f.fecha_pago ? fmtD(f.fecha_pago) : '<span class="rojo">pendiente</span>'}</td><td>${tieneXML(f) ? '✓' : ent(f.entidad_id)?.no_factura ? 'no aplica' : '<span class="rojo">falta</span>'}</td><td class="r">${$$(f.monto_total)}</td></tr>`), 'Sin pagos de nómina en el periodo.');
+  }
+  if (P === 'semanal') cuerpo += h('4. Conciliación de cirugías de la semana') + lineas(4) + h('5. Inventario (farmacia y quirófano)') + `<div class="p">${['far', 'qui'].map(x => { const I = datosInventario(x); return `<b>${x === 'far' ? 'Farmacia' : 'Quirófano'}:</b> ${I.porAcabarse.length} por acabarse · ${I.acabado.length} acabados · ${I.porCaducar.length} por caducar · ${I.caducado.length} caducados · ${I.pedidos.length} pedidos abiertos`; }).join('<br>')}</div>`;
+  if (P === 'mensual' || P === 'trimestral') {
+    const meses = []; for (let d = new Date(a + 'T12:00:00'); isoD(d) <= b; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) { const i = isoD(new Date(d.getFullYear(), d.getMonth(), 1)), f = isoD(new Date(d.getFullYear(), d.getMonth() + 1, 0)); meses.push([MESES[d.getMonth()], i, f]); }
+    cuerpo += h('2. Ingresos y egresos por mes') + tbl(['Mes', 'Ingresos cajas', 'Cobros', 'Egresos pagados', 'Facturas recabadas', 'Pendientes cumplidos / vencidos'], meses.map(([n, i, f]) => { const M = datosPeriodo(i, f, uid); return `<tr><td style="text-transform:capitalize">${n}</td><td class="r">${$$(M.caja)}</td><td class="r">${$$(M.totIngC)}</td><td class="r">${$$(M.totEgr)}</td><td class="r">${M.xml.length}</td><td class="r">${M.cumpl.length} / ${M.venc.length}</td></tr>`; }), '');
+    const cxcV = abiertas('ingreso').filter(f => semaforo(f) === 'r'), cxpV = abiertas('egreso').filter(f => semaforo(f) === 'r');
+    cuerpo += h('3. Saldos al cierre') + `<table><tbody><tr><td>Cuentas por pagar vencidas</td><td class="r">${cxpV.length} · ${$$(sumS(cxpV))}</td></tr><tr><td>Cuentas por cobrar vencidas</td><td class="r">${cxcV.length} · ${$$(sumS(cxcV))}</td></tr><tr><td>Facturas por solicitar</td><td class="r">${fps.length} · ${$$(fps.reduce((s, f) => s + num(f.monto_pagado), 0))}</td></tr></tbody></table>`;
+    const crono = TAR.filter(x => x.origen === 'cronograma' && fOrig(x) >= a && fOrig(x) <= b);
+    cuerpo += h('4. Cronograma contable del periodo') + tbl(['Actividad', 'Fecha', 'Estatus'], crono.map(x => `<tr><td>${esc(x.titulo)}</td><td>${fmtD(fOrig(x))}</td><td class="${x.estado === 'cumplida' ? 'verde' : 'rojo'}">${x.estado === 'cumplida' ? 'Cumplido ' + fmtD(String(x.cumplida_at).slice(0, 10)) : (EST_T[x.estado] || [x.estado])[0]}</td></tr>`), 'Sin actividades del cronograma en el periodo.');
+  }
+  cuerpo += h('Observaciones y avances') + lineas(P === 'semanal' ? 4 : 6);
+  cuerpo += `<div class="firmas"><div>Elaboró<br><b>${esc(respNom(respKey(t)))}</b></div><div>De conformidad<br>Dirección General / Dirección / Administración<br><span style="font-size:9px">(firma con PIN en COE Finanzas)</span></div></div>`;
+  imprimir(`${PLANT_T[P] || 'Informe'} · ${fmtD(a)} al ${fmtD(b)}`, cuerpo);
 }
 
 // ══ SUBIR DOCUMENTO: el sistema lee y decide ═══

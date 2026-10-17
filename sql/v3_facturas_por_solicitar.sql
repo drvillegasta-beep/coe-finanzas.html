@@ -81,3 +81,14 @@ alter table public.fin_recurrentes add column if not exists monto numeric(14,2),
   add column if not exists eliminado_at timestamptz, add column if not exists eliminado_por uuid;
 -- public.fin_guardar_recurrente(p_usuario, p_pin, p_id, p_datos jsonb, p_accion 'guardar'|'eliminar'):
 --   solo rol admin; crea la empresa si es nueva; "eliminar" la quita de la lista y del calendario (activo=false, eliminado_at) conservando pagos hechos.
+
+-- 9) (17/10/2026) Informes recurrentes con firma de conformidad
+alter table public.fin_tareas add column if not exists requiere_conformidad boolean not null default false,
+  add column if not exists conformidad_por uuid, add column if not exists conformidad_at timestamptz, add column if not exists conformidad_nota text,
+  add column if not exists periodo_ini date, add column if not exists periodo_fin date, add column if not exists plantilla text;
+-- public.fin_generar_informes(p_hasta): genera (sin duplicar) los informes de la Contadora:
+--   semanal (lun-sáb, entrega lunes siguiente), quincenal (1-15 entrega el 17; 16-fin entrega el 2),
+--   mensual (mes anterior, entrega el 5, crítico), trimestral (trimestre anterior, entrega el 10, crítico).
+-- public.fin_tarea_conformidad(p_usuario, p_pin, p_tarea, p_conforme, p_nota): solo admin/direccion/administracion,
+--   nunca quien lo entregó; "no conforme" exige motivo y regresa el informe a En proceso.
+-- pg_cron 'fin_generar_pendientes_0600' (12:00 UTC): fin_generar_informes() + fin_generar_tareas(current_date + 35).
