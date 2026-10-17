@@ -92,3 +92,11 @@ alter table public.fin_tareas add column if not exists requiere_conformidad bool
 -- public.fin_tarea_conformidad(p_usuario, p_pin, p_tarea, p_conforme, p_nota): solo admin/direccion/administracion,
 --   nunca quien lo entregó; "no conforme" exige motivo y regresa el informe a En proceso.
 -- pg_cron 'fin_generar_pendientes_0600' (12:00 UTC): fin_generar_informes() + fin_generar_tareas(current_date + 35).
+
+-- 10) (17/10/2026) Avisos push a computadora y teléfono (Web Push)
+--  Tablas fin_push_subs (dispositivos por usuario) y fin_push_log; RPC fin_push_suscribir (con PIN), fin_push_estado, fin_push_quitar, fin_push_probar (con PIN).
+--  Llaves VAPID y llave de la función en el vault (fin_vapid_public, fin_vapid_private, fin_avisos_key); fin__avisos_config solo para service_role.
+--  fin__avisos_digest(momento): por usuario con dispositivo activo arma vencidos, hoy, críticos, informes, facturas por pedir,
+--    pagos que vencen hoy; a Dirección/Administración: informes por firmar y ESCALADO de críticos del equipo con más de 2 días de atraso.
+--  Edge Function fin-avisos (verify_jwt=false; valida x-coe-key) envía con web-push y desactiva suscripciones caducadas.
+--  pg_cron: fin_avisos_0900 (15:00 UTC), fin_avisos_1300 (19:00 UTC), fin_avisos_1730 (23:30 UTC), lunes a sábado.

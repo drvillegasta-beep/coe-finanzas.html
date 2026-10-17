@@ -1,0 +1,15 @@
+{
+  "name": "COE Finanzas",
+  "short_name": "COE Finanzas",
+  "description": "Centro Ocular Especializado · Finanzas, pendientes y avisos",
+  "start_url": "./coe-finanzas-v3.html#dash",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0D1117",
+  "theme_color": "#0D1117",
+  "lang": "es-MX",
+  "icons": [
+    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

@@ -7,7 +7,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>COE Finanzas</title>
 <link rel="icon" href="assets/coe-logo.png">
-<link rel="apple-touch-icon" href="assets/coe-logo.png">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<link rel="manifest" href="coe-finanzas.webmanifest">
+<meta name="apple-mobile-web-app-title" content="COE Finanzas">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -575,6 +577,8 @@ tr.trsep td{background:var(--dd);color:var(--dg);font-size:11px;font-weight:800;
 .kcr{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--br);font-size:11px}.kcr>span{font-family:'DM Mono',monospace;font-weight:800;white-space:nowrap}
 .avgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px}
 .avbox{margin-top:0}
+.avbanner{display:flex;gap:12px;align-items:center;margin:0 28px 4px;padding:12px 16px;border-radius:12px;background:rgba(0,201,167,.1);border:1px solid var(--pr)}
+@media(max-width:700px){.avbanner{margin:0 12px 4px;flex-wrap:wrap}}
 </style>
 </head>
 <body>
@@ -686,6 +690,7 @@ const SB_URL = 'https://ckjkdenwqicdjvodflba.supabase.co';
 const SB_KEY = 'sb_publishable_6kfSTYsmi2KxAeX0AMwymQ_dWPTAxYz';
 const BKT = 'comprobantes';
 const SESSION_KEY = 'coe_fin_v3_sesion';
+const VAPID_PUB = 'BNy0ZI4m9L9ltwWbIlIZQSo_5mHT1lJzQvqwlMr6z2VPqv7BV5QMhvrZyQFdqebT0MzDsqnH-TLONdPZAWR6v3Q';  // llave pública de avisos push (la privada vive en el vault de Supabase)
 
 // ── Helpers ─────────────────────────────────────
 const isUUID = v => !!v && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v));
@@ -946,8 +951,8 @@ async function entrarApp() {
   aplicarPermisosMenu();
   await cargarTodo();
   suscribir();
+  await initSW();
   goTab(location.hash.slice(1) || 'dash');
-  if ('Notification' in window && Notification.permission === 'default') setTimeout(() => Notification.requestPermission().catch(() => { }), 4000);
   setInterval(tick, 30000);
   tick();
 }
@@ -1039,7 +1044,11 @@ function onCambio(tabla, p) {
   recargarPronto();
 }
 function notificar(msg) {
-  try { if (document.hidden && 'Notification' in window && Notification.permission === 'granted') new Notification('COE Finanzas', { body: msg, icon: 'assets/coe-logo.png' }); } catch { }
+  try {
+    if (!document.hidden || !('Notification' in window) || Notification.permission !== 'granted') return;
+    if (typeof SWREG !== 'undefined' && SWREG) SWREG.showNotification('COE Finanzas', { body: msg, icon: 'assets/icon-192.png', tag: 'coe-fin-local', renotify: true });
+    else new Notification('COE Finanzas', { body: msg, icon: 'assets/icon-192.png' });
+  } catch { }
 }
 function pintarLive() {
   const b = document.getElementById('liveBadge'), t = document.getElementById('liveTx');
@@ -1068,14 +1077,8 @@ async function tick() {
     try { localStorage.setItem('coe_fin_recordar_cierre', isoD(ah)); } catch { }
     notificar('Es hora de cerrar tu día'); modal('Cierre del día', '<div class="warnbox">Antes de irte, registra tus avances y cierra tu día. Dirección recibe el reporte.</div>', `<button class="btn btn-s" onclick="CM('mGen')">Más tarde</button><button class="btn btn-p" onclick="CM('mGen');cerrarDia()">Cerrar mi día</button>`, 'sm');
   }
-  // Resumen diario en pantalla a la hora configurada
-  const ahora = new Date(), [hh, mm] = String(CFG.hora_alertas || '09:00').split(':').map(Number);
-  const clave = isoD(ahora);
-  let visto = null; try { visto = localStorage.getItem('coe_fin_resumen'); } catch { }
-  if (visto !== clave && (ahora.getHours() > hh || (ahora.getHours() === hh && ahora.getMinutes() >= mm))) {
-    try { localStorage.setItem('coe_fin_resumen', clave); } catch { }
-    if (ALR.length) { mostrarResumen(); notificar(`${ALR.length} alertas para hoy`); }
-  }
+  // Ventana emergente «Tu día»: al abrir y a las 9:00, 13:00 y 17:30
+  revisarTuDia();
 }
 
 // ══ ALERTAS ════════════════════════════════════
@@ -1183,8 +1186,8 @@ function tablaCorta(lista) {
 }
 function rAlr() {
   return `<div class="ph"><div><div class="ptit">Alertas</div><div class="psub">Vencimientos, cobros, pedidos, facturas por solicitar, tareas y recurrentes · se actualizan en tiempo real</div></div>
-    <button class="btn btn-s btn-sm" onclick="Notification.requestPermission().then(p=>toast(p==='granted'?'Avisos del navegador activados':'Avisos del navegador bloqueados', p==='granted'?'success':'warning'))">Activar avisos del navegador</button></div>
-  <div class="pad">${alertasHtml(ALR)}<div class="mini" style="margin-top:16px">Resumen diario a las ${esc(CFG.hora_alertas)} en esta pantalla. El envío por correo a ${esc(CFG.correo_alertas)} se activa al conectar el servicio de correo.</div></div>`;
+    <button class="btn btn-s btn-sm" onclick="ventanaTuDia('aviso',true)">Ver «Tu día»</button></div>
+  <div class="pad">${panelAvisos()}${alertasHtml(ALR)}<div class="mini" style="margin-top:16px">Ventana «Tu día» al abrir la app y a las 9:00, 13:00 y 17:30; avisos al teléfono o computadora a esas mismas horas aunque la app esté cerrada.</div></div>`;
 }
 
 // ══ CUENTAS (por pagar / por cobrar) ═══════════
@@ -1951,7 +1954,7 @@ function rDash() {
 const sumS = a => a.reduce((s, f) => s + saldo(f), 0);
 function cabDash(titulo, sub, extra) {
   return `<div class="ph"><div><div class="ptit">${titulo}</div><div class="psub">${new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · ${sub}</div></div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${extra || ''}<button class="btn btn-s btn-sm" onclick="mostrarResumen()">Resumen del día</button></div></div>`;
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${extra || ''}<button class="btn btn-s btn-sm" onclick="ventanaTuDia('aviso',true)">Tu día</button></div></div>${bannerAvisos()}`;
 }
 function caja(titulo, cuerpo, accion) { return `<div class="cfg-section"><h3 style="display:flex;justify-content:space-between;align-items:center">${titulo}${accion || ''}</h3><div class="body">${cuerpo}</div></div>`; }
 function lista(arr, fila, vacio = 'Nada pendiente') { return arr.length ? `<div class="alist">${arr.map(fila).join('')}</div>` : `<div class="mini">✓ ${vacio}</div>`; }
@@ -2882,6 +2885,103 @@ function imprimirInforme(id) {
   cuerpo += h('Observaciones y avances') + lineas(P === 'semanal' ? 4 : 6);
   cuerpo += `<div class="firmas"><div>Elaboró<br><b>${esc(respNom(respKey(t)))}</b></div><div>De conformidad<br>Dirección General / Dirección / Administración<br><span style="font-size:9px">(firma con PIN en COE Finanzas)</span></div></div>`;
   imprimir(`${PLANT_T[P] || 'Informe'} · ${fmtD(a)} al ${fmtD(b)}`, cuerpo);
+}
+
+// ══ AVISOS EN COMPUTADORA Y TELÉFONO ══════════
+// 1) Push (aunque la app esté cerrada): 9:00, 13:00 y 17:30 de lunes a sábado, desde el servidor (función fin-avisos).
+// 2) Ventana emergente «Tu día» dentro de la app: al abrir por primera vez en el día y a las 9:00, 13:00 y 17:30.
+let SWREG = null, AVISOS_ON = null;
+const esIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const esStandalone = () => (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+const pushSoportado = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+const b64u = s => { const p = '='.repeat((4 - s.length % 4) % 4), r = atob((s + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from([...r].map(c => c.charCodeAt(0))); };
+async function initSW() {
+  if (!('serviceWorker' in navigator) || location.protocol === 'file:') return;
+  try {
+    SWREG = await navigator.serviceWorker.register('sw.js');
+    navigator.serviceWorker.addEventListener('message', e => { if (e.data && e.data.tipo === 'abrir') { goTab('dash'); ventanaTuDia('aviso', true); } });
+    await revisarAvisos();
+  } catch (e) { console.warn('SW', e); }
+}
+async function revisarAvisos() {
+  if (!SWREG || !cu || !pushSoportado()) { AVISOS_ON = false; return; }
+  try {
+    const s = await SWREG.pushManager.getSubscription();
+    if (!s || Notification.permission !== 'granted') { AVISOS_ON = false; return; }
+    const { data } = await sb.rpc('fin_push_estado', { p_usuario: cu.id, p_endpoint: s.endpoint });
+    AVISOS_ON = !!(data && data.activo);
+  } catch { AVISOS_ON = false; }
+}
+async function activarAvisos() {
+  if (esIOS() && !esStandalone()) {
+    modal('Avisos en iPhone / iPad', `<div class="p">En iPhone los avisos solo funcionan con la app instalada en la pantalla de inicio:</div>
+      <ol style="line-height:1.9;margin:10px 0 0 18px"><li>Abre esta página en <b>Safari</b>.</li><li>Toca <b>Compartir</b> (el cuadro con la flecha ↑).</li><li>Elige <b>Agregar a pantalla de inicio</b> → Agregar.</li><li>Abre <b>COE Finanzas</b> desde el ícono nuevo, entra con tu usuario y toca <b>Activar avisos</b>.</li></ol>
+      <div class="mini" style="margin-top:10px">Requiere iOS 16.4 o más reciente.</div>`, `<button class="btn btn-p" onclick="CM('mGen')">Entendido</button>`, 'sm');
+    return;
+  }
+  if (!pushSoportado()) { toast('Este navegador no permite avisos. Usa Chrome, Edge o Safari actualizado', 'warning'); return; }
+  if (!SWREG) await initSW();
+  if (!SWREG) { toast('No se pudo preparar el servicio de avisos', 'error'); return; }
+  const perm = await Notification.requestPermission();
+  if (perm !== 'granted') { toast('Permite las notificaciones de COE Finanzas en la configuración del navegador', 'warning'); return; }
+  let sub = await SWREG.pushManager.getSubscription();
+  try { if (!sub) sub = await SWREG.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(VAPID_PUB) }); }
+  catch (e) { toast('No se pudo suscribir: ' + e.message, 'error'); return; }
+  const disp = (esIOS() ? 'iPhone/iPad' : /Android/i.test(navigator.userAgent) ? 'Teléfono Android' : 'Computadora') + ' · ' + (/Edg\//.test(navigator.userAgent) ? 'Edge' : /Chrome\//.test(navigator.userAgent) ? 'Chrome' : /Safari\//.test(navigator.userAgent) ? 'Safari' : 'Navegador');
+  const r = await rpcFirmado('fin_push_suscribir', { p_sub: sub.toJSON(), p_dispositivo: disp }, { titulo: 'Activar avisos en este equipo' });
+  if (r) { AVISOS_ON = true; toast('Avisos activados en este equipo', 'success'); renderTab(); }
+}
+async function probarAvisos() {
+  const r = await rpcFirmado('fin_push_probar', {}, { titulo: 'Enviar aviso de prueba' });
+  if (r) toast('Aviso de prueba enviado: llega en unos segundos a tus equipos activados', 'success');
+}
+async function desactivarAvisos() {
+  try { const s = SWREG && await SWREG.pushManager.getSubscription(); if (s) { await sb.rpc('fin_push_quitar', { p_usuario: cu.id, p_endpoint: s.endpoint }); await s.unsubscribe(); } } catch { }
+  AVISOS_ON = false; toast('Avisos desactivados en este equipo', 'info'); renderTab();
+}
+function bannerAvisos() {
+  if (!cu || AVISOS_ON || location.protocol === 'file:' && !window._forzarBanner) return '';
+  let oc = null; try { oc = localStorage.getItem('coe_fin_banner_avisos'); } catch { }
+  if (oc === isoD(new Date())) return '';
+  return `<div class="avbanner"><span style="font-size:22px">🔔</span><div style="flex:1"><b>Activa los avisos en este ${/Android|iPhone|iPad/i.test(navigator.userAgent) ? 'teléfono' : 'equipo'}</b><div class="mini">Te llegan aunque la app esté cerrada: 9:00, 13:00 y 17:30, con lo vencido, lo de hoy y lo crítico.</div></div>
+    <button class="btn btn-p btn-sm" onclick="activarAvisos()">Activar avisos</button><button class="btn btn-s btn-sm" title="Ocultar por hoy" onclick="try{localStorage.setItem('coe_fin_banner_avisos','${isoD(new Date())}')}catch{};renderTab()">✕</button></div>`;
+}
+function panelAvisos() {
+  return `<div class="cfg-section"><h3>Avisos en computadora y teléfono</h3><div class="body">
+    <div class="mini" style="margin-bottom:10px">Estado en este equipo: <b style="color:${AVISOS_ON ? 'var(--sc)' : 'var(--wn)'}">${AVISOS_ON ? 'activados' : 'sin activar'}</b>. Llegan a las 9:00, 13:00 y 17:30 (lunes a sábado). Actívalos en cada equipo que uses.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${AVISOS_ON ? `<button class="btn btn-s btn-sm" onclick="probarAvisos()">Enviar aviso de prueba</button><button class="btn btn-s btn-sm" onclick="desactivarAvisos()">Desactivar en este equipo</button>` : `<button class="btn btn-p btn-sm" onclick="activarAvisos()">🔔 Activar avisos</button>`}</div></div></div>`;
+}
+// ── Ventana emergente «Tu día» ──
+const MOMENTOS = [['manana', 9, 0], ['mediodia', 13, 0], ['tarde', 17, 30]];
+function itemsTuDia() {
+  if (['contadora', 'administracion'].includes(cu.rol) || (puede('tareas') && !esAdmin() && cu.rol !== 'direccion')) return faltantesContadora(cu);
+  const I = [], hoy = hoyISO();
+  TAR.filter(t => esDe(t, cu) && abiertaT(t)).forEach(t => { const d = diasA(t.fecha_limite); if (d <= 0) I.push({ cat: 'pend', d, crit: t.prioridad === 'critico', t: t.titulo, m: d < 0 ? `venció ${fmtD(t.fecha_limite)}` : 'vence hoy', go: `verPendiente('${t.id}')` }); });
+  TAR.filter(t => t.requiere_conformidad && t.estado === 'cumplida' && !t.conformidad_at && puedeConformidad(t)).forEach(t => I.push({ cat: 'pend', d: 0, crit: false, t: 'Firmar de conformidad: ' + t.titulo, m: `${respNom(respKey(t))} lo entregó ${fmtDT(t.cumplida_at)}`, go: `verPendiente('${t.id}')` }));
+  TAR.filter(t => abiertaT(t) && t.prioridad === 'critico' && diasA(t.fecha_limite) < -2 && !esDe(t, cu)).forEach(t => I.push({ cat: 'pend', d: -1, crit: true, t: 'ESCALADO · ' + t.titulo, m: `${respNom(respKey(t))} · ${-diasA(t.fecha_limite)} días de atraso · ${t.ultimo_avance || 'sin avance'}`, go: `verPendiente('${t.id}')` }));
+  propuestas().forEach(f => { if (diasA(f.propuesta_pago) <= 0) I.push({ cat: 'pago', d: diasA(f.propuesta_pago), crit: false, t: `Pago propuesto · ${nomEnt(f.entidad_id)} · ${$$(saldo(f))}`, m: `para el ${fmtD(f.propuesta_pago)}`, go: `verCuenta('${f.id}')` }); });
+  PED.filter(p => p.estado === 'solicitado' && enMiSede(p) && puede('pedidos', 3)).forEach(p => I.push({ cat: 'ped', d: 0, crit: !!p.urgente, t: `Pedido por autorizar ${p.folio}${p.urgente ? ' · URGENTE' : ''}`, m: `${p.area} · ${$$(p.monto_estimado)}`, go: `verPedido('${p.id}')` }));
+  return I;
+}
+function ventanaTuDia(momento, forzar) {
+  if (!cu) return;
+  const I = itemsTuDia(), venc = I.filter(x => x.d < 0), hoy = I.filter(x => x.d === 0), crit = I.filter(x => x.crit && x.d >= 0);
+  if (!forzar && !venc.length && !hoy.length && !crit.length) return;
+  const sec = (t, L, cls) => L.length ? `<h4 style="margin:6px 0 8px;font-size:13px">${t} (${L.length})</h4><div class="alist" style="margin-bottom:12px">${L.slice(0, 8).map(x => `<div class="aitem ${cls}" onclick="CM('mGen');${x.go}"><div><div class="at">${esc(x.t)}</div><div class="am">${x.m}</div></div></div>`).join('')}${L.length > 8 ? `<div class="mini">y ${L.length - 8} más…</div>` : ''}</div>` : '';
+  const tit = { manana: 'Buenos días · tu día', mediodia: 'Revisión de mediodía', tarde: 'Antes de cerrar el día', apertura: 'Tu día', aviso: 'Tu día' }[momento] || 'Tu día';
+  const cuerpo = (venc.length + hoy.length + crit.length) ? sec('⛔ Vencido', venc, 'r') + sec('📌 Para hoy', hoy, 'a') + sec('⚠ Crítico', crit, 'r') : '<div class="emp"><div class="ic">✓</div><p>Nada vencido ni pendiente para hoy</p></div>';
+  const pie = `${momento === 'tarde' && puede('tareas') && !esAdmin() && !yaCerre() ? `<button class="btn btn-w" onclick="CM('mGen');cerrarDia()">Cerrar mi día</button>` : ''}<button class="btn btn-s" onclick="CM('mGen')">Entendido</button><button class="btn btn-p" onclick="CM('mGen');goTab('dash')">Ir a mi tablero</button>`;
+  modal(`${tit} · ${new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}`, cuerpo, pie, 'lg');
+  if (document.hidden) notificar(`${venc.length} vencido(s) · ${hoy.length} para hoy · ${crit.length} crítico(s)`);
+}
+function revisarTuDia() {
+  if (!cu || document.getElementById('mGen').style.display === 'flex' || document.getElementById('pinOv').style.display === 'flex') return;
+  const ah = new Date(), k = 'coe_fin_tudia_' + cu.id + '_' + isoD(ah);
+  let vistos = []; try { vistos = JSON.parse(localStorage.getItem(k) || '[]'); } catch { }
+  const marcar = m => { vistos.push(m); try { localStorage.setItem(k, JSON.stringify(vistos)); } catch { } };
+  if (!vistos.includes('apertura')) { marcar('apertura'); MOMENTOS.forEach(([m, h, mi]) => { if (ah.getHours() > h || (ah.getHours() === h && ah.getMinutes() >= mi)) if (!vistos.includes(m)) marcar(m); }); ventanaTuDia('apertura'); return; }
+  if (ah.getDay() === 0) return;
+  for (const [m, h, mi] of MOMENTOS) if (!vistos.includes(m) && (ah.getHours() > h || (ah.getHours() === h && ah.getMinutes() >= mi))) { marcar(m); ventanaTuDia(m); return; }
 }
 
 // ══ SUBIR DOCUMENTO: el sistema lee y decide ═══
