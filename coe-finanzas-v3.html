@@ -560,6 +560,12 @@ tr.trsep td{background:var(--dd);color:var(--dg);font-size:11px;font-weight:800;
 .cico.nom.r{box-shadow:0 0 0 2px var(--dg)}.cico.nom.a{box-shadow:0 0 0 2px var(--wn)}.cico.nom.v{background:var(--sc);border-color:var(--sc)}
 .trok{color:var(--sc);font-weight:700;cursor:pointer}.trok a{color:var(--tm)}
 .pri.sp{background:transparent;color:var(--tm);border:1px dashed var(--br2)}
+.invchips{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.invchip{background:var(--sf2);border:1.5px solid var(--br);border-radius:10px;padding:8px 4px;cursor:pointer;color:var(--tm);display:flex;flex-direction:column;align-items:center;gap:2px;font-family:var(--fn)}
+.invchip b{font-size:20px;font-family:'DM Mono',monospace}.invchip span{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;text-align:center}
+.invchip.r{color:var(--dg);border-color:rgba(248,81,73,.5);background:var(--dd)}.invchip.a{color:var(--wn);border-color:rgba(227,179,65,.5);background:var(--wd)}.invchip.p{color:#58A6FF;border-color:rgba(88,166,255,.5);background:rgba(88,166,255,.1)}
+.invchip.act{outline:2px solid var(--tx);outline-offset:1px}
+@media(max-width:700px){.invchips{grid-template-columns:repeat(3,1fr)}}
 </style>
 </head>
 <body>
@@ -712,7 +718,7 @@ function closeSb() { document.getElementById('sdb').classList.remove('open'); do
 
 // ── Estado ──────────────────────────────────────
 let sb = null, cu = null, tab = 'dash';
-let USR = [], ENT = [], FAC = [], ABO = [], REC = [], PED = [], TAR = [], DOCS = [], RS = [], CIE = [], SUC = [], CORR = [], NOM = [], NOM_EMP = [];
+let USR = [], ENT = [], FAC = [], ABO = [], REC = [], PED = [], TAR = [], DOCS = [], RS = [], CIE = [], SUC = [], CORR = [], NOM = [], NOM_EMP = [], INV = {};
 let CFG = { monto_doble_firma: 3000, correo_alertas: 'drvillegas.ta@gmail.com', hora_alertas: '09:00', dias_aviso: 3 };
 let FALTA_SQL = [];
 let lastSync = null, rtState = 'wait', calY, calM;
@@ -760,7 +766,7 @@ const ERR = {
   director_requerido: 'Se requiere el PIN del Director General', director_pin: 'PIN del Director incorrecto',
   comprobante: 'Falta el comprobante', monto_saldo: 'El monto excede el saldo de la cuenta (no se permite descuadrar)', ya_solicitada: 'Ya hay una solicitud de baja pendiente', cuenta: 'Cuenta no encontrada',
   monto: 'Monto no válido', proveedor: 'Falta el proveedor', descripcion: 'Falta la descripción',
-  solo_director: 'Solo el Director General puede anular', motivo: 'Escribe el motivo', tiene_pagos: 'Tiene pagos; anula primero los pagos',
+  solo_director: 'Solo el Director General puede hacer esto', motivo: 'Escribe el motivo', tiene_pagos: 'Tiene pagos; anula primero los pagos',
   uuid_duplicado: 'Esta factura (UUID) ya está registrada', sin_permiso: 'Tu perfil no tiene permiso para esta acción',
   estado: 'El estado actual no permite esta acción', no_autorizado: 'El pedido aún no está autorizado', sede: 'Pedido de otra sede',
   evidencia: 'Sube la evidencia de la tarea', nombre: 'Falta el nombre', tabla: 'Operación no permitida',
@@ -967,10 +973,19 @@ async function cargarTodo(silencioso) {
     q('fin_solicitudes_baja', x => x.order('solicitado_at', { ascending: false }).limit(300)),
     q('nom_empleados', x => x.select('id,nombre,esquema,activo')),
     q('nom_periodos', x => x.select('fecha_pago,salario_neto,tipo,empleado_id').gte('fecha_pago', isoD(new Date(Date.now() - 200 * 86400000)))),
+    q('far_productos', x => x.select('id,clave,nombre,categoria,minimo,critico,servicio,activo').eq('activo', true)),
+    q('far_lotes', x => x.select('id,producto_id,lote,caducidad,cantidad,ejemplo')),
+    q('far_pedidos', x => x.order('created_at', { ascending: false }).limit(200)),
+    q('inventario', x => x.select('id,nombre,codigo,categoria,existencia,minimo,unidad,caducidad,lote,activo').eq('activo', true)),
+    q('lotes', x => x.select('id,item_id,numero,caducidad,cantidad')),
+    q('lentes', x => x.select('id,codigo,marca,modelo,poder,existencia,minimo,caducidad,activo').eq('activo', true)),
+    q('pedidos', x => x.order('created_at', { ascending: false }).limit(200)),
+    q('qui_pedidos_lio', x => x.select('id,folio,paciente_nombre,lio_modelo,lio_power,estado,solicitado_at,fecha_entrega_estimada,created_at').order('created_at', { ascending: false }).limit(200)),
   ]);
   [ENT, FAC, ABO, REC, PED, TAR, DOCS, RS, CIE, SUC] = r;
   if (silencioso !== 'sinusr') { await cargarUsuarios(); const yo = USR.find(u => u.id === cu.id); if (!yo || yo.activo === false || yo.debe_cambiar) { try { localStorage.removeItem(SESSION_KEY); } catch { } alert('Tu acceso fue cambiado por Dirección General. Entra de nuevo.'); location.reload(); return; } if (yo) { cu.permisos = yo.permisos || {}; cu.rol = yo.rol; cu.sede = yo.sede || null; aplicarPermisosMenu(); } }
   CORR = r[11]; AVA = r[12]; CJ = r[13]; SOLB = r[14]; NOM_EMP = r[15] || []; NOM = r[16] || [];
+  INV = { farProd: r[17] || [], farLotes: r[18] || [], farPed: r[19] || [], quiInv: r[20] || [], quiLotes: r[21] || [], quiLentes: r[22] || [], quiPed: r[23] || [], quiLio: r[24] || [] };
   r[10].forEach(c => { CFG[c.clave] = c.valor; });
   if (!RS.length) RS = [{ id: null, nombre: 'José Antonio Villegas Ávila', rfc: 'VIAA870425115' }];
   lastSync = new Date();
@@ -1644,8 +1659,9 @@ function buildRecOcurrencias(diasFuturo) {
   const hoy = hoyD(), items = [];
   REC.filter(r => r.activo && r.tipo !== 'ingreso').forEach(r => {
     if (r.pausado_hasta && new Date(r.pausado_hasta + 'T00:00:00') >= hoy) return;
-    const alta = r.created_at ? (d => (d.setHours(0, 0, 0, 0), d))(new Date(r.created_at)) : null;
-    calcOcurrencias(r, diasFuturo).filter(d => !alta || d >= alta).forEach(d => {
+    const alta = r.fecha_inicio ? new Date(r.fecha_inicio + 'T00:00:00') : r.created_at ? (d => (d.setHours(0, 0, 0, 0), d))(new Date(r.created_at)) : null;
+    const fin = r.fecha_fin ? new Date(r.fecha_fin + 'T00:00:00') : null;
+    calcOcurrencias(r, diasFuturo).filter(d => (!alta || d >= alta) && (!fin || d <= fin)).forEach(d => {
       const per = isoD(d), pag = FAC.find(f => f.recurrente_id === r.id && f.recurrente_periodo === per && !f.anulado) || cuentaNomina(r, per);
       const diff = Math.floor((d - hoy) / 86400000);
       items.push({ rec: r, fecha: d, factura: pag, diasDiff: diff, estado: pag && pag.estado === 'pagado' ? 'pagado' : diff < 0 ? 'vencido' : diff <= (r.dias_alerta || 3) ? 'proximo' : 'futuro' });
@@ -1661,12 +1677,13 @@ function rRec() {
     const L = buildRecOcurrencias(35).filter(o => o.diasDiff <= 35 && (o.estado !== 'pagado' || o.diasDiff >= -31));
     const sem = { pagado: 'v', vencido: 'r', proximo: 'a', futuro: 'g' }, txt = { pagado: 'Pagado', vencido: 'Vencido', proximo: 'Por vencer', futuro: 'Programado' };
     window._recOc = L;
-    body = L.length ? `<table><thead><tr><th>Estatus</th><th>Fecha</th><th>Pago</th><th>Proveedor</th><th>Frecuencia</th><th></th></tr></thead><tbody>${L.map((o, i) => `<tr><td><span class="sem ${sem[o.estado]}"></span><span class="mini">${txt[o.estado]}</span></td><td>${fmtD(isoD(o.fecha))}</td><td><b>${esc(o.rec.descripcion)}</b><div class="mini">${esc(o.rec.categoria || '')}</div></td><td>${esc(nomEnt(o.rec.entidad_id))}</td><td class="mini">${FREC[o.rec.frecuencia] || ''}</td><td>${o.estado === 'pagado' ? `<button class="btn btn-s btn-sm" onclick="verCuenta('${o.factura.id}')">Ver</button>` : (puede('cxp') ? `<button class="btn btn-p btn-sm" onclick="pagarRecurrenteDesde(${i})">Pagar</button>` : '')}</td></tr>`).join('')}</tbody></table>` : '<div class="emp">Sin pagos recurrentes próximos</div>';
+    body = L.length ? `<table><thead><tr><th>Estatus</th><th>Fecha</th><th>Pago</th><th>Proveedor</th><th>Frecuencia</th><th></th></tr></thead><tbody>${L.map((o, i) => `<tr><td><span class="sem ${sem[o.estado]}"></span><span class="mini">${txt[o.estado]}</span></td><td>${fmtD(isoD(o.fecha))}</td><td><b>${esc(o.rec.descripcion)}</b><div class="mini">${esc(o.rec.categoria || '')}</div></td><td>${esc(nomEnt(o.rec.entidad_id))}</td><td class="mini">${FREC[o.rec.frecuencia] || ''}</td><td>${o.estado === 'pagado' ? `<button class="btn btn-s btn-sm" onclick="verCuenta('${o.factura.id}')">Ver</button>` : (puede('recurrentes') ? `<button class="btn btn-p btn-sm" onclick="pagarRecurrenteDesde(${i})">Pagar</button>` : '')}</td></tr>`).join('')}</tbody></table>` : '<div class="emp">Sin pagos recurrentes próximos</div>';
   } else {
-    body = `<table><thead><tr><th>Plantilla</th><th>Proveedor</th><th>Frecuencia</th><th>Día</th><th>Aviso</th><th></th></tr></thead><tbody>${REC.map(r => `<tr><td><b>${esc(r.descripcion)}</b><div class="mini">${esc(r.categoria || '')}</div></td><td>${esc(nomEnt(r.entidad_id))}</td><td>${FREC[r.frecuencia] || r.frecuencia}</td><td>${r.dia_vencimiento || ''}${r.dia_vencimiento_2 ? ' y ' + r.dia_vencimiento_2 : ''}${r.mes_vencimiento ? ' / mes ' + r.mes_vencimiento : ''}</td><td>${r.dias_alerta || 3} días antes</td><td>${puede('recurrentes') ? `<button class="btn btn-s btn-sm" onclick="editarRec('${r.id}')">Editar</button>` : ''}</td></tr>`).join('')}</tbody></table>`;
+    const ord = REC.slice().sort((a, b) => (nomRef(a) ? 1 : 0) - (nomRef(b) ? 1 : 0) || a.descripcion.localeCompare(b.descripcion));
+    body = `<table><thead><tr><th>Concepto</th><th>Empresa</th><th style="text-align:right">Monto</th><th>Periodicidad</th><th>Vigencia</th><th>Prioridad</th><th></th></tr></thead><tbody>${ord.map(r => `<tr><td><b>${esc(r.descripcion)}</b><div class="mini">${esc(r.categoria || '')}</div></td><td>${esc(nomEnt(r.entidad_id))}</td><td class="amt" style="text-align:right">${r.monto ? $$(r.monto) : nomRef(r) ? '<span class="mini">según COE Nómina</span>' : '<span class="mini">variable</span>'}</td><td>${FREC[r.frecuencia] || r.frecuencia}<div class="mini">${diasRec(r)}</div></td><td class="mini">${r.fecha_inicio ? 'desde ' + fmtD(r.fecha_inicio) : ''}<br>${r.fecha_fin ? 'hasta ' + fmtD(r.fecha_fin) : '<b>indefinido</b>'}</td><td>${priBdg(r.prioridad)}</td><td>${puede('recurrentes') ? `<div class="rowact"><button class="btn btn-s btn-sm" onclick="editarRec('${r.id}')">Editar</button><button class="btn btn-d btn-sm" onclick="eliminarRec('${r.id}')">Eliminar</button></div>` : ''}</td></tr>`).join('')}</tbody></table>`;
   }
-  return `<div class="ph"><div><div class="ptit">Pagos recurrentes</div><div class="psub">Servicios y pagos fijos · avisos antes del vencimiento · hoja imprimible del mes</div></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">${tg}<button class="btn btn-p btn-sm" onclick="openTransferencias()">⬆ Transferencias de honorarios y nómina</button><button class="btn btn-s btn-sm" onclick="imprimirRecurrentes()">🖨 Hoja del mes</button>${puede('recurrentes') ? `<button class="btn btn-p btn-sm" onclick="editarRec()">+ Plantilla</button>` : ''}</div></div>
+  return `<div class="ph"><div><div class="ptit">Pagos recurrentes</div><div class="psub">Solo Dirección General · aparecen en el calendario de la Contadora con su prioridad · hoja imprimible del mes</div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${tg}<button class="btn btn-p btn-sm" onclick="openTransferencias()">⬆ Transferencias de honorarios y nómina</button><button class="btn btn-s btn-sm" onclick="imprimirRecurrentes()">🖨 Hoja del mes</button>${puede('recurrentes') ? `<button class="btn btn-p btn-sm" onclick="editarRec()">+ Nuevo recurrente</button>` : ''}</div></div>
   <div class="pad"><div class="tc">${body}</div></div>`;
 }
 // Recurrentes ligados a COE Nómina (notas 'nom:<empleado>' o 'nom:fijo')
@@ -1685,7 +1702,7 @@ function pagarRecurrente(i) {
     <div class="drop" style="margin-top:14px"><input type="file" accept="image/*,application/pdf" onchange="pgArchivo(this.files[0])"><div class="big">⬆</div><div><b>${ref === 'fijo' ? 'Sube el comprobante bancario de la transferencia de nómina' : ref ? 'Sube la transferencia del pago de honorarios' : 'Sube el comprobante'}</b></div><div class="mini">El sistema lee el monto</div></div><div id="pgInfo"></div>
     ${ref ? `<div class="mini" style="margin-top:8px">${mn !== null ? 'Monto calculado en COE Nómina para esta quincena: <b>' + $$(mn) + '</b>' : 'La quincena aún no está calculada en COE Nómina; captura el monto del comprobante.'}${ref === 'fijo' ? ' · Sin factura (pago por plantilla del banco).' : ' · Al pagar, la factura de honorarios queda en Facturas por solicitar.'}</div>` : ''}
     <div class="fgrd" style="margin-top:14px">
-      <div class="fgrp"><label>Monto</label><div class="ipfx"><span>$</span><input type="number" id="pgM" step="0.01" value="${o.factura ? saldo(o.factura).toFixed(2) : mn !== null ? mn.toFixed(2) : ''}"></div></div>
+      <div class="fgrp"><label>Monto</label><div class="ipfx"><span>$</span><input type="number" id="pgM" step="0.01" value="${o.factura ? saldo(o.factura).toFixed(2) : mn !== null ? mn.toFixed(2) : r.monto ? num(r.monto).toFixed(2) : ''}"></div></div>
       <div class="fgrp"><label>Forma de pago</label><select id="pgMet"><option>Transferencia</option><option>Domiciliado</option><option>Tarjeta</option><option>Efectivo</option></select></div>
       <div class="fgrp"><label>Fecha</label><input type="date" id="pgF" value="${isoD(new Date())}"></div>
       <div class="fgrp"><label>Referencia</label><input type="text" id="pgR"></div></div>`,
@@ -1728,7 +1745,7 @@ function openTransferencias() {
     const i = oc.indexOf(o), k = isoD(o.fecha), f = o.factura;
     if (f && num(f.monto_pagado) > 0.009) return `<td><div class="trok" onclick="verCuenta('${f.id}')">✓ ${$$(f.monto_pagado)}<div class="mini">pagado ${fmtD(f.fecha_pago)}${f.comprobante_pago_url ? ' · <a href="' + esc(f.comprobante_pago_url) + '" target="_blank" onclick="event.stopPropagation()">comprobante</a>' : ''}</div></div></td>`;
     const est = f ? saldo(f) : montoNomina(o.rec, k);
-    return `<td>${puede('cxp') ? `<button class="btn ${diasA(k) <= 0 ? 'btn-p' : 'btn-s'} btn-sm" onclick="pagarRecurrente(${i})">⬆ Subir transferencia</button>` : '<span class="mini">pendiente</span>'}<div class="mini" style="margin-top:3px">${est !== null && est !== undefined ? $$(est) + ' según COE Nómina' : 'monto por capturar'} · ${fmtD(k)}</div></td>`;
+    return `<td>${puede('recurrentes') ? `<button class="btn ${diasA(k) <= 0 ? 'btn-p' : 'btn-s'} btn-sm" onclick="pagarRecurrente(${i})">⬆ Subir transferencia</button>` : '<span class="mini">pendiente</span>'}<div class="mini" style="margin-top:3px">${est !== null && est !== undefined ? $$(est) + ' según COE Nómina' : 'monto por capturar'} · ${fmtD(k)}</div></td>`;
   };
   const filas = recs.map(r => {
     const O = oc.filter(o => o.rec.id === r.id).sort((a, b) => a.fecha - b.fecha), q1 = O.find(o => o.fecha.getDate() <= 15), q2 = O.find(o => o.fecha.getDate() > 15), fijo = nomRef(r) === 'fijo';
@@ -1744,29 +1761,55 @@ function openTransferencias() {
       <div style="display:flex;gap:6px;align-items:center"><button class="btn btn-s btn-sm" onclick="VIEW.trOff--;openTransferencias()">‹</button><b style="text-transform:capitalize;min-width:120px;text-align:center">${mesTxt}</b><button class="btn btn-s btn-sm" onclick="VIEW.trOff++;openTransferencias()">›</button></div></div>
     ${filas ? `<div class="tc"><table><thead><tr><th>Prestador</th><th>Quincena 15</th><th>Quincena fin de mes</th><th>Factura</th></tr></thead><tbody>${filas}</tbody></table></div>` : '<div class="emp">Sin pagos de nómina u honorarios en este mes</div>'}`, '', 'lg');
 }
+const diasRec = r => r.frecuencia === 'mensual_ultimo' ? 'último día' : r.frecuencia === 'semanal' ? ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'][r.dia_vencimiento || 0] : (r.dia_vencimiento ? 'día ' + r.dia_vencimiento : '') + (r.dia_vencimiento_2 ? ' y ' + r.dia_vencimiento_2 : '') + (r.mes_vencimiento ? ' de ' + MESES[r.mes_vencimiento - 1] : '');
 function editarRec(id) {
-  const r = id ? REC.find(x => x.id === id) : {};
-  modal(id ? 'Editar plantilla' : 'Nueva plantilla recurrente', `<div class="fgrd">
-    <div class="fgrp sp2"><label>Descripción</label><input type="text" id="rcD" value="${esc(r.descripcion || '')}"></div>
-    <div class="fgrp sp2"><label>Proveedor</label><select id="rcE">${optsEnt(r.entidad_id)}</select></div>
-    <div class="fgrp"><label>Frecuencia</label><select id="rcF">${Object.entries(FREC).map(([k, l]) => `<option value="${k}" ${r.frecuencia === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+  if (!puede('recurrentes')) { toast('Solo Dirección General administra los recurrentes', 'warning'); return; }
+  const r = id ? REC.find(x => x.id === id) : { frecuencia: 'mensual', dias_alerta: 3, prioridad: 'moderado', fecha_inicio: isoD(new Date()) };
+  const provs = ENT.filter(e => e.tipo !== 'cliente' && e.activo !== false).sort((a, b) => a.nombre.localeCompare(b.nombre));
+  modal(id ? 'Editar recurrente' : 'Nuevo pago recurrente', `<div class="fgrd">
+    <div class="fgrp sp2"><label>Empresa</label><select id="rcE" onchange="document.getElementById('rcEN').style.display=this.value==='__nueva'?'':'none'"><option value="">— Elige —</option><option value="__nueva">＋ Nueva empresa…</option>${provs.map(e => `<option value="${e.id}" ${r.entidad_id === e.id ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}</select>
+      <input type="text" id="rcEN" placeholder="Nombre de la nueva empresa" style="display:none;margin-top:6px"></div>
+    <div class="fgrp sp2"><label>Concepto</label><input type="text" id="rcD" value="${esc(r.descripcion || '')}" placeholder="Ej. Renta local Morelos 110"></div>
+    <div class="fgrp"><label>Monto</label><div class="ipfx"><span>$</span><input type="number" id="rcMo" step="0.01" value="${r.monto ?? ''}" placeholder="Vacío si varía"></div></div>
+    <div class="fgrp"><label>Prioridad</label><select id="rcP">${Object.entries(PRI).map(([k, P]) => `<option value="${k}" ${r.prioridad === k ? 'selected' : ''}>${P.t}</option>`).join('')}</select></div>
+    <div class="fgrp"><label>Periodicidad</label><select id="rcF" onchange="recCampos()">${Object.entries(FREC).map(([k, l]) => `<option value="${k}" ${r.frecuencia === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+    <div class="fgrp" id="rcG1"><label id="rcL1">Día de pago</label><input type="number" id="rcD1" min="0" max="31" value="${r.dia_vencimiento ?? ''}"></div>
+    <div class="fgrp" id="rcG2"><label>2º día (quincenal)</label><input type="number" id="rcD2" min="1" max="31" value="${r.dia_vencimiento_2 || ''}"></div>
+    <div class="fgrp" id="rcG3"><label>Mes (anual)</label><select id="rcM"><option value="">—</option>${MESES.map((m, i) => `<option value="${i + 1}" ${r.mes_vencimiento === i + 1 ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
+    <div class="fgrp"><label>Fecha de inicio</label><input type="date" id="rcFi" value="${r.fecha_inicio || ''}"></div>
+    <div class="fgrp"><label>Fecha de término</label><input type="date" id="rcFf" value="${r.fecha_fin || ''}" ${r.fecha_fin ? '' : 'disabled'}>
+      <label class="opt" style="margin-top:6px;padding:6px 10px"><input type="checkbox" id="rcInd" ${r.fecha_fin ? '' : 'checked'} onchange="rcFf.disabled=this.checked;if(this.checked)rcFf.value=''"> Indefinido</label></div>
     <div class="fgrp"><label>Categoría</label><select id="rcC">${catOpts(r.categoria)}</select></div>
-    <div class="fgrp"><label>Día de vencimiento</label><input type="number" id="rcD1" min="0" max="31" value="${r.dia_vencimiento || ''}"><span class="fhint">Semanal: 1=lunes … 0=domingo</span></div>
-    <div class="fgrp"><label>2º día (quincenal)</label><input type="number" id="rcD2" min="1" max="31" value="${r.dia_vencimiento_2 || ''}"></div>
-    <div class="fgrp"><label>Mes (anual)</label><input type="number" id="rcM" min="1" max="12" value="${r.mes_vencimiento || ''}"></div>
     <div class="fgrp"><label>Avisar días antes</label><input type="number" id="rcA" min="0" max="30" value="${r.dias_alerta || 3}"></div>
-    <div class="fgrp sp2"><label>Notas</label><input type="text" id="rcN" value="${esc(r.notas || '')}"></div></div>`,
-    `${id ? `<button class="btn btn-d" onclick="guardarRec('${id}',true)">Desactivar</button>` : ''}<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="guardarRec('${id || ''}')">Firmar y guardar</button>`);
+    <div class="fgrp sp2"><label>Notas</label><input type="text" id="rcN" value="${esc(nomRef(r) ? '' : (r.notas || ''))}"></div></div>
+    <div class="mini" style="margin-top:8px">Aparece en el calendario de la Contadora con su prioridad. Solo tú puedes crearlo, cambiarlo, pagarlo o eliminarlo.</div>`,
+    `${id ? `<button class="btn btn-d" onclick="eliminarRec('${id}')">Eliminar</button>` : ''}<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="guardarRec('${id || ''}')">Firmar y guardar</button>`);
+  recCampos();
 }
-async function guardarRec(id, desactivar) {
-  let pin; try { pin = await askPin('Firmar plantilla recurrente'); } catch { return; }
-  const { data } = await sb.rpc('fin_verificar_pin', { p_usuario: cu.id, p_pin: pin });
-  if (!data?.ok) { toast(ERR[data?.error] || 'PIN incorrecto', 'error'); return; }
-  const pay = desactivar ? { activo: false } : { tipo: 'egreso', descripcion: rcD.value.trim(), entidad_id: rcE.value || null, frecuencia: rcF.value, categoria: rcC.value || null, dia_vencimiento: num(rcD1.value) || null, dia_vencimiento_2: num(rcD2.value) || null, mes_vencimiento: num(rcM.value) || null, dias_alerta: num(rcA.value) || 3, notas: rcN.value || null, activo: true };
-  if (!desactivar && !pay.descripcion) { toast('Falta la descripción', 'warning'); return; }
-  const { error } = id ? await sb.from('fin_recurrentes').update(pay).eq('id', id) : await sb.from('fin_recurrentes').insert(pay);
-  if (error) { toast(error.message, 'error'); return; }
-  CM('mGen'); toast('Plantilla guardada', 'success'); await cargarTodo();
+function recCampos() {
+  const f = document.getElementById('rcF').value;
+  document.getElementById('rcG1').style.display = f === 'mensual_ultimo' ? 'none' : '';
+  document.getElementById('rcL1').textContent = f === 'semanal' ? 'Día de la semana (1=lunes … 0=domingo)' : f === 'quincenal' ? '1er día' : 'Día de pago';
+  document.getElementById('rcG2').style.display = f === 'quincenal' ? '' : 'none';
+  document.getElementById('rcG3').style.display = f === 'anual' ? '' : 'none';
+}
+async function guardarRec(id) {
+  const ent = rcE.value, nueva = ent === '__nueva' ? rcEN.value.trim() : '';
+  const d = { entidad_id: ent && ent !== '__nueva' ? ent : '', empresa_nueva: nueva, descripcion: rcD.value.trim(), monto: rcMo.value, prioridad: rcP.value, frecuencia: rcF.value,
+    dia_vencimiento: rcD1.value, dia_vencimiento_2: rcF.value === 'quincenal' ? rcD2.value : '', mes_vencimiento: rcF.value === 'anual' ? rcM.value : '',
+    fecha_inicio: rcFi.value, fecha_fin: rcInd.checked ? '' : rcFf.value, categoria: rcC.value, dias_alerta: rcA.value, notas: rcN.value.trim() };
+  if (!d.entidad_id && !d.empresa_nueva) { toast('Elige o escribe la empresa', 'warning'); return; }
+  if (!d.descripcion) { toast('Escribe el concepto', 'warning'); return; }
+  if (!rcInd.checked && !d.fecha_fin) { toast('Pon la fecha de término o marca Indefinido', 'warning'); return; }
+  if (d.frecuencia !== 'mensual_ultimo' && d.dia_vencimiento === '') { toast('Indica el día de pago', 'warning'); return; }
+  const r = await rpcFirmado('fin_guardar_recurrente', { p_id: id || null, p_datos: d, p_accion: 'guardar' }, { titulo: 'Firmar pago recurrente' });
+  if (r) { CM('mGen'); toast('Recurrente guardado · ya aparece en el calendario', 'success'); await cargarTodo(); }
+}
+async function eliminarRec(id) {
+  const r = REC.find(x => x.id === id);
+  if (!confirm('¿Eliminar «' + r.descripcion + '»? Deja de aparecer en el calendario; los pagos ya hechos se conservan.')) return;
+  const x = await rpcFirmado('fin_guardar_recurrente', { p_id: id, p_datos: {}, p_accion: 'eliminar' }, { titulo: 'Firmar eliminación' });
+  if (x) { CM('mGen'); toast('Recurrente eliminado', 'success'); await cargarTodo(); }
 }
 
 // ══ AUDITORÍA ══════════════════════════════════
@@ -1827,6 +1870,7 @@ function nivelRol(rol, m) {
 }
 function niv(m, u = cu) {
   if (!u) return 0;
+  if (m === 'recurrentes') return u.rol === 'admin' ? 3 : 0;  // solo el Director General administra recurrentes
   const p = u.permisos && u.permisos[m];
   return p !== undefined && p !== null && p !== '' ? Number(p) : nivelRol(u.rol, m);
 }
@@ -1980,7 +2024,7 @@ function eventosCal(y, m, tareas, conCobros) {
     abiertas('egreso').filter(f => !f.recurrente_id && f.origen !== 'nomina' && f.fecha_vencimiento).forEach(f => { const k = f.fecha_vencimiento.slice(0, 10); add(k, { k: 'cxp', s: sDe(k), f, monto: saldo(f) }); });
     const fin = new Date(y, m + 1, 0), dias = Math.max(1, Math.ceil((fin - hoyD()) / 86400000) + 1);
     const SR = { pagado: 'v', vencido: 'r', proximo: 'a', futuro: 'p' };
-    buildRecOcurrencias(dias).forEach(o => { const ref = nomRef(o.rec), k = isoD(o.fecha); add(k, { k: ref ? 'nomp' : 'rec', s: SR[o.estado], o, ref, monto: o.factura ? num(o.factura.monto_total) : null, est: ref ? montoNomina(o.rec, k) : null }); });
+    buildRecOcurrencias(dias).forEach(o => { const ref = nomRef(o.rec), k = isoD(o.fecha); add(k, { k: ref ? 'nomp' : 'rec', s: SR[o.estado], o, ref, monto: o.factura ? num(o.factura.monto_total) : (!ref && o.rec.monto ? num(o.rec.monto) : null), est: ref ? montoNomina(o.rec, k) : null, pri: o.rec.prioridad }); });
     const desde = NOM.length ? NOM.map(p => p.fecha_pago).sort()[0] : null, est = nominaEstimada();
     [new Date(y, m, 15), new Date(y, m + 1, 0)].forEach(d => {
       const k = isoD(d); if (desde && k < desde) return;
@@ -2006,7 +2050,7 @@ function calSemaforo(tareas, conCobros) {
     const k = isoD(new Date(y, m, d)), L = ev[k] || [], T = L.filter(e => e.k === 'tar'), c = { r: 0, a: 0, p: 0, v: 0 };
     T.forEach(e => c[e.s]++);
     const peor = L.length ? peorS(L) : '';
-    const crit = T.some(e => abiertaT(e.t) && e.t.prioridad === 'critico');
+    const crit = T.some(e => abiertaT(e.t) && e.t.prioridad === 'critico') || L.some(e => e.k === 'rec' && e.s !== 'v' && e.pri === 'critico');
     const pagar = L.filter(e => e.k === 'cxp' || e.k === 'rec' || e.k === 'nom'), monto = pagar.filter(e => e.s !== 'v').reduce((s, e) => s + (e.monto || 0), 0);
     totMes += monto;
     const ico = (kk, txt, cls) => { const X = L.filter(e => e.k === kk); return X.length ? `<span class="cico ${cls || peorS(X)}" title="${txt}">${kk === 'nom' ? 'Nómina' : (kk === 'cxp' ? '$' : kk === 'rec' ? '↻' : '↑') + (X.length > 1 ? X.length : '')}</span>` : ''; };
@@ -2050,12 +2094,13 @@ function tablaDia(tareas) {
   const TIPO = { cxp: 'Cuenta por pagar', rec: 'Pago recurrente', nom: 'Nómina', nomp: 'Nómina', cxc: 'Cobro' };
   const filaP = e => {
     const tit = e.k === 'nom' ? 'Nómina quincenal · total' : e.k === 'nomp' ? (e.ref === 'fijo' ? 'Personal fijo · transferencia de nómina' : 'Honorarios · ' + nomEnt(e.o.rec.entidad_id)) : e.k === 'rec' ? e.o.rec.descripcion : nomEnt(e.f.entidad_id);
+    const pri = e.k === 'rec' && e.pri ? priBdg(e.pri) + ' ' : '';
     const sub = e.k === 'nom' ? (e.real ? 'Calculada en COE Nómina' : 'Estimado con la última quincena · aún no calculada') + (e.nP ? ` · ${e.nPag} de ${e.nP} pagos con comprobante` + (e.total ? ' · total ' + $$(e.total) : '') : '') : e.k === 'nomp' ? (e.ref === 'fijo' ? 'Plantilla bancaria · sube el comprobante de la transferencia · sin factura' : 'Sube la transferencia · después se solicita su factura') : e.k === 'rec' ? nomEnt(e.o.rec.entidad_id) + ' · ' + (FREC[e.o.rec.frecuencia] || '') : e.f.descripcion;
     const est = e.s === 'v' ? '<span class="bdg bdg-apr">' + (e.k === 'nom' ? (e.nP ? 'Pagada' : 'Calculada') : 'Pagado') + '</span>' : e.s === 'r' ? '<span class="bdg bdg-ven">Vencido</span>' : e.s === 'a' ? '<span class="bdg bdg-pnd">Por vencer</span>' : '<span class="bdg bdg-pro">Programado</span>';
     const ri = window._calRec.indexOf(e.o);
     const acc = e.k === 'cxp' || e.k === 'cxc' ? `<button class="btn btn-s btn-sm" onclick="verCuenta('${e.f.id}')">Ver</button>${e.k === 'cxp' && puedePagar(e.f) ? ` <button class="btn btn-p btn-sm" onclick="pagarCuenta('${e.f.id}')">Pagar</button>` : ''}`
-      : e.k === 'rec' || e.k === 'nomp' ? (e.s === 'v' ? `<button class="btn btn-s btn-sm" onclick="verCuenta('${e.o.factura.id}')">Ver</button>` : puede('cxp') ? `<button class="btn btn-p btn-sm" onclick="window._recOc=_calRec;pagarRecurrenteDesde(${ri})">${e.k === 'nomp' ? (e.ref === 'fijo' ? '⬆ Comprobante nómina' : '⬆ Transferencia') : 'Pagar'}</button>` : '') : '';
-    return `<tr class="trs ${e.s}"><td style="width:22px"><span class="semd ${e.s}"></span></td><td><div style="display:flex;gap:6px;align-items:center"><span class="cico ${e.k === 'nom' || e.k === 'nomp' ? 'nom ' + e.s : e.s}">${e.k === 'nom' ? 'Nómina' : e.k === 'nomp' ? (e.ref === 'fijo' ? 'Fijo' : 'Hon') : e.k === 'cxp' ? '$' : e.k === 'rec' ? '↻' : '↑'}</span><b>${esc(tit)}</b></div><div class="mini" style="margin-top:3px">${TIPO[e.k]} · ${esc(sub)}</div></td>
+      : e.k === 'rec' || e.k === 'nomp' ? (e.s === 'v' ? `<button class="btn btn-s btn-sm" onclick="verCuenta('${e.o.factura.id}')">Ver</button>` : puede('recurrentes') ? `<button class="btn btn-p btn-sm" onclick="window._recOc=_calRec;pagarRecurrenteDesde(${ri})">${e.k === 'nomp' ? (e.ref === 'fijo' ? '⬆ Comprobante nómina' : '⬆ Transferencia') : 'Pagar'}</button>` : '') : '';
+    return `<tr class="trs ${e.s}"><td style="width:22px"><span class="semd ${e.s}"></span></td><td><div style="display:flex;gap:6px;align-items:center"><span class="cico ${e.k === 'nom' || e.k === 'nomp' ? 'nom ' + e.s : e.s}">${e.k === 'nom' ? 'Nómina' : e.k === 'nomp' ? (e.ref === 'fijo' ? 'Fijo' : 'Hon') : e.k === 'cxp' ? '$' : e.k === 'rec' ? '↻' : '↑'}</span>${pri}<b>${esc(tit)}</b></div><div class="mini" style="margin-top:3px">${TIPO[e.k]} · ${esc(sub)}</div></td>
       <td class="amt" style="text-align:right;white-space:nowrap">${e.k === 'nom' ? $$(e.total || 0) : e.monto !== null && e.monto !== undefined ? $$(e.monto) : e.est !== null && e.est !== undefined ? $$(e.est) + '<div class="mini">según COE Nómina</div>' : '<span class="mini">sin monto</span>'}</td><td>${est}</td><td style="text-align:right;white-space:nowrap">${acc}</td></tr>`;
   };
   const vencP = esHoy && niv('cxp') >= 1 ? abiertas('egreso').filter(f => f.fecha_vencimiento && f.fecha_vencimiento.slice(0, 10) < hoy) : [];
@@ -2106,6 +2151,7 @@ function dashContadora(sel) {
       <div class="cdash-main">${calSemaforo(misT)}${tablaDia(misT)}</div>
       ${ladoMisTareas(misP)}
     </div>
+    <div class="cfgg" style="margin-top:20px">${cajaInventario('far')}${cajaInventario('qui')}</div>
     <div class="cfgg" style="margin-top:20px">
       ${caja(`Facturas por solicitar (${fps.length})`, lista(fps.slice(0, 8), f => `<div class="aitem ${diasA(limFps(f)) < 0 ? 'r' : 'a'}" onclick="verCuenta('${f.id}')"><div style="flex:1"><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(f.monto_pagado)}</div><div class="am">${esc(f.descripcion)} · pagado ${fmtD(f.fecha_pago)} · límite ${fmtD(limFps(f))}</div></div><div class="rowact" onclick="event.stopPropagation()"><button class="btn btn-s btn-sm" onclick="correoProveedor('${f.entidad_id}','${f.id}',null,'factura')">✉</button><button class="btn btn-p btn-sm" onclick="openUpload('${f.id}')">⬆ XML</button></div></div>`, 'Lista en cero'), `<button class="btn btn-s btn-sm" onclick="goTab('fps')">Ver todas</button>`)}
       ${caja(`Documentos faltantes · por pagar (${faltan.length})`, lista(faltan.slice(0, 8), f => `<div class="aitem a" onclick="openUpload('${f.id}')"><div style="flex:1"><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(f.monto_total)}</div><div class="am">${esc(f.descripcion)}</div></div>${docsDe(f)}</div>`, 'Las cuentas por pagar tienen XML y PDF'))}
@@ -2172,6 +2218,43 @@ function cajaMisPendientes() {
   const mis = TAR.filter(t => esMia(t) && abiertaT(t)).sort(ordenPend);
   return caja(`Mis pendientes (${mis.length})`, lista(mis.slice(0, 8), t => `<div class="aitem ${vencidaT(t) ? (t.prioridad === 'critico' ? 'r' : 'a') : ''}" onclick="verPendiente('${t.id}')"><div style="flex:1"><div class="at">${priBdg(t.prioridad, t.id)} ${esc(t.titulo)}</div><div class="am">${vencidaT(t) ? 'Venció' : 'Vence'} ${fmtD(t.fecha_limite)} ${atraso(t) ? '· atraso ' + atraso(t) + ' d ' : ''}· ${estBdg(t.estado)}</div></div>${puede('tareas') ? `<button class="btn btn-s btn-sm" onclick="event.stopPropagation();avancePendiente('${t.id}')">Avance</button>` : ''}</div>`, 'Sin pendientes abiertos'),
     `<div style="display:flex;gap:6px">${puede('tareas') ? `<button class="btn btn-s btn-sm" onclick="nuevoPendiente()">+</button>` : ''}<button class="btn btn-s btn-sm" onclick="VIEW.pAmb='mios';goTab('tar')">Ver todos</button></div>`);
+}
+// ══ INVENTARIO EN EL TABLERO DE LA CONTADORA (lee COE Farmacia y COE Quirófano) ══
+const DIAS_CADUCAR = 90;
+const PED_CERRADO = ['recibido', 'entregado', 'surtido', 'cerrado', 'cancelado', 'rechazado', 'facturado'];
+function datosInventario(area) {
+  const hoy = hoyISO(), R = { porAcabarse: [], acabado: [], porCaducar: [], caducado: [], pedidos: [], ejemplo: false };
+  const cad = (nombre, lote, f, cant) => { if (!f || !(num(cant) > 0)) return; const d = diasA(f); if (d < 0) R.caducado.push({ t: nombre, m: `${lote ? 'Lote ' + lote + ' · ' : ''}${num(cant)} pza · caducó ${fmtD(f)}`, s: 'r' }); else if (d <= DIAS_CADUCAR) R.porCaducar.push({ t: nombre, m: `${lote ? 'Lote ' + lote + ' · ' : ''}${num(cant)} pza · caduca ${fmtD(f)} (${d} d)`, s: d <= 30 ? 'r' : 'a', d }); };
+  const stockMin = (nombre, ex, min, crit, uni) => { ex = num(ex); if (ex <= 0) R.acabado.push({ t: nombre, m: `Sin existencia${num(min) ? ' · mínimo ' + num(min) : ''}`, s: 'r' }); else if (num(min) && ex <= num(min)) R.porAcabarse.push({ t: nombre, m: `Quedan ${ex} ${uni || 'pza'} · mínimo ${num(min)}${crit ? ' · crítico ' + num(crit) : ''}`, s: crit && ex <= num(crit) ? 'r' : 'a' }); };
+  if (area === 'far') {
+    const L = INV.farLotes || [];
+    R.ejemplo = L.length > 0 && L.every(l => l.ejemplo);
+    (INV.farProd || []).filter(p => !p.servicio).forEach(p => { const ls = L.filter(l => l.producto_id === p.id); stockMin(p.nombre, ls.reduce((s, l) => s + num(l.cantidad), 0), p.minimo, p.critico); ls.forEach(l => cad(p.nombre, l.lote, l.caducidad, l.cantidad)); });
+    (INV.farPed || []).filter(x => !PED_CERRADO.includes(String(x.estado || '').toLowerCase())).forEach(x => R.pedidos.push({ t: (x.folio ? x.folio + ' · ' : '') + (Array.isArray(x.items) ? x.items.length + ' artículo(s)' : 'Pedido de farmacia'), m: `${x.estado || 'pendiente'}${x.monto ? ' · ' + $$(x.monto) : ''} · ${fmtD(String(x.created_at || '').slice(0, 10))}`, s: x.prioridad === 'urgente' || x.prioridad === 'critico' ? 'r' : 'a' }));
+    PED.filter(p => /farm/i.test(p.area || '') && !PED_CERRADO.includes(p.estado)).forEach(p => R.pedidos.push({ t: `${p.folio} · ${p.descripcion || ''}`, m: `${(PED_EST[p.estado] || [p.estado])[0]} · ${$$(p.monto_estimado)}`, s: p.urgente ? 'r' : 'a', go: `verPedido('${p.id}')` }));
+  } else {
+    const L = INV.quiLotes || [];
+    (INV.quiInv || []).forEach(i => { const ls = L.filter(l => l.item_id === i.id); const ex = ls.length ? ls.reduce((s, l) => s + num(l.cantidad), 0) : i.existencia; stockMin(i.nombre, ex, i.minimo, null, i.unidad); if (ls.length) ls.forEach(l => cad(i.nombre, l.numero, l.caducidad, l.cantidad)); else cad(i.nombre, i.lote, i.caducidad, i.existencia); });
+    (INV.quiLentes || []).forEach(l => { const n = `LIO ${[l.marca, l.modelo, l.poder ? l.poder + ' D' : ''].filter(Boolean).join(' ')}`; stockMin(n, l.existencia, l.minimo); cad(n, l.codigo, l.caducidad, l.existencia); });
+    (INV.quiPed || []).filter(x => !PED_CERRADO.includes(String(x.estado || '').toLowerCase())).forEach(x => R.pedidos.push({ t: (x.folio ? x.folio + ' · ' : '') + (x.tipo || 'Pedido de quirófano'), m: `${x.estado || 'pendiente'} · ${fmtD(String(x.fecha || x.created_at || '').slice(0, 10))}${x.paciente ? ' · ' + x.paciente : ''}`, s: 'a' }));
+    (INV.quiLio || []).filter(x => !['entregado', 'cancelado', 'recibido_clinica'].includes(String(x.estado || '').toLowerCase())).forEach(x => R.pedidos.push({ t: `${x.folio || 'LIO'} · ${x.lio_modelo || 'LIO'} ${x.lio_power ? x.lio_power + ' D' : ''}`, m: `${x.estado || ''} · ${esc(x.paciente_nombre || '')}${x.fecha_entrega_estimada ? ' · entrega ' + fmtD(x.fecha_entrega_estimada) : ''}`, s: 'a' }));
+    PED.filter(p => /quir/i.test(p.area || '') && !PED_CERRADO.includes(p.estado)).forEach(p => R.pedidos.push({ t: `${p.folio} · ${p.descripcion || ''}`, m: `${(PED_EST[p.estado] || [p.estado])[0]} · ${$$(p.monto_estimado)}`, s: p.urgente ? 'r' : 'a', go: `verPedido('${p.id}')` }));
+  }
+  R.porCaducar.sort((a, b) => a.d - b.d);
+  return R;
+}
+VIEW.invSec = { far: 'porAcabarse', qui: 'porAcabarse' };
+function cajaInventario(area) {
+  const D = datosInventario(area), tit = area === 'far' ? 'Farmacia' : 'Quirófano';
+  const SEC = [['porAcabarse', 'Por acabarse', 'a'], ['acabado', 'Acabado', 'r'], ['porCaducar', 'Por caducar', 'a'], ['caducado', 'Caducado', 'r'], ['pedidos', 'Pedidos', 'p']];
+  const total = SEC.reduce((s, [k]) => s + D[k].length, 0);
+  const sinDatos = area === 'far' ? !(INV.farProd || []).length : !((INV.quiInv || []).length || (INV.quiLentes || []).length || (INV.quiPed || []).length || (INV.quiLio || []).length || PED.some(p => /quir/i.test(p.area || '')));
+  let sel = VIEW.invSec[area]; if (!D[sel].length) { const f = SEC.find(([k]) => D[k].length); if (f) sel = f[0]; }
+  const L = D[sel];
+  const cuerpo = sinDatos ? `<div class="mini">Sin datos aún: la lista se llena sola cuando COE ${tit} registre su inventario${area === 'qui' ? ' (inventario, lotes, LIO y pedidos)' : ''}.</div>`
+    : `<div class="invchips">${SEC.map(([k, l, c]) => `<button class="invchip ${D[k].length ? c : 'z'} ${k === sel ? 'act' : ''}" onclick="VIEW.invSec['${area}']='${k}';renderTab()"><b>${D[k].length}</b><span>${l}</span></button>`).join('')}</div>
+      ${L.length ? `<div class="alist" style="margin-top:10px">${L.slice(0, 8).map(x => `<div class="aitem ${x.s === 'r' ? 'r' : x.s === 'a' ? 'a' : 'i'}" ${x.go ? `onclick="${x.go}"` : ''}><div><div class="at">${esc(x.t)}</div><div class="am">${x.m}</div></div></div>`).join('')}${L.length > 8 ? `<div class="mini">y ${L.length - 8} más…</div>` : ''}</div>` : `<div class="mini" style="margin-top:10px">✓ ${total ? 'Nada en esta lista' : 'Inventario sin alertas'}</div>`}`;
+  return caja(`Inventario de ${tit.toLowerCase()}${D.ejemplo ? ' <span class="bdg bdg-pnd" style="font-size:10px">datos de ejemplo</span>' : ''}`, cuerpo);
 }
 
 // ══ PENDIENTES: prioridad, seguimiento, retrasos y cierre del día ══

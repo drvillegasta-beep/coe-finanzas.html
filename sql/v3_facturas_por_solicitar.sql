@@ -74,3 +74,10 @@ end $function$;
 --    public.fin__honorarios_tarea() + trigger trg_honorarios_tarea (after insert/update en fin_facturas)
 --    y public.fin__fps_regla() (límite de factura de honorarios = fin del mes de la quincena).
 -- 7) (16/10/2026) Índice único fin_facturas_recurrente_periodo_uq (recurrente_id, recurrente_periodo) para evitar dobles registros por doble clic.
+
+-- 8) (17/10/2026) Recurrentes administrados solo por Dirección General
+alter table public.fin_recurrentes add column if not exists monto numeric(14,2), add column if not exists fecha_inicio date,
+  add column if not exists fecha_fin date, add column if not exists prioridad text,
+  add column if not exists eliminado_at timestamptz, add column if not exists eliminado_por uuid;
+-- public.fin_guardar_recurrente(p_usuario, p_pin, p_id, p_datos jsonb, p_accion 'guardar'|'eliminar'):
+--   solo rol admin; crea la empresa si es nueva; "eliminar" la quita de la lista y del calendario (activo=false, eliminado_at) conservando pagos hechos.
