@@ -559,6 +559,7 @@ tr.trsep td{background:var(--dd);color:var(--dg);font-size:11px;font-weight:800;
 @media(max-width:700px){.ccal-m{display:none}.cico{min-width:14px;height:15px;font-size:9px;padding:0 2px}.cico.nom{font-size:0;width:10px;min-width:10px}.ccal-d{min-height:62px}}
 .cico.nom.r{box-shadow:0 0 0 2px var(--dg)}.cico.nom.a{box-shadow:0 0 0 2px var(--wn)}.cico.nom.v{background:var(--sc);border-color:var(--sc)}
 .trok{color:var(--sc);font-weight:700;cursor:pointer}.trok a{color:var(--tm)}
+.pri.sp{background:transparent;color:var(--tm);border:1px dashed var(--br2)}
 </style>
 </head>
 <body>
@@ -1936,6 +1937,7 @@ function dashDirector(sel) {
       ${kpi('Por cobrar', $$(sumS(cxc)), `${cxc.filter(f => semaforo(f) === 'r').length} vencidas`, 'var(--sc)', "goTab('cxc')")}
     </div>
     <div class="cfgg">
+      ${cajaSinPrioridad()}
       <div id="bxProp">${caja(`Pagos propuestos (${prop.length})`, lista(prop, f => `<div class="aitem ${semaforo(f) === 'r' ? 'r' : ''}" onclick="verCuenta('${f.id}')"><div style="flex:1"><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(saldo(f))}</div><div class="am">${esc(f.descripcion)} · pagar el ${fmtD(f.propuesta_pago)} · vence ${fmtD(f.fecha_vencimiento)}</div></div>${puede('pagos', 3) ? `<button class="btn btn-p btn-sm" onclick="event.stopPropagation();pagarCuenta('${f.id}')">Pagar</button>` : ''}</div>`, 'La contadora no ha propuesto pagos'), prop.length ? `<button class="btn btn-s btn-sm" onclick="imprimirPropuesta()">🖨</button>` : '')}</div>
       ${SOLB.some(s => s.estado === 'pendiente') ? caja(`Solicitudes de baja (${SOLB.filter(s => s.estado === 'pendiente').length})`, lista(SOLB.filter(s => s.estado === 'pendiente'), s => { const x = descSolicitud(s); return `<div class="aitem a" onclick="${x.f.id ? `verCuenta('${x.f.id}')` : ''}"><div style="flex:1"><div class="at">${esc(x.txt)}</div><div class="am">${esc(nomUsr(s.solicitado_por))} · ${fmtDT(s.solicitado_at)} · ${esc(s.motivo)}</div></div>${esAdmin() ? `<div class="rowact"><button class="btn btn-d btn-sm" onclick="event.stopPropagation();aprobarBaja('${s.id}')">Autorizar</button><button class="btn btn-s btn-sm" onclick="event.stopPropagation();rechazarBaja('${s.id}')">Rechazar</button></div>` : ''}</div>`; })) : ''}
       ${caja(`Pedidos por autorizar (${pedAut.length})`, lista(pedAut, p => `<div class="aitem ${p.urgente ? 'r' : 'i'}" onclick="verPedido('${p.id}')"><div style="flex:1"><div class="at">${p.urgente ? 'URGENTE · ' : ''}${esc(p.folio)} · ${$$(p.monto_estimado)}</div><div class="am">${esc(p.area)} · ${esc(p.descripcion)} · ${esc(nomUsr(p.solicitado_por))}</div></div>${puede('pedidos', 3) && (!lim || p.monto_estimado <= lim) ? `<button class="btn btn-p btn-sm" onclick="event.stopPropagation();autorizarPedido('${p.id}','autorizar')">Autorizar</button>` : ''}</div>`))}
@@ -2034,7 +2036,7 @@ function tablaDia(tareas) {
     const s = semT(t), ok = t.estado === 'cumplida';
     return `<tr class="trs ${s}" onclick="verPendiente('${t.id}')" style="cursor:pointer">
       <td style="width:22px"><span class="semd ${s}" title="${SEMT[s] || ''}"></span></td>
-      <td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${priBdg(t.prioridad)}<b style="${ok ? 'text-decoration:line-through;color:var(--tm)' : ''}">${esc(t.titulo)}</b></div>
+      <td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${priBdg(t.prioridad, t.id)}<b style="${ok ? 'text-decoration:line-through;color:var(--tm)' : ''}">${esc(t.titulo)}</b></div>
         <div class="mini" style="margin-top:3px">${esc(t.categoria || '')}${t.ultimo_avance ? ' · último avance: ' + esc(t.ultimo_avance) : ''}</div></td>
       <td class="mini" style="white-space:nowrap">${arrastre ? `<span style="color:var(--dg);font-weight:700">venció ${fmtD(t.fecha_limite)}</span>` : fmtD(t.fecha_limite)}<div style="margin-top:4px">${atraso(t) ? atrasoBdg(t) : ''}</div></td>
       <td>${estBdg(t.estado)}</td>
@@ -2072,7 +2074,7 @@ function ladoMisTareas(misP) {
   return `<aside class="cdash-side"><div class="cfg-section"><h3 style="display:flex;justify-content:space-between;align-items:center">Mis tareas (${misP.length})${puede('tareas') ? `<button class="btn btn-s btn-sm" onclick="nuevoPendiente()">+</button>` : ''}</h3>
     <div class="body mtl">${misP.length ? misP.map(t => { const s = semT(t); return `<div class="mt ${s}" onclick="verPendiente('${t.id}')">
       ${puede('tareas') ? `<button class="mtchk" title="Marcar hecho con evidencia" onclick="event.stopPropagation();cumplirTarea('${t.id}')"></button>` : ''}
-      <div style="flex:1;min-width:0"><div class="mtt">${esc(t.titulo)}</div><div class="mini">${priBdg(t.prioridad)} ${s === 'r' ? `<b style="color:var(--dg)">venció ${fmtD(t.fecha_limite)}</b>` : 'vence ' + fmtD(t.fecha_limite)}${t.estado === 'bloqueado' ? ' · <b style="color:var(--dg)">bloqueado</b>' : ''}</div></div></div>`; }).join('') : '<div class="mini">✓ Sin tareas abiertas</div>'}</div>
+      <div style="flex:1;min-width:0"><div class="mtt">${esc(t.titulo)}</div><div class="mini">${priBdg(t.prioridad, t.id)} ${s === 'r' ? `<b style="color:var(--dg)">venció ${fmtD(t.fecha_limite)}</b>` : 'vence ' + fmtD(t.fecha_limite)}${t.estado === 'bloqueado' ? ' · <b style="color:var(--dg)">bloqueado</b>' : ''}</div></div></div>`; }).join('') : '<div class="mini">✓ Sin tareas abiertas</div>'}</div>
     <div style="padding:0 16px 14px"><button class="btn btn-s btn-sm" style="width:100%" onclick="VIEW.pAmb='mios';goTab('tar')">Ver todos mis pendientes</button></div></div></aside>`;
 }
 function dashContadora(sel) {
@@ -2168,7 +2170,7 @@ function botonCierre() {
 }
 function cajaMisPendientes() {
   const mis = TAR.filter(t => esMia(t) && abiertaT(t)).sort(ordenPend);
-  return caja(`Mis pendientes (${mis.length})`, lista(mis.slice(0, 8), t => `<div class="aitem ${vencidaT(t) ? (t.prioridad === 'critico' ? 'r' : 'a') : ''}" onclick="verPendiente('${t.id}')"><div style="flex:1"><div class="at">${priBdg(t.prioridad)} ${esc(t.titulo)}</div><div class="am">${vencidaT(t) ? 'Venció' : 'Vence'} ${fmtD(t.fecha_limite)} ${atraso(t) ? '· atraso ' + atraso(t) + ' d ' : ''}· ${estBdg(t.estado)}</div></div>${puede('tareas') ? `<button class="btn btn-s btn-sm" onclick="event.stopPropagation();avancePendiente('${t.id}')">Avance</button>` : ''}</div>`, 'Sin pendientes abiertos'),
+  return caja(`Mis pendientes (${mis.length})`, lista(mis.slice(0, 8), t => `<div class="aitem ${vencidaT(t) ? (t.prioridad === 'critico' ? 'r' : 'a') : ''}" onclick="verPendiente('${t.id}')"><div style="flex:1"><div class="at">${priBdg(t.prioridad, t.id)} ${esc(t.titulo)}</div><div class="am">${vencidaT(t) ? 'Venció' : 'Vence'} ${fmtD(t.fecha_limite)} ${atraso(t) ? '· atraso ' + atraso(t) + ' d ' : ''}· ${estBdg(t.estado)}</div></div>${puede('tareas') ? `<button class="btn btn-s btn-sm" onclick="event.stopPropagation();avancePendiente('${t.id}')">Avance</button>` : ''}</div>`, 'Sin pendientes abiertos'),
     `<div style="display:flex;gap:6px">${puede('tareas') ? `<button class="btn btn-s btn-sm" onclick="nuevoPendiente()">+</button>` : ''}<button class="btn btn-s btn-sm" onclick="VIEW.pAmb='mios';goTab('tar')">Ver todos</button></div>`);
 }
 
@@ -2202,12 +2204,41 @@ function respNom(k) {
 const esMia = t => t.responsable_id === cu.id || (!t.responsable_id && t.responsable_rol === cu.rol);
 const veEquipo = () => niv('tareas') >= 3 || ['admin', 'direccion'].includes(cu.rol);
 function ordenPend(a, b) {
-  const k = t => [abiertaT(t) ? 0 : 1, vencidaT(t) ? 0 : 1, (PRI[t.prioridad] || PRI.moderado).w, -atraso(t), String(t.fecha_limite)];
+  const k = t => [abiertaT(t) ? 0 : 1, vencidaT(t) ? 0 : 1, PRI[t.prioridad] ? PRI[t.prioridad].w : 0.5, -atraso(t), String(t.fecha_limite)];
   const x = k(a), y = k(b);
   for (let i = 0; i < x.length; i++) { if (x[i] < y[i]) return -1; if (x[i] > y[i]) return 1; }
   return 0;
 }
-const priBdg = p => { const P = PRI[p] || PRI.moderado; return `<span class="pri ${P.c}">${P.t}</span>`; };
+const priBdg = (p, id) => {
+  if (!p || !PRI[p]) return `<span class="pri sp" ${id && niv('tareas') >= 3 ? `style="cursor:pointer" title="Asignar prioridad" onclick="event.stopPropagation();ponerPrioridad('${id}')"` : ''}>Sin prioridad</span>`;
+  const P = PRI[p]; return `<span class="pri ${P.c}">${P.t}</span>`;
+};
+function ponerPrioridad(id) {
+  const t = TAR.find(x => x.id === id);
+  modal('Prioridad: ' + t.titulo, `<div style="display:grid;gap:8px">${Object.entries(PRI).map(([k, P]) => `<button class="btn btn-s" style="text-align:left;justify-content:flex-start" onclick="firmarPrioridad('${id}','${k}')"><span class="pri ${P.c}">${P.t}</span> <span class="mini" style="margin-left:8px">${P.d}</span></button>`).join('')}</div>`, '', 'sm');
+}
+async function firmarPrioridad(id, k) {
+  const r = await rpcFirmado('fin_tarea_avance', { p_tarea: id, p_datos: { prioridad: k } }, { titulo: 'Firmar prioridad' });
+  if (r) { CM('mGen'); toast('Prioridad asignada', 'success'); await cargarTodo(); }
+}
+// Varios a la vez con una sola firma
+async function firmarPrioridades() {
+  const sel = [...document.querySelectorAll('select[data-prio]')].filter(s => s.value).map(s => [s.dataset.prio, s.value]);
+  if (!sel.length) { toast('Elige la prioridad de al menos un pendiente', 'warning'); return; }
+  let pin; try { pin = await askPin('Firmar prioridades', sel.length + ' pendiente(s)'); } catch { return; }
+  let ok = 0, err = '';
+  for (const [id, k] of sel) { const r = await rpcConPin('fin_tarea_avance', { p_tarea: id, p_datos: { prioridad: k } }, pin); if (r.ok) ok++; else { err = r.error; if (r.error === 'pin') break; } }
+  toast(ok ? `${ok} prioridad(es) asignada(s)` : (ERR[err] || err), ok ? 'success' : 'error'); await cargarTodo();
+}
+function cajaSinPrioridad() {
+  if (niv('tareas') < 3) return '';
+  const L = TAR.filter(t => abiertaT(t) && !PRI[t.prioridad]).sort((a, b) => String(a.fecha_limite).localeCompare(String(b.fecha_limite)));
+  if (!L.length) return '';
+  return caja(`Pendientes sin prioridad (${L.length})`, `<div class="mini" style="margin-bottom:8px">Asigna la prioridad y firma una sola vez.</div>
+    <div class="alist">${L.map(t => `<div class="aitem" style="align-items:center"><div style="flex:1;min-width:0"><div class="at">${esc(t.titulo)}</div><div class="am">${esc(respNom(respKey(t)))} · vence ${fmtD(t.fecha_limite)}${t.descripcion ? ' · ' + esc(t.descripcion) : ''}</div></div>
+      <select data-prio="${t.id}" style="width:auto;min-width:120px"><option value="">—</option>${Object.entries(PRI).map(([k, P]) => `<option value="${k}">${P.t}</option>`).join('')}</select></div>`).join('')}</div>
+    <div style="margin-top:10px"><button class="btn btn-p btn-sm" onclick="firmarPrioridades()">Firmar prioridades</button></div>`);
+}
 const estBdg = e => `<span class="bdg ${(EST_T[e] || ['', ''])[1]}">${(EST_T[e] || [e])[0]}</span>`;
 function atrasoBdg(t) {
   const d = atraso(t);
@@ -2258,7 +2289,7 @@ function rTareas() {
     </div>
     ${L.length ? `<table><thead><tr><th>Prioridad</th><th>Pendiente</th>${VIEW.pAmb === 'equipo' ? '<th>Responsable</th>' : ''}<th>Vence</th><th>Atraso</th><th>Estatus</th><th>Último avance</th><th></th></tr></thead><tbody>
     ${L.map(t => { const ss = sinSeguimiento(t), dv = diasA(t.fecha_limite); return `<tr style="cursor:pointer" onclick="verPendiente('${t.id}')">
-      <td>${priBdg(t.prioridad)}</td>
+      <td>${priBdg(t.prioridad, t.id)}</td>
       <td><b>${esc(t.titulo)}</b><div class="mini">${esc(t.categoria || '')}${t.reprogramaciones ? ` · reprogramado ${t.reprogramaciones}×` : ''}${t.origen === 'cronograma' ? ' · cronograma' : ''}</div></td>
       ${VIEW.pAmb === 'equipo' ? `<td>${esc(respNom(respKey(t)))}</td>` : ''}
       <td>${fmtD(t.fecha_limite)}${abiertaT(t) ? `<div class="mini" style="${dv < 0 ? 'color:var(--dg)' : ''}">${dv < 0 ? 'venció hace ' + -dv + ' d' : dv === 0 ? 'hoy' : 'en ' + dv + ' d'}</div>` : ''}</td>
@@ -2278,7 +2309,7 @@ function verPendiente(id) {
     const cls = a.tipo === 'cumplida' ? 'done' : a.tipo === 'reprogramacion' ? 'warn' : a.estado_nuevo === 'bloqueado' ? 'fail' : 'act';
     return `<div class="tl-row ${cls}"><div class="tl-lbl">${esc(txt)}</div><div class="tl-meta">${fmtDT(a.created_at)} · ${esc(nomUsr(a.usuario_id))}${a.nota ? ' — ' + esc(a.nota) : ''}${a.evidencia_url ? ` · <a href="${esc(a.evidencia_url)}" target="_blank" style="color:var(--pr)">evidencia</a>` : ''}</div></div>`;
   };
-  const b = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">${priBdg(t.prioridad)} ${estBdg(t.estado)} ${atrasoBdg(t)}</div>
+  const b = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">${priBdg(t.prioridad, t.id)} ${estBdg(t.estado)} ${atrasoBdg(t)}</div>
   <div class="kv">
     <b>Pendiente</b><div><b>${esc(t.titulo)}</b>${t.descripcion ? `<div class="mini">${esc(t.descripcion)}</div>` : ''}</div>
     <b>Responsable</b><div>${esc(respNom(respKey(t)))}${t.creada_por && t.creada_por !== t.responsable_id ? ` <span class="mini">· asignó ${esc(nomUsr(t.creada_por))}</span>` : ''}</div>
@@ -2384,8 +2415,8 @@ function cerrarDia() {
       ${kpi('Cumplidos', String(a.cumplidos.length), 'hoy', 'var(--sc)')}${kpi('Avances', String(a.avances.length), 'hoy')}${kpi('Vencidos', String(a.vencidos.length), 'abiertos', a.vencidos.length ? 'var(--wn)' : '')}${kpi('Críticos sin avance', String(a.criticosSinAvance.length), 'hoy', a.criticosSinAvance.length ? 'var(--dg)' : '')}
     </div>
     ${a.criticosSinAvance.length ? `<div class="errbox">Tienes ${a.criticosSinAvance.length} pendiente(s) crítico(s) vencido(s) sin avance hoy. Explica en el resumen qué pasó.</div>` : ''}
-    <h4 style="margin:8px 0 6px">Cumplidos hoy</h4>${li(a.cumplidos, t => `<div class="aitem v"><div class="at">${priBdg(t.prioridad)} ${esc(t.titulo)}</div></div>`)}
-    <h4 style="margin:12px 0 6px">Siguen vencidos</h4>${li(a.vencidos.slice(0, 8), t => `<div class="aitem ${PRI[t.prioridad]?.c === 'r' ? 'r' : ''}"><div><div class="at">${priBdg(t.prioridad)} ${esc(t.titulo)}</div><div class="am">Atraso ${atraso(t)} d · ${esc(t.ultimo_avance || 'sin avance')}</div></div></div>`)}
+    <h4 style="margin:8px 0 6px">Cumplidos hoy</h4>${li(a.cumplidos, t => `<div class="aitem v"><div class="at">${priBdg(t.prioridad, t.id)} ${esc(t.titulo)}</div></div>`)}
+    <h4 style="margin:12px 0 6px">Siguen vencidos</h4>${li(a.vencidos.slice(0, 8), t => `<div class="aitem ${PRI[t.prioridad]?.c === 'r' ? 'r' : ''}"><div><div class="at">${priBdg(t.prioridad, t.id)} ${esc(t.titulo)}</div><div class="am">Atraso ${atraso(t)} d · ${esc(t.ultimo_avance || 'sin avance')}</div></div></div>`)}
     <div class="fld" style="margin-top:12px"><label>Resumen del día y bloqueos${a.criticosSinAvance.length ? ' (obligatorio)' : ''}</label><textarea id="cdR" style="min-height:80px" placeholder="Qué se avanzó, qué está detenido y qué necesitas de Dirección"></textarea></div>`,
     `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="confirmarCierreDia()">Firmar cierre y enviar a Dirección</button>`, 'xl');
   window._cd = a;
@@ -2417,7 +2448,7 @@ function textoCierre(uid, fecha) {
   const L = (arr, f) => arr.length ? arr.map(f).join('\n') : '  (ninguno)';
   return `CIERRE DEL DÍA ${fmtD(fecha)} — ${nomUsr(uid)}\nCentro Ocular Especializado · COE Finanzas\n\n` +
     `Cumplidos: ${a.cumplidos.length} · Avances: ${a.avances.length} · Reprogramados: ${a.reprog.length} · Vencidos abiertos: ${a.vencidos.length} · Críticos sin avance: ${a.criticosSinAvance.length}\n\n` +
-    `CUMPLIDOS HOY\n${L(a.cumplidos, t => `  ✓ [${PRI[t.prioridad]?.t}] ${t.titulo}`)}\n\nSIGUEN VENCIDOS\n${L(a.vencidos, t => `  • [${PRI[t.prioridad]?.t}] ${t.titulo} — atraso ${atraso(t)} d — ${t.ultimo_avance || 'sin avance'}`)}\n\n` +
+    `CUMPLIDOS HOY\n${L(a.cumplidos, t => `  ✓ [${PRI[t.prioridad]?.t || 'Sin prioridad'}] ${t.titulo}`)}\n\nSIGUEN VENCIDOS\n${L(a.vencidos, t => `  • [${PRI[t.prioridad]?.t || 'Sin prioridad'}] ${t.titulo} — atraso ${atraso(t)} d — ${t.ultimo_avance || 'sin avance'}`)}\n\n` +
     `RESUMEN\n${c?.resumen || '(sin resumen)'}\n`;
 }
 
@@ -2512,8 +2543,8 @@ function rRep() {
   </tbody></table></div>
   <div class="cfgg">
     <div class="cfg-section"><h3>Por prioridad</h3><div class="body"><table><tbody>${d.porPri.map(p => `<tr><td>${priBdg(p.p)}</td><td class="mini">${p.total} · ${p.aTiempo} a tiempo · ${p.tarde} tarde · ${p.noCump} no cumplidos</td><td style="text-align:right;font-weight:800;color:${colPct(p.pct)}">${p.pct}%</td></tr>`).join('')}</tbody></table></div></div>
-    <div class="cfg-section"><h3>No cumplido</h3><div class="body">${lst(d.noCump.sort(ordenPend), t => `<div class="aitem ${t.prioridad === 'critico' ? 'r' : ''}" onclick="verPendiente('${t.id}')"><div><div class="at">${priBdg(t.prioridad)} ${esc(t.titulo)}</div><div class="am">${esc(respNom(respKey(t)))} · atraso ${atraso(t)} d · ${esc(t.ultimo_avance || 'sin avance')}</div></div></div>`)}</div></div>
-    <div class="cfg-section"><h3>Cumplido tarde</h3><div class="body">${lst(d.tarde, t => `<div class="aitem" onclick="verPendiente('${t.id}')"><div><div class="at">${priBdg(t.prioridad)} ${esc(t.titulo)}</div><div class="am">${esc(nomUsr(t.cumplida_por))} · ${atraso(t)} d tarde</div></div></div>`)}</div></div>
+    <div class="cfg-section"><h3>No cumplido</h3><div class="body">${lst(d.noCump.sort(ordenPend), t => `<div class="aitem ${t.prioridad === 'critico' ? 'r' : ''}" onclick="verPendiente('${t.id}')"><div><div class="at">${priBdg(t.prioridad, t.id)} ${esc(t.titulo)}</div><div class="am">${esc(respNom(respKey(t)))} · atraso ${atraso(t)} d · ${esc(t.ultimo_avance || 'sin avance')}</div></div></div>`)}</div></div>
+    <div class="cfg-section"><h3>Cumplido tarde</h3><div class="body">${lst(d.tarde, t => `<div class="aitem" onclick="verPendiente('${t.id}')"><div><div class="at">${priBdg(t.prioridad, t.id)} ${esc(t.titulo)}</div><div class="am">${esc(nomUsr(t.cumplida_por))} · ${atraso(t)} d tarde</div></div></div>`)}</div></div>
     <div class="cfg-section"><h3>Facturas por solicitar vencidas</h3><div class="body">${lst(d.fpsV, f => `<div class="aitem r" onclick="verCuenta('${f.id}')"><div><div class="at">${esc(nomEnt(f.entidad_id))}</div><div class="am">${esc(f.descripcion)} · ${$$(f.monto_total)}</div></div></div>`)}</div></div>
   </div></div>`;
 }
