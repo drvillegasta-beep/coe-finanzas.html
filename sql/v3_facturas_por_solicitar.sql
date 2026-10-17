@@ -100,3 +100,6 @@ alter table public.fin_tareas add column if not exists requiere_conformidad bool
 --    pagos que vencen hoy; a Dirección/Administración: informes por firmar y ESCALADO de críticos del equipo con más de 2 días de atraso.
 --  Edge Function fin-avisos (verify_jwt=false; valida x-coe-key) envía con web-push y desactiva suscripciones caducadas.
 --  pg_cron: fin_avisos_0900 (15:00 UTC), fin_avisos_1300 (19:00 UTC), fin_avisos_1730 (23:30 UTC), lunes a sábado.
+-- 11) (17/10/2026) Activar/quitar avisos en un equipo se autoriza con el PIN del Director General (fin_config 'director_general_id'),
+--     aunque la sesión abierta sea de otra persona: fin_push_suscribir(p_usuario destino, p_pin del Director, ...) y fin_push_quitar(p_usuario, p_pin, p_endpoint).
+--     La versión anterior fin_push_quitar(p_usuario, p_endpoint) quedó inhabilitada (responde director_requerido).

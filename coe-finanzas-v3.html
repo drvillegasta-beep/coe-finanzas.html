@@ -2928,27 +2928,36 @@ async function activarAvisos() {
   try { if (!sub) sub = await SWREG.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(VAPID_PUB) }); }
   catch (e) { toast('No se pudo suscribir: ' + e.message, 'error'); return; }
   const disp = (esIOS() ? 'iPhone/iPad' : /Android/i.test(navigator.userAgent) ? 'Teléfono Android' : 'Computadora') + ' · ' + (/Edg\//.test(navigator.userAgent) ? 'Edge' : /Chrome\//.test(navigator.userAgent) ? 'Chrome' : /Safari\//.test(navigator.userAgent) ? 'Safari' : 'Navegador');
-  const r = await rpcFirmado('fin_push_suscribir', { p_sub: sub.toJSON(), p_dispositivo: disp }, { titulo: 'Activar avisos en este equipo' });
-  if (r) { AVISOS_ON = true; toast('Avisos activados en este equipo', 'success'); renderTab(); }
+  const r = await rpcDirector('fin_push_suscribir', { p_usuario: cu.id, p_sub: sub.toJSON(), p_dispositivo: disp }, 'Activar avisos para ' + cu.nombre + ' en este equipo');
+  if (r) { AVISOS_ON = true; toast('Avisos activados en este equipo para ' + cu.nombre, 'success'); renderTab(); }
+}
+// Autorización con el PIN del Director General (aunque la sesión abierta sea de otra persona)
+async function rpcDirector(fn, args, sub) {
+  let pin; try { pin = await askPin('PIN del Director General', sub || ''); } catch { return null; }
+  const { data, error } = await sb.rpc(fn, { ...args, p_pin: pin });
+  if (error) { toast('Error: ' + error.message, 'error'); return null; }
+  if (!data?.ok) { toast(ERR[data?.error] || ('No se pudo: ' + (data?.error || 'error')), 'error'); return null; }
+  return data;
 }
 async function probarAvisos() {
   const r = await rpcFirmado('fin_push_probar', {}, { titulo: 'Enviar aviso de prueba' });
   if (r) toast('Aviso de prueba enviado: llega en unos segundos a tus equipos activados', 'success');
 }
 async function desactivarAvisos() {
-  try { const s = SWREG && await SWREG.pushManager.getSubscription(); if (s) { await sb.rpc('fin_push_quitar', { p_usuario: cu.id, p_endpoint: s.endpoint }); await s.unsubscribe(); } } catch { }
+  const s = SWREG && await SWREG.pushManager.getSubscription().catch(() => null);
+  if (s) { const r = await rpcDirector('fin_push_quitar', { p_usuario: cu.id, p_endpoint: s.endpoint }, 'Quitar avisos de este equipo'); if (!r) return; try { await s.unsubscribe(); } catch { } }
   AVISOS_ON = false; toast('Avisos desactivados en este equipo', 'info'); renderTab();
 }
 function bannerAvisos() {
   if (!cu || AVISOS_ON || location.protocol === 'file:' && !window._forzarBanner) return '';
   let oc = null; try { oc = localStorage.getItem('coe_fin_banner_avisos'); } catch { }
   if (oc === isoD(new Date())) return '';
-  return `<div class="avbanner"><span style="font-size:22px">🔔</span><div style="flex:1"><b>Activa los avisos en este ${/Android|iPhone|iPad/i.test(navigator.userAgent) ? 'teléfono' : 'equipo'}</b><div class="mini">Te llegan aunque la app esté cerrada: 9:00, 13:00 y 17:30, con lo vencido, lo de hoy y lo crítico.</div></div>
+  return `<div class="avbanner"><span style="font-size:22px">🔔</span><div style="flex:1"><b>Activa los avisos en este ${/Android|iPhone|iPad/i.test(navigator.userAgent) ? 'teléfono' : 'equipo'}</b><div class="mini">Te llegan aunque la app esté cerrada: 9:00, 13:00 y 17:30, con lo vencido, lo de hoy y lo crítico. La activación la autoriza el Director General con su PIN.</div></div>
     <button class="btn btn-p btn-sm" onclick="activarAvisos()">Activar avisos</button><button class="btn btn-s btn-sm" title="Ocultar por hoy" onclick="try{localStorage.setItem('coe_fin_banner_avisos','${isoD(new Date())}')}catch{};renderTab()">✕</button></div>`;
 }
 function panelAvisos() {
   return `<div class="cfg-section"><h3>Avisos en computadora y teléfono</h3><div class="body">
-    <div class="mini" style="margin-bottom:10px">Estado en este equipo: <b style="color:${AVISOS_ON ? 'var(--sc)' : 'var(--wn)'}">${AVISOS_ON ? 'activados' : 'sin activar'}</b>. Llegan a las 9:00, 13:00 y 17:30 (lunes a sábado). Actívalos en cada equipo que uses.</div>
+    <div class="mini" style="margin-bottom:10px">Estado en este equipo: <b style="color:${AVISOS_ON ? 'var(--sc)' : 'var(--wn)'}">${AVISOS_ON ? 'activados' : 'sin activar'}</b>. Llegan a las 9:00, 13:00 y 17:30 (lunes a sábado). Actívalos en cada equipo que uses; activar o quitar avisos lo autoriza el Director General con su PIN.</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">${AVISOS_ON ? `<button class="btn btn-s btn-sm" onclick="probarAvisos()">Enviar aviso de prueba</button><button class="btn btn-s btn-sm" onclick="desactivarAvisos()">Desactivar en este equipo</button>` : `<button class="btn btn-p btn-sm" onclick="activarAvisos()">🔔 Activar avisos</button>`}</div></div></div>`;
 }
 // ── Ventana emergente «Tu día» ──
