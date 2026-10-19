@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#0D1117">
+<meta name="theme-color" content="#141517">
+<script>(function(){var t;try{t=localStorage.getItem('coe_tema')||localStorage.getItem('qx_tema')}catch(e){}document.documentElement.setAttribute('data-tema',/^(grafito|noche|pizarra|claro)$/.test(t||'')?t:'grafito')})()</script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>COE Finanzas</title>
 <link rel="icon" href="assets/coe-logo.png">
@@ -579,6 +580,72 @@ tr.trsep td{background:var(--dd);color:var(--dg);font-size:11px;font-weight:800;
 .avbox{margin-top:0}
 .avbanner{display:flex;gap:12px;align-items:center;margin:0 28px 4px;padding:12px 16px;border-radius:12px;background:rgba(0,201,167,.1);border:1px solid var(--pr)}
 @media(max-width:700px){.avbanner{margin:0 12px 4px;flex-wrap:wrap}}
+
+/* ===== Temas COE (mismo sistema que COE Quirófano): colores sobrios; el semáforo se reserva para alertas reales ===== */
+:root,[data-tema="grafito"]{--bg:#141517;--sf:#1B1D20;--sf2:#202327;--sf3:#272A2F;--br:#2F3338;--br2:#454A52;--tx:#E7E5E0;--tm:#9A9C9F;--td:#74777B;
+ --pr:#8DB8A5;--pd:rgba(141,184,165,.13);--on-pr:#0F1A15;--in:#A9B7C6;--id:rgba(169,183,198,.12);--pu:#B9AFC9;--pud:rgba(185,175,201,.12);
+ --d1:#8DB8A5;--d2:#5F8879;--d3:#3B4F48;--d4:#5B6068;color-scheme:dark}
+[data-tema="noche"]{--bg:#0E1420;--sf:#141C2B;--sf2:#182234;--sf3:#1E2A3F;--br:#28354C;--br2:#3D4E6B;--tx:#DDE4EE;--tm:#8E9BB0;--td:#68758B;
+ --pr:#86ABE0;--pd:rgba(134,171,224,.14);--on-pr:#0B1322;--in:#A8BBD6;--id:rgba(168,187,214,.12);--pu:#B5ACD6;--pud:rgba(181,172,214,.12);
+ --d1:#86ABE0;--d2:#5576A8;--d3:#35496B;--d4:#56627A;color-scheme:dark}
+[data-tema="pizarra"]{--bg:#111214;--sf:#18191C;--sf2:#1D1F22;--sf3:#24262A;--br:#2D2F34;--br2:#43464C;--tx:#ECE8E1;--tm:#9B9890;--td:#77746D;
+ --pr:#C9AE7C;--pd:rgba(201,174,124,.13);--on-pr:#1A140A;--in:#B6B1A6;--id:rgba(182,177,166,.12);--pu:#BFB2A0;--pud:rgba(191,178,160,.12);
+ --d1:#C9AE7C;--d2:#8F7D5B;--d3:#5A5040;--d4:#5E6066;color-scheme:dark}
+[data-tema="claro"]{--bg:#F3F1EC;--sf:#FFFFFF;--sf2:#FBFAF7;--sf3:#EEEBE5;--br:#E3DFD7;--br2:#CBC5B9;--tx:#24272B;--tm:#6B6E73;--td:#8F9196;
+ --pr:#2F6F66;--pd:rgba(47,111,102,.10);--on-pr:#FFFFFF;--in:#4C5E73;--id:rgba(76,94,115,.09);--pu:#5E5672;--pud:rgba(94,86,114,.09);
+ --d1:#2F6F66;--d2:#7FA9A2;--d3:#C7DBD7;--d4:#B9B4AA;
+ --dg:#C2413A;--dd:rgba(194,65,58,.10);--wn:#A8730F;--wd:rgba(168,115,15,.11);--sc:#2E7D46;--sd:rgba(46,125,70,.10);--or:#B8612F;--od:rgba(184,97,47,.10);color-scheme:light}
+body{background:var(--bg)}
+.btn-p,.vt-btn.act,.auth-num.active,.ccal-hoy,.tav{color:var(--on-pr)!important}
+.hello img{filter:invert(1) brightness(1.15)}
+[data-tema="claro"] .tlogo,[data-tema="claro"] .lgn-logo,[data-tema="claro"] .hello img{filter:none}
+[data-tema="claro"] .cchip,[data-tema="claro"] .cico.nom{color:#fff}
+[data-tema="claro"] ::-webkit-scrollbar-track{background:var(--sf3)}
+
+/* ── Piezas del tablero (mismo lenguaje visual que Quirófano) ── */
+.hello{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:2px 0 14px}
+.hello h2{margin:2px 0 0;font-size:24px;font-weight:700;letter-spacing:-.2px}.hello .muted{color:var(--tm);font-size:13px;text-transform:capitalize}
+.muted{color:var(--tm);font-size:12.5px}
+.kps{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;margin:0 0 12px}
+.kp{position:relative;text-align:left;background:var(--sf);border:1px solid var(--br);border-radius:16px;padding:14px 16px;cursor:pointer;color:var(--tx);display:flex;flex-direction:column;gap:2px;font-family:var(--fn);transition:border-color .15s,transform .15s}
+.kp:hover{border-color:var(--br2);transform:translateY(-1px)}
+.kp .kl{font-size:13px;color:var(--tm);padding-right:70px}.kp b{font-family:var(--mo);font-weight:500;font-size:30px;line-height:1.15;letter-spacing:-.5px}.kp small{color:var(--tm);font-size:12px}
+.kp em{position:absolute;top:12px;right:12px;font-style:normal;font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;color:var(--tm);background:var(--sf3)}
+.kp.t-rojo em{color:var(--on-pr);background:var(--pr)}.kp.t-amar em{color:var(--tx);background:transparent;box-shadow:inset 0 0 0 1px var(--br2)}
+.dgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;margin-bottom:12px;align-items:start}
+.dcard{background:var(--sf);border:1px solid var(--br);border-radius:14px;padding:14px 16px;min-width:0}
+.dcard h3{font-size:15px;font-weight:700;margin:0 0 8px}
+.ph3{display:flex;align-items:center;gap:8px;margin-bottom:6px}.ph3 h3{margin:0;flex:1}.ph3 .cnt{font-family:var(--mo);font-size:20px;color:var(--tx)}
+.list-item{display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--br)}.list-item:last-child{border-bottom:0}
+.list-item .grow{flex:1;min-width:0}.list-item b{font-weight:600}
+.list-item[onclick]{cursor:pointer}.list-item[onclick]:hover b{color:var(--pr)}
+i.dot{flex:0 0 10px;height:10px;border-radius:50%;margin-top:6px;align-self:flex-start;display:inline-block}i.dot.hi{background:var(--pr)}i.dot.lo{background:var(--br2)}i.dot.cr{background:var(--dg)}
+.sbar,.meter{margin:10px 0 14px}.sbar-h{display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px;gap:8px}.sbar-h b{font-family:var(--mo);font-weight:500}
+.sbar-t{display:flex;gap:2px;height:12px;border-radius:6px;overflow:hidden}.sbar-t i{display:block;min-width:4px}
+.sbar-l{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px;font-size:12px;color:var(--tm)}.sbar-l span{display:flex;align-items:center;gap:5px}.sbar-l i{width:9px;height:9px;border-radius:3px;display:inline-block}.sbar-l b{color:var(--tx);font-weight:600}
+.cch{display:flex;gap:4px;align-items:flex-end;height:180px;padding-top:6px}.cc{flex:1;display:flex;flex-direction:column;align-items:center;height:100%;min-width:0}
+.ccv{font-size:10.5px;color:var(--tx);height:16px;font-family:var(--mo);white-space:nowrap}.ccb2{flex:1;width:100%;max-width:40px;display:flex;flex-direction:row;align-items:flex-end;gap:2px}.ccb2 i{flex:1;border-radius:4px 4px 0 0;display:block;min-height:2px}
+.ccl{font-size:10px;color:var(--tm);text-align:center;line-height:1.2;margin-top:4px;white-space:nowrap}.cc.hoy .ccl{color:var(--pr);font-weight:700}
+.s-ok,.s-pr{background:var(--d1)}.s-warn{background:var(--d2)}.s-ser,.s-crit{background:var(--d3)}.s-neu{background:var(--d4)}
+.sb-ok{background:var(--sc)}.sb-warn{background:var(--wn)}.sb-ser{background:#C9853E}.sb-crit{background:var(--dg)}
+.seg{display:inline-flex;background:var(--sf2);border:1px solid var(--br);border-radius:12px;padding:3px;gap:2px}.seg button{border:0;background:transparent;color:var(--tm);font-family:var(--fn);font-size:12.5px;font-weight:600;padding:6px 12px;border-radius:9px;cursor:pointer}.seg button.on{background:var(--sf3);color:var(--tx)}
+/* Áreas de la clínica */
+.areas{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;margin-bottom:12px}
+.area{background:var(--sf);border:1px solid var(--br);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.area-h{display:flex;align-items:center;gap:10px}.area-h .ai{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--pd);color:var(--pr);font-size:16px;flex:0 0 auto}
+.area-h .an{flex:1;min-width:0}.area-h .an b{display:block;font-size:14.5px}.area-h .an span{font-size:11.5px;color:var(--tm)}
+.area-sc{font-family:var(--mo);font-size:22px;font-weight:500}.area-sc.bajo{color:var(--dg)}.area-sc.medio{color:var(--wn)}
+.area-kv{display:grid;grid-template-columns:1fr auto;gap:3px 10px;font-size:12.5px}.area-kv span{color:var(--tm)}.area-kv b{font-family:var(--mo);font-weight:500;text-align:right}
+.area-kv b.al{color:var(--dg)}
+.area .meter{margin:2px 0 0}
+.area-f{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto}
+.area.off{opacity:.75}
+/* Selector de tema */
+.temas{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}.tema-op{display:flex;gap:8px;align-items:center;border:1px solid var(--br);background:var(--sf2);border-radius:12px;padding:10px;cursor:pointer;color:var(--tx);font-family:var(--fn);font-size:13px}.tema-op.on{border-color:var(--pr);box-shadow:0 0 0 1px var(--pr)}
+.tema-op .sw4{width:28px;height:18px;border-radius:5px;flex:0 0 auto}
+.tema-op[data-tm="grafito"] .sw4{background:linear-gradient(90deg,#1B1D20 50%,#8DB8A5 50%)}.tema-op[data-tm="noche"] .sw4{background:linear-gradient(90deg,#141C2B 50%,#86ABE0 50%)}.tema-op[data-tm="pizarra"] .sw4{background:linear-gradient(90deg,#18191C 50%,#C9AE7C 50%)}.tema-op[data-tm="claro"] .sw4{background:linear-gradient(90deg,#FFFFFF 50%,#2F6F66 50%);border:1px solid #ccc}
+.tbtn-tema{background:none;border:1px solid var(--br);color:var(--tm);border-radius:10px;width:34px;height:34px;cursor:pointer;font-size:15px;display:grid;place-items:center}.tbtn-tema:hover{color:var(--pr);border-color:var(--pr)}
+@media (max-width:600px){.dgrid{grid-template-columns:1fr}.kp b{font-size:26px}.cch{height:150px}.ccv{font-size:9px}}
 </style>
 </head>
 <body>
@@ -613,6 +680,7 @@ tr.trsep td{background:var(--dd);color:var(--dg);font-size:11px;font-weight:800;
     <span class="ttit">Finanzas</span>
     <span class="live wait" id="liveBadge" title="Estado de conexión"><span class="ldot"></span><span class="ltx" id="liveTx">Conectando…</span></span>
     <span class="tsp"></span>
+    <button class="tbtn-tema" onclick="elegirTema()" title="Colores">◐</button>
     <button class="bell" onclick="goTab('alr')" title="Alertas">🔔<b id="bellN" style="display:none"></b></button>
     <div class="tusr">
       <div class="tav" id="tav" style="cursor:pointer" onclick="miAcceso()" title="Mi acceso">A</div>
@@ -1961,7 +2029,7 @@ function lista(arr, fila, vacio = 'Nada pendiente') { return arr.length ? `<div 
 const propuestas = () => abiertas('egreso').filter(f => f.propuesta_pago);
 
 // ── Director General ──
-function dashDirector(sel) {
+function dashDirectorFin(sel) {
   const cxp = abiertas('egreso'), cxc = abiertas('ingreso'), venc = cxp.filter(f => semaforo(f) === 'r');
   const mes = isoD(new Date()).slice(0, 7);
   const lim = esAdmin() ? 0 : limiteFirma();
@@ -1981,7 +2049,7 @@ function dashDirector(sel) {
   const d = datosCumplimiento('mensual'), pct = d.tar.length ? Math.round(d.aTiempo.length / d.tar.length * 100) : 100;
   const topProv = Object.entries(cxp.reduce((o, f) => { o[f.entidad_id] = (o[f.entidad_id] || 0) + saldo(f); return o; }, {})).sort((a, b) => b[1] - a[1]).slice(0, 6);
   const ult = CIE[0];
-  return cabDash('Tablero del Director', esc(RS[0]?.nombre || ''), sel + (puede('cxp') ? `<button class="btn btn-p btn-sm" onclick="openTransferencias()">⬆ Transferencias de honorarios y nómina</button>` : '')) + `<div class="pad">
+  return cabDash('Tablero del Director · Finanzas', esc(RS[0]?.nombre || ''), segDir() + sel + (puede('cxp') ? `<button class="btn btn-p btn-sm" onclick="openTransferencias()">⬆ Transferencias de honorarios y nómina</button>` : '')) + `<div class="pad">
     <div class="dg">
       ${kpi('Requiere tu firma', String(pedAut.length + prop.length), `${pedAut.length} pedidos · ${prop.length} pagos propuestos`, (pedAut.length + prop.length) ? 'var(--wn)' : 'var(--sc)')}
       ${kpi('Propuesta de pagos', $$(sumS(prop)), prop.length ? 'preparada por la contadora' : 'sin propuesta', '', "document.getElementById('bxProp').scrollIntoView({behavior:'smooth'})")}
@@ -3354,5 +3422,235 @@ async function upAplicar() {
 }
 
 boot();
+
+// ══ TEMAS DE COLOR (mismos que COE Quirófano) ══
+const TEMAS = [['grafito', 'Grafito y salvia'], ['noche', 'Azul noche'], ['pizarra', 'Pizarra y champaña'], ['claro', 'Claro cálido']];
+const temaActual = () => document.documentElement.getAttribute('data-tema') || 'grafito';
+function ponerTema(t) {
+  document.documentElement.setAttribute('data-tema', t);
+  try { localStorage.setItem('coe_tema', t); } catch { }
+  const mc = document.querySelector('meta[name="theme-color"]'); if (mc) mc.content = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#141517';
+  document.querySelectorAll('.tema-op').forEach(b => b.classList.toggle('on', b.dataset.tm === t));
+}
+function elegirTema() {
+  modal('Colores', `<div class="temas">${TEMAS.map(([k, t]) => `<button class="tema-op ${temaActual() === k ? 'on' : ''}" data-tm="${k}" onclick="ponerTema('${k}')"><span class="sw4"></span>${t}</button>`).join('')}</div>
+    <div class="mini" style="margin-top:10px">Se guarda en este equipo. Son los mismos colores de COE Quirófano.</div>`, `<button class="btn btn-p" onclick="CM('mGen')">Listo</button>`, 'sm');
+}
+
+// ══ PIEZAS VISUALES (mismo lenguaje que el tablero de COE Quirófano) ══
+const moneyK = n => { n = Number(n) || 0; const a = Math.abs(n), s = n < 0 ? '-' : ''; return a >= 1e6 ? s + '$' + (a / 1e6).toFixed(a >= 1e7 ? 1 : 2).replace(/\.?0+$/, '') + ' M' : a >= 1e4 ? s + '$' + Math.round(a / 1e3) + ' k' : a >= 1e3 ? s + '$' + (a / 1e3).toFixed(1).replace(/\.0$/, '') + ' k' : s + '$' + Math.round(a); };
+const pctDe = (a, b) => b ? Math.round(a / b * 100) : 0;
+const kp = (lab, big, sub, go, st) => `<button class="kp ${st || ''}" ${go ? `onclick="${go}"` : 'style="cursor:default"'}><span class="kl">${lab}</span><b>${big}</b>${sub ? `<small>${sub}</small>` : ''}${/rojo/.test(st || '') ? '<em>Atender</em>' : /amar/.test(st || '') ? '<em>Revisar</em>' : ''}</button>`;
+function sbar(lab, segs, go, fmt) {
+  const tot = segs.reduce((a, s) => a + s.n, 0), F = fmt || (x => x);
+  return `<div class="sbar" ${go ? `onclick="${go}" style="cursor:pointer"` : ''}><div class="sbar-h"><span>${lab}</span><b>${F(tot)}</b></div><div class="sbar-t">${tot ? segs.filter(s => s.n).map(s => `<i class="${s.c}" style="flex:${s.n}" title="${esc(s.t)}: ${F(s.n)}"></i>`).join('') : '<i style="flex:1;background:var(--sf3)"></i>'}</div>
+  <div class="sbar-l">${segs.map(s => `<span><i class="${s.c}"></i>${esc(s.t)} <b>${F(s.n)}</b></span>`).join('')}</div></div>`;
+}
+function meter(lab, v, max, sub, cls) {
+  const p = max ? Math.min(100, Math.round(v / max * 100)) : 0;
+  return `<div class="meter"><div class="sbar-h"><span>${lab}</span><b>${max ? p + '%' : '—'}</b></div><div class="sbar-t"><i class="${cls || 's-ok'}" style="flex:${p}"></i><i style="flex:${100 - p};background:var(--sf3)"></i></div>${sub ? `<div class="sbar-l"><span>${sub}</span></div>` : ''}</div>`;
+}
+// Barras pareadas por columna: cols = [{l, hoy, tip, a, b}] · leg = [[clase, texto], [clase, texto]]
+function colPares(cols, leg, fmt) {
+  const mx = Math.max(1, ...cols.map(c => Math.max(c.a, c.b))), F = fmt || moneyK;
+  return `<div class="cch">${cols.map(c => `<div class="cc ${c.hoy ? 'hoy' : ''}" title="${esc(c.tip)}"><div class="ccv">${c.a ? F(c.a) : ''}</div><div class="ccb2"><i class="${leg[0][0]}" style="height:${c.a / mx * 100}%"></i><i class="${leg[1][0]}" style="height:${c.b / mx * 100}%"></i></div><div class="ccl">${c.l}</div></div>`).join('')}</div>
+  <div class="sbar-l" style="margin-top:6px">${leg.map(([c, t]) => `<span><i class="${c}"></i>${t}</span>`).join('')}</div>`;
+}
+const dcard = (titulo, cuerpo, cnt, extra) => `<div class="dcard">${cnt !== undefined || extra ? `<div class="ph3"><h3>${titulo}</h3>${extra || ''}${cnt !== undefined ? `<span class="cnt">${cnt}</span>` : ''}</div>` : `<h3>${titulo}</h3>`}${cuerpo}</div>`;
+
+// ══ PANORAMA COE: datos de las demás apps (Conciliación, Quirófano, Óptica, Nómina) ══
+// Se leen con fin_panorama (solo Dirección); con la sesión segura no pide nada, si no, se confirma con PIN.
+const APPS_COE = {
+  qui: ['COE Quirófano', 'https://drvillegasta-beep.github.io/coe-quirofano/quirofano-v2.html'],
+  far: ['COE Farmacia', 'https://drvillegasta-beep.github.io/coe-quirofano/farmacia.html'],
+  con: ['COE Conciliación', 'https://drvillegasta-beep.github.io/coe-conciliacion.html/coe-conciliacion.html'],
+  opt: ['COE Óptica', 'https://drvillegasta-beep.github.io/coe-conciliacion.html/coe-optica.html'],
+  nom: ['COE Nómina', 'https://drvillegasta-beep.github.io/coe-nomina/coe-nomina.html'],
+};
+const PAN = { d: null, at: 0, cargando: false, err: null };
+async function cargarPanorama(pin) {
+  if (PAN.cargando) return;
+  PAN.cargando = true; PAN.intento = Date.now();
+  try {
+    const { data, error } = await sb.rpc('fin_panorama', pin ? { p_usuario: cu.id, p_pin: pin } : {});
+    if (error) PAN.err = /function|does not exist|schema cache/i.test(error.message) ? 'falta_sql' : 'red';
+    else if (!data?.ok) PAN.err = data?.error || 'sesion';
+    else { PAN.d = data.datos; PAN.at = Date.now(); PAN.err = null; PAN.pin = !!pin; }
+  } catch { PAN.err = 'red'; }
+  PAN.cargando = false;
+  if (tab === 'dash') renderTab();
+}
+async function panoramaConPin() {
+  let pin; try { pin = await askPin('Ver todas las áreas', 'Confirma con tu PIN para leer Conciliación, Quirófano, Óptica y Nómina'); } catch { return; }
+  await cargarPanorama(pin);
+  if (PAN.err) toast(PAN.err === 'pin' || PAN.err === 'pin_incorrecto' ? 'PIN incorrecto' : PAN.err === 'solo_director' ? 'Solo Dirección puede ver todas las áreas' : 'No se pudo leer: ' + PAN.err, 'error');
+}
+function panoramaVigente() {
+  if (!PAN.cargando && !PAN.pin && Date.now() - (PAN.intento || 0) > 180000 && PAN.err !== 'sesion' && PAN.err !== 'solo_director') setTimeout(() => cargarPanorama(), 0);
+  return PAN.d;
+}
+const avisoPan = () => PAN.cargando && !PAN.d ? '<div class="mini">Leyendo las demás aplicaciones…</div>'
+  : PAN.err === 'sesion' ? `<div class="mini" style="margin-bottom:8px">Para ver esta área confirma tu identidad.</div><button class="btn btn-p btn-sm" onclick="panoramaConPin()">Ver con mi PIN</button>`
+  : PAN.err === 'solo_director' ? '<div class="mini">Solo Dirección General ve esta área.</div>'
+  : PAN.err ? `<div class="mini">No se pudo leer (${esc(PAN.err)}). <a href="#" onclick="cargarPanorama();return false">Reintentar</a></div>` : '<div class="mini">Sin datos.</div>';
+
+// ── Tarjeta de un área ──
+function areaCard(o) {
+  const cls = o.score === null || o.score === undefined ? '' : o.score < 70 ? 'bajo' : o.score < 90 ? 'medio' : '';
+  return `<div class="area ${o.off ? 'off' : ''}">
+    <div class="area-h"><span class="ai">${o.ico}</span><div class="an"><b>${o.t}</b><span>${o.sub || ''}</span></div>${o.score !== null && o.score !== undefined ? `<span class="area-sc ${cls}" title="${esc(o.scoreLbl || '')}">${o.score}%</span>` : ''}</div>
+    ${o.cuerpo}
+    <div class="area-f">${(o.btns || []).join('')}${o.app ? `<a class="btn btn-s btn-sm" href="${APPS_COE[o.app][1]}" target="_blank" rel="noopener">Abrir ${APPS_COE[o.app][0]} ↗</a>` : ''}</div></div>`;
+}
+const kvA = rows => `<div class="area-kv">${rows.filter(Boolean).map(([k, v, al]) => `<span>${k}</span><b class="${al ? 'al' : ''}">${v}</b>`).join('')}</div>`;
+
+// ── Tablero del Director ──
+VIEW.dirTab = VIEW.dirTab || 'pan';
+function dashDirector(sel) {
+  if (VIEW.dirTab === 'fin') return dashDirectorFin(sel);
+  return dashPanorama(sel);
+}
+const segDir = () => `<div class="seg">${[['pan', 'Panorama COE'], ['fin', 'Finanzas a detalle']].map(([k, t]) => `<button class="${VIEW.dirTab === k ? 'on' : ''}" onclick="VIEW.dirTab='${k}';renderTab()">${t}</button>`).join('')}</div>`;
+function helloDir(sel) {
+  const h = new Date().getHours(), saludo = h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
+  const nom = String(cu.nombre || '').replace(/^(dr|dra)\.?\s+/i, '').split(' ').slice(0, 2).join(' ');
+  return `<div class="hello"><div style="display:flex;gap:12px;align-items:center"><img src="assets/coe-logo.png" alt="COE" style="height:40px;width:auto"><div><div class="muted">${new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · Centro Ocular Especializado</div><h2>${saludo}, ${esc(nom)}</h2></div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${segDir()}${sel}${puede('cxp') ? `<button class="btn btn-s btn-sm" onclick="openTransferencias()">⬆ Transferencias</button>` : ''}<button class="btn btn-s btn-sm" onclick="ventanaTuDia('aviso',true)">Tu día</button></div></div>${bannerAvisos()}`;
+}
+function dashPanorama(sel) {
+  const P = panoramaVigente(), hoy = hoyISO(), mes = hoy.slice(0, 7);
+  // Finanzas
+  const cxp = abiertas('egreso'), cxc = abiertas('ingreso'), venc = cxp.filter(f => semaforo(f) === 'r');
+  const egresoDe = a => { const f = FAC.find(x => x.id === a.factura_id); return f && f.tipo === 'egreso'; };
+  const pagosMes = ABO.filter(a => !a.anulado && String(a.fecha_pago || '').startsWith(mes) && egresoDe(a)).reduce((s, a) => s + num(a.monto), 0);
+  const prox7 = cxp.filter(f => f.fecha_vencimiento && diasA(f.fecha_vencimiento) >= 0 && diasA(f.fecha_vencimiento) <= 7);
+  const prop = propuestas(), lim = esAdmin() ? 0 : limiteFirma();
+  const pedAut = PED.filter(p => p.estado === 'solicitado' && enMiSede(p));
+  const conf = TAR.filter(t => t.requiere_conformidad && t.estado === 'cumplida' && !t.conformidad_at);
+  const sinPri = TAR.filter(t => abiertaT(t) && !t.prioridad);
+  const bajas = SOLB.filter(s => s.estado === 'pendiente');
+  const dc = datosCumplimiento('mensual'), pctEq = dc.tar.length ? Math.round(dc.aTiempo.length / dc.tar.length * 100) : 100;
+  const critEq = TAR.filter(t => vencidaT(t) && t.prioridad === 'critico');
+  const conta = USR.find(u => u.rol === 'contadora' && u.activo !== false);
+  const cc = conta ? cumplimientoContadora(conta) : null;
+  const fpsV = dc.fpsV;
+  const ingMes = P ? num(P.cajas.ing_mes) : null;
+  const firmas = prop.length + pedAut.length + conf.length + bajas.length;
+
+  // Requiere su atención: lo que espera su firma y lo que está fuera de regla en cualquier área
+  const U = [];
+  if (prop.length) U.push({ r: true, t: `${prop.length} pago(s) propuestos por la contadora · ${moneyK(sumS(prop))}`, d: 'Esperan su autorización para pagar', go: "VIEW.dirTab='fin';renderTab();setTimeout(()=>document.getElementById('bxProp')?.scrollIntoView({behavior:'smooth'}),80)" });
+  if (pedAut.length) U.push({ r: pedAut.some(p => p.urgente), t: `${pedAut.length} pedido(s) por autorizar${pedAut.some(p => p.urgente) ? ' · hay urgentes' : ''}`, d: pedAut.slice(0, 3).map(p => p.folio + ' ' + moneyK(p.monto_estimado)).join(' · '), go: "goTab('ped')" });
+  if (conf.length) U.push({ r: false, t: `${conf.length} informe(s) por firmar de conformidad`, d: conf.slice(0, 2).map(t => t.titulo).join(' · '), go: "VIEW.dirTab='fin';renderTab()" });
+  if (bajas.length) U.push({ r: false, t: `${bajas.length} solicitud(es) de baja`, d: 'Requieren su autorización', go: "VIEW.dirTab='fin';renderTab()" });
+  if (sinPri.length) U.push({ r: false, t: `${sinPri.length} pendiente(s) sin prioridad`, d: 'Usted les asigna la prioridad', go: "VIEW.dirTab='fin';renderTab()" });
+  if (venc.length) U.push({ r: true, t: `${venc.length} cuenta(s) por pagar vencidas · ${moneyK(sumS(venc))}`, d: 'Proveedores con pago atrasado', go: "VIEW.cxpF='r';goTab('cxp')" });
+  if (critEq.length) U.push({ r: true, t: `${critEq.length} pendiente(s) crítico(s) vencido(s) del equipo`, d: critEq.slice(0, 2).map(t => respNom(respKey(t)) + ': ' + t.titulo).join(' · '), go: "VIEW.pAmb='equipo';goTab('tar')" });
+  if (fpsV.length) U.push({ r: false, t: `${fpsV.length} factura(s) por solicitar fuera de plazo`, d: 'La contadora debe recabar XML y PDF', go: "goTab('fps')" });
+  if (P) {
+    const c = P.cajas, q = P.qx, o = P.opt, n = P.nom;
+    if (c.sin_revisar) U.push({ r: c.sin_revisar > 3, t: `${c.sin_revisar} turno(s) de caja con diferencia o sin cierre por revisar`, d: `Últimos 30 días: ${c.dif30} con diferencia · ${c.sin_cierre30} sin cierre`, ext: 'con' });
+    if (num(q.lio_cad)) U.push({ r: true, t: `${q.lio_cad} LIO caducado(s) en existencia`, d: 'Quirófano · retirar o devolver al proveedor', ext: 'qui' });
+    if (num(q.esc_abiertos)) U.push({ r: true, t: `${q.esc_abiertos} aviso(s) de Quirófano sin resolver`, d: Object.entries(q.esc_tipos || {}).map(([k, v]) => `${ESC_T[k] || k.replace(/_/g, ' ')} ${v}`).join(' · '), ext: 'qui' });
+    if (num(q.mat_agotado)) U.push({ r: true, t: `${q.mat_agotado} material(es) de quirófano agotado(s)`, d: `${q.mat_bajo} bajo mínimo en total`, ext: 'qui' });
+    if (num(o.atrasados)) U.push({ r: true, t: `${o.atrasados} trabajo(s) de óptica atrasado(s)`, d: 'Ya pasó la fecha de llegada y no se ha entregado', ext: 'opt' });
+    if (num(o.pagos_sin_verificar)) U.push({ r: false, t: `${o.pagos_sin_verificar} pago(s) de óptica sin verificar`, d: 'Anticipos y liquidaciones pendientes de validar', ext: 'opt' });
+    if (n.ultima && n.ultima.estado && !['pagada', 'autorizada', 'cancelada'].includes(n.ultima.estado) && n.ultima.fecha_pago <= hoy) U.push({ r: true, t: `Nómina ${n.ultima.folio} en ${n.ultima.estado}`, d: `Fecha de pago ${fmtD(n.ultima.fecha_pago)} · falta calcular y autorizar`, ext: 'nom' });
+  }
+  const FAR = datosInventario('far');
+  if (FAR.caducado.length || FAR.acabado.filter(x => !x.pedido).length) U.push({ r: true, t: `Farmacia: ${FAR.caducado.length} caducado(s) · ${FAR.acabado.filter(x => !x.pedido).length} acabado(s) sin pedido`, d: 'Revisar existencias y pedidos', ext: 'far' });
+  U.sort((a, b) => b.r - a.r);
+  const filaU = u => `<div class="list-item" ${u.go ? `onclick="${u.go}"` : u.ext ? `onclick="window.open('${APPS_COE[u.ext][1]}','_blank')"` : ''}><i class="dot ${u.r ? 'hi' : 'lo'}"></i><div class="grow"><b>${esc(u.t)}</b><div class="muted">${esc(u.d || '')}${u.ext ? ' · ' + APPS_COE[u.ext][0] + ' ↗' : ''}</div></div><span class="muted">›</span></div>`;
+
+  // Ingresos (cajas) vs pagos a proveedores · 8 semanas
+  const lunes = d => { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
+  const L0 = lunes(new Date());
+  const sem = Array.from({ length: 8 }, (_, i) => { const a = new Date(L0.getTime() - (7 - i) * 7 * 864e5), b = new Date(a.getTime() + 6 * 864e5); return { a: isoD(a), b: isoD(b) }; });
+  const ingSem = {}; (P ? P.cajas.semanas : []).forEach(s => { ingSem[String(s.w).slice(0, 10)] = num(s.v); });
+  const cols = sem.map((s, i) => { const eg = ABO.filter(a => !a.anulado && a.fecha_pago && a.fecha_pago.slice(0, 10) >= s.a && a.fecha_pago.slice(0, 10) <= s.b && egresoDe(a)).reduce((t, a) => t + num(a.monto), 0), ing = ingSem[s.a] || 0;
+    return { l: fmtD(s.a).slice(0, 5), hoy: i === 7, a: ing, b: eg, tip: `Semana del ${fmtD(s.a)}: ingresos de cajas ${$$(ing)} · pagado a proveedores ${$$(eg)}` }; });
+
+  // Compromisos próximas 4 semanas
+  const comp = [0, 1, 2, 3].map(i => { const a = new Date(hoyD().getTime() + i * 7 * 864e5), b = new Date(a.getTime() + 6 * 864e5), ai = isoD(a), bi = isoD(b);
+    return { l: i === 0 ? 'Esta semana + vencido' : `${fmtD(ai).slice(0, 5)} – ${fmtD(bi).slice(0, 5)}`, v: cxp.filter(f => f.fecha_vencimiento && (i === 0 ? f.fecha_vencimiento <= bi : f.fecha_vencimiento >= ai && f.fecha_vencimiento <= bi)).reduce((s, f) => s + saldo(f), 0) }; });
+  const mxC = Math.max(1, ...comp.map(c => c.v));
+
+  // ── Áreas ──
+  const A = [];
+  A.push(areaCard({ ico: '∑', t: 'Contabilidad', sub: conta ? esc(conta.nombre) + ' · Contadora' : 'Contadora', score: cc ? cc.pct : null, scoreLbl: 'Cumplimiento del mes',
+    cuerpo: (cc ? meter('Cumplimiento del mes', cc.ok, cc.tot, `${cc.ok} de ${cc.tot} criterios cumplidos`, cc.pct < 70 ? 's-ser' : cc.pct < 90 ? 's-warn' : 's-ok') : '') + kvA([
+      ['Pendientes vencidos', String(conta ? TAR.filter(t => esDe(t, conta) && vencidaT(t)).length : 0), conta && TAR.some(t => esDe(t, conta) && vencidaT(t))],
+      ['Facturas por pedir', String(vivas().filter(porSolicitar).length)],
+      ['Fuera de plazo', String(fpsV.length), fpsV.length > 0],
+      ['Pagos propuestos', `${prop.length} · ${moneyK(sumS(prop))}`]]),
+    btns: [`<button class="btn btn-s btn-sm" onclick="DASH_VER='contadora';renderTab()">Ver su tablero</button>`] }));
+  if (P) {
+    const c = P.cajas, cuad = pctDe(c.cuadrados30, c.t30);
+    A.push(areaCard({ ico: '◫', t: 'Cajas y conciliación', sub: 'Farmacia · Clínica y óptica', score: c.t30 ? cuad : null, scoreLbl: 'Turnos cuadrados (30 días)', app: 'con',
+      cuerpo: meter('Turnos cuadrados · 30 días', c.cuadrados30, c.t30, `${c.cuadrados30} de ${c.t30} turnos cerrados sin diferencia`, cuad < 90 ? 's-warn' : 's-ok') + kvA([
+        ['Ingresos del mes', moneyK(c.ing_mes)], ['Hoy', moneyK(c.ing_hoy)],
+        ['Con diferencia (30 d)', `${c.dif30} · ${moneyK(c.dif_monto30)}`, c.dif30 > 0], ['Sin cierre (30 d)', String(c.sin_cierre30), c.sin_cierre30 > 0],
+        ['Por revisar', String(c.sin_revisar), c.sin_revisar > 0], ['Alertas 7 días', String(c.alertas7)]]) }));
+    const q = P.qx, invOk = num(q.mat_activos) - num(q.mat_bajo);
+    A.push(areaCard({ ico: '✚', t: 'Quirófano', sub: 'Cirugía, cotizaciones e inventario', score: num(q.mat_activos) ? pctDe(invOk, q.mat_activos) : null, scoreLbl: 'Material con existencia suficiente', app: 'qui',
+      cuerpo: meter('Conversión 30 días', q.conv30, q.cot30, `${q.conv30} de ${q.cot30} cotizaciones programadas o realizadas`, 's-pr') + meter('Material con existencia suficiente', invOk, q.mat_activos, `${q.mat_bajo} bajo mínimo · ${q.mat_agotado} agotados`, pctDe(invOk, q.mat_activos) < 70 ? 's-ser' : 's-warn') + kvA([
+        ['Cotizado en el mes', `${q.cot_mes} · ${moneyK(q.cot_mes_monto)}`], ['Cotizaciones vigentes', `${q.vigentes} · ${moneyK(q.vigentes_monto)}`],
+        ['Cirugías próximas 14 d', String(q.cir14)], ['Avisos sin resolver', String(q.esc_abiertos), q.esc_abiertos > 0],
+        ['Lotes caducados', String(q.lotes_cad), q.lotes_cad > 0], ['LIO disponibles', `${q.lio_disp}${q.lio_cad ? ' · ' + q.lio_cad + ' caducados' : ''}`, q.lio_cad > 0]]) }));
+  } else ['Cajas y conciliación', 'Quirófano'].forEach((t, i) => A.push(areaCard({ ico: i ? '✚' : '◫', t, sub: i ? 'Cirugía, cotizaciones e inventario' : 'Farmacia · Clínica y óptica', off: true, cuerpo: avisoPan(), app: i ? 'qui' : 'con' })));
+  {
+    const D = FAR, nP = (INV.farProd || []).filter(p => !p.servicio).length, malos = new Set([...D.acabado, ...D.porAcabarse].map(x => x.n)).size;
+    A.push(areaCard({ ico: '℞', t: 'Farmacia', sub: 'Inventario y pedidos', score: nP ? pctDe(nP - malos, nP) : null, scoreLbl: 'Productos con existencia suficiente', app: 'far',
+      cuerpo: nP ? sbar('Productos', [{ t: 'Suficiente', n: Math.max(0, nP - malos), c: 'sb-ok' }, { t: 'Por acabarse', n: D.porAcabarse.length, c: 'sb-warn' }, { t: 'Acabado', n: D.acabado.length, c: 'sb-crit' }]) + kvA([
+        ['Caducados', String(D.caducado.length), D.caducado.length > 0], ['Por caducar (90 d)', String(D.porCaducar.length)],
+        ['Acabados sin pedido', String(D.acabado.filter(x => !x.pedido).length), D.acabado.some(x => !x.pedido)], ['Pedidos abiertos', String(D.pedidos.length)]])
+        : '<div class="mini">Sin inventario registrado aún en COE Farmacia.</div>' }));
+  }
+  if (P) {
+    const o = P.opt, n = P.nom, a = n.asis30 || {}, punt = a.total ? pctDe(a.total - a.retardos - a.faltas, a.total) : null;
+    A.push(areaCard({ ico: '◎', t: 'Óptica', sub: 'Trabajos, cobranza y exámenes', score: num(o.venta_mes) ? Math.min(100, pctDe(o.cobrado_mes, o.venta_mes)) : null, scoreLbl: 'Cobrado de lo vendido en el mes', app: 'opt',
+      cuerpo: meter('Cobrado de lo vendido en el mes', o.cobrado_mes, o.venta_mes, `${moneyK(o.cobrado_mes)} de ${moneyK(o.venta_mes)}`, 's-pr') + kvA([
+        ['Trabajos del mes', String(o.trab_mes)], ['Entregados', String(o.entregados_mes)], ['En proceso', String(o.en_proceso)], ['Atrasados', String(o.atrasados), o.atrasados > 0],
+        ['Saldo por cobrar', moneyK(o.saldo)], ['Pagos sin verificar', String(o.pagos_sin_verificar), o.pagos_sin_verificar > 0], ['Exámenes del mes', String(o.examenes_mes)]]) }));
+    A.push(areaCard({ ico: '☺', t: 'Personal y nómina', sub: `${n.empleados} empleados activos`, score: punt, scoreLbl: 'Puntualidad', app: 'nom',
+      cuerpo: (a.total ? meter('Puntualidad · últimos 30 días con registro', a.total - a.retardos - a.faltas, a.total, `${a.retardos} retardos · ${a.faltas} faltas · ${a.comida} comidas excedidas${n.asis_hasta ? ' · checador hasta ' + fmtD(n.asis_hasta) : ''}`, punt < 80 ? 's-ser' : 's-warn') : '<div class="mini">Sin registros del checador.</div>') + kvA([
+        n.ultima ? ['Última nómina', `${esc(n.ultima.folio)} · ${esc(n.ultima.estado)}`, !['pagada', 'autorizada'].includes(n.ultima.estado)] : null,
+        n.ultima ? ['Fecha de pago', fmtD(n.ultima.fecha_pago)] : null,
+        ['Nómina estimada quincena', nominaEstimada() !== null ? moneyK(nominaEstimada()) : '—'],
+        ['Incidencias del mes', String(n.incidencias_mes)]]) }));
+  } else ['Óptica', 'Personal y nómina'].forEach((t, i) => A.push(areaCard({ ico: i ? '☺' : '◎', t, off: true, cuerpo: avisoPan(), app: i ? 'nom' : 'opt' })));
+  A.push(areaCard({ ico: '✓', t: 'Equipo administrativo', sub: 'Pendientes de todo el equipo', score: pctEq, scoreLbl: 'Cumplimiento a tiempo del mes',
+    cuerpo: meter('Pendientes a tiempo · mes', dc.aTiempo.length, dc.tar.length, `${dc.aTiempo.length} a tiempo · ${dc.tarde.length} tarde · ${dc.noCump.length} no cumplidos`, pctEq < 70 ? 's-ser' : pctEq < 90 ? 's-warn' : 's-ok') + kvA([
+      ['Críticos vencidos', String(critEq.length), critEq.length > 0], ['En plazo', String(dc.enPlazo.length)], ['Pedidos por autorizar', String(pedAut.length), pedAut.length > 0]]),
+    btns: [`<button class="btn btn-s btn-sm" onclick="goTab('rep')">Desempeño</button>`, `<button class="btn btn-s btn-sm" onclick="reporteDia()">Reporte del día</button>`] }));
+
+  const c = P ? P.cajas : null;
+  return `<div class="pad">${helloDir(sel)}
+    <div class="kps">
+      ${kp('Ingresos de cajas · mes', P ? moneyK(ingMes) : '—', P ? `hoy ${moneyK(c.ing_hoy)} · ${MESES[new Date().getMonth()]}` : (PAN.cargando ? 'leyendo…' : 'requiere PIN'), P ? '' : 'panoramaConPin()')}
+      ${kp('Pagado a proveedores · mes', moneyK(pagosMes), P ? `resultado de caja ${moneyK(ingMes - pagosMes)}` : 'pagos registrados en Finanzas', "goTab('pag')")}
+      ${kp('Por pagar vencido', moneyK(sumS(venc)), `${venc.length} cuentas · próximos 7 días ${moneyK(sumS(prox7))}`, "VIEW.cxpF='r';goTab('cxp')", venc.length ? 't-rojo' : '')}
+      ${kp('Por cobrar', moneyK(sumS(cxc)), `${cxc.filter(f => semaforo(f) === 'r').length} vencidas`, "goTab('cxc')")}
+      ${kp('Espera su firma', String(firmas), `${prop.length} pagos · ${pedAut.length} pedidos · ${conf.length} informes`, U.length ? "document.getElementById('bxAt')?.scrollIntoView({behavior:'smooth'})" : '', firmas ? 't-amar' : '')}
+      ${kp('Cumplimiento del equipo', pctEq + '%', `${dc.noCump.length} no cumplidos · ${critEq.length} críticos vencidos`, "goTab('rep')", critEq.length ? 't-rojo' : '')}
+    </div>
+    <div class="dgrid">
+      <div id="bxAt">${dcard('Requiere su atención', U.length ? U.slice(0, 12).map(filaU).join('') + (U.length > 12 ? `<div class="muted">y ${U.length - 12} más…</div>` : '') : '<div class="muted">Todo en orden.</div>', U.length)}</div>
+      ${dcard('Ingresos de cajas vs pagos a proveedores · 8 semanas', colPares(cols, [['s-pr', 'Ingresos de cajas (Conciliación)'], ['s-neu', 'Pagado a proveedores (Finanzas)']]) + (P ? '' : `<div class="mini" style="margin-top:6px">Los ingresos de cajas aparecen al confirmar con su PIN.</div>`))}
+    </div>
+    <div class="dgrid">
+      ${dcard('De dónde viene el dinero · mes', P ? sbar('Por forma de pago', [{ t: 'Efectivo', n: num(c.efe_mes), c: 's-ok' }, { t: 'Transferencia', n: num(c.trf_mes), c: 's-warn' }, { t: 'Tarjeta', n: num(c.tar_mes), c: 's-neu' }], '', moneyK)
+        + sbar('Por sede', (c.sedes || []).map((s, i) => ({ t: s.sede, n: num(s.v), c: ['s-ok', 's-warn', 's-neu', 's-ser'][i % 4] })), '', moneyK)
+        + sbar('Óptica en el mes', [{ t: 'Cobrado', n: num(P.opt.cobrado_mes), c: 's-ok' }, { t: 'Por cobrar', n: Math.max(0, num(P.opt.venta_mes) - num(P.opt.cobrado_mes)), c: 's-neu' }], '', moneyK)
+        + sbar('Cotizaciones de cirugía vigentes', [{ t: 'Vigentes sin programar', n: num(P.qx.vigentes_monto), c: 's-warn' }], '', moneyK) : avisoPan())}
+      ${dcard('Compromisos de pago · próximas 4 semanas', comp.map(s => `<div class="meter"><div class="sbar-h"><span>${s.l}</span><b>${moneyK(s.v)}</b></div><div class="sbar-t"><i class="s-pr" style="flex:${Math.round(s.v / mxC * 100)}"></i><i style="flex:${100 - Math.round(s.v / mxC * 100)};background:var(--sf3)"></i></div></div>`).join('')
+        + `<div class="area-kv" style="margin-top:6px"><span>Nómina estimada por quincena</span><b>${nominaEstimada() !== null ? moneyK(nominaEstimada()) : '—'}</b><span>Recurrentes sin pagar (35 días)</span><b>${buildRecOcurrencias(35).filter(o => !o.factura).length}</b></div>`)}
+    </div>
+    <div class="ph3" style="margin:6px 0 10px"><h3 style="font-size:16px">Desempeño por área</h3><span class="muted">${P && PAN.at ? 'actualizado ' + new Date(PAN.at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : ''}</span>${P ? `<button class="btn btn-s btn-sm" onclick="${PAN.pin ? 'panoramaConPin()' : 'cargarPanorama()'}">↻</button>` : ''}</div>
+    <div class="areas">${A.join('')}</div>
+    <div class="mini" style="margin:4px 0 20px">Los porcentajes de cada área: verde ≥ 90 %, ámbar 70 – 89 %, rojo &lt; 70 %. Toque «Finanzas a detalle» para firmar pagos, pedidos e informes.</div>
+  </div>`;
+}
+const ESC_T = { carro_vencido: 'Carro rojo vencido', carro_por_vencer: 'Carro rojo por vencer', carro_revision: 'Revisión de carro rojo', inventario_completo: 'Inventario completo', inventario_criticos: 'Inventario de críticos', lio_vencido: 'LIO vencido', lio_por_caducar: 'LIO por caducar' };
 </script>
 </body></html>

@@ -103,3 +103,9 @@ alter table public.fin_tareas add column if not exists requiere_conformidad bool
 -- 11) (17/10/2026) Activar/quitar avisos en un equipo se autoriza con el PIN del Director General (fin_config 'director_general_id'),
 --     aunque la sesión abierta sea de otra persona: fin_push_suscribir(p_usuario destino, p_pin del Director, ...) y fin_push_quitar(p_usuario, p_pin, p_endpoint).
 --     La versión anterior fin_push_quitar(p_usuario, p_endpoint) quedó inhabilitada (responde director_requerido).
+-- 12) (19/10/2026) Panorama COE para el tablero del Director
+--   public.fin_panorama(p_usuario default null, p_pin default null): security definer, solo rol admin/direccion.
+--   Identifica al usuario por la sesión segura (app_metadata.apps contiene 'fin' → app_user_id) o, si no hay, con usuario + PIN.
+--   Devuelve métricas agregadas (sin datos de pacientes) de: Conciliación (con_turnos, con_cierres_dia, con_alertas),
+--   Quirófano (qx_cotizaciones, qx_cirugias, qx_materiales/qx_lotes, qx_lio_unidades, qx_escalamientos),
+--   Óptica (opt_trabajos, opt_pagos, opt_examenes) y Nómina (nom_empleados, nom_nominas, nom_asistencias, nom_incidencias).
