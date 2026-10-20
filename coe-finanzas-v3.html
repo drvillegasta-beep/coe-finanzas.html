@@ -646,6 +646,14 @@ i.dot{flex:0 0 10px;height:10px;border-radius:50%;margin-top:6px;align-self:flex
 .tema-op[data-tm="grafito"] .sw4{background:linear-gradient(90deg,#1B1D20 50%,#8DB8A5 50%)}.tema-op[data-tm="noche"] .sw4{background:linear-gradient(90deg,#141C2B 50%,#86ABE0 50%)}.tema-op[data-tm="pizarra"] .sw4{background:linear-gradient(90deg,#18191C 50%,#C9AE7C 50%)}.tema-op[data-tm="claro"] .sw4{background:linear-gradient(90deg,#FFFFFF 50%,#2F6F66 50%);border:1px solid #ccc}
 .tbtn-tema{background:none;border:1px solid var(--br);color:var(--tm);border-radius:10px;width:34px;height:34px;cursor:pointer;font-size:15px;display:grid;place-items:center}.tbtn-tema:hover{color:var(--pr);border-color:var(--pr)}
 @media (max-width:600px){.dgrid{grid-template-columns:1fr}.kp b{font-size:26px}.cch{height:150px}.ccv{font-size:9px}}
+/* Subir pagos */
+.spit{display:flex;gap:14px;border:1px solid var(--br);background:var(--sf2);border-radius:14px;padding:12px;margin-top:12px}
+.spit.err{border-color:var(--wn)}.spit.off{opacity:.55}
+.spth{flex:0 0 92px;height:120px;border-radius:10px;overflow:hidden;background:var(--sf3);display:grid;place-items:center;border:1px solid var(--br);text-decoration:none}
+.spth img{width:100%;height:100%;object-fit:cover}.spth span{font-weight:800;color:var(--tm);font-size:13px}
+.spbd{flex:1;min-width:0}.sphd{display:flex;gap:10px;align-items:center;margin-bottom:8px}.sphd b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:45%}.sphd .mini{flex:1}
+.spft{margin-top:6px;font-size:12.5px}
+@media (max-width:600px){.spit{flex-direction:column}.spth{flex-basis:auto;height:140px;width:100%}}
 </style>
 </head>
 <body>
@@ -1759,7 +1767,7 @@ function rRec() {
     .sort((a, b) => (nomRef(a) ? 1 : 0) - (nomRef(b) ? 1 : 0) || nomEnt(a.entidad_id).localeCompare(nomEnt(b.entidad_id)));
   const body = L.length ? `<table><thead><tr><th>Proveedor</th><th>Concepto</th><th style="text-align:right">Monto</th><th>Frecuencia</th><th>Prioridad</th>${puede('recurrentes') ? '<th></th>' : ''}</tr></thead><tbody>${L.map(r => `<tr><td>${esc(nomEnt(r.entidad_id))}</td><td><b>${esc(r.descripcion)}</b>${r.fecha_fin ? `<div class="mini">hasta ${fmtD(r.fecha_fin)}</div>` : ''}</td><td class="amt" style="text-align:right">${r.monto ? $$(r.monto) : nomRef(r) ? '<span class="mini">según COE Nómina</span>' : '<span class="mini">variable</span>'}</td><td>${FREC[r.frecuencia] || r.frecuencia}<div class="mini">${diasRec(r)}</div></td><td>${priBdg(r.prioridad)}</td>${puede('recurrentes') ? `<td><div class="rowact"><button class="btn btn-s btn-sm" onclick="editarRec('${r.id}')">Editar</button><button class="btn btn-d btn-sm" onclick="eliminarRec('${r.id}')">Eliminar</button></div></td>` : ''}</tr>`).join('')}</tbody></table>` : '<div class="emp">Sin pagos recurrentes</div>';
   return `<div class="ph"><div><div class="ptit">Pagos recurrentes</div><div class="psub">Solo Dirección General los modifica · la Contadora los ve en su calendario y los paga con comprobante</div></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-p btn-sm" onclick="openTransferencias()">⬆ Transferencias de honorarios y nómina</button><button class="btn btn-s btn-sm" onclick="imprimirRecurrentes()">🖨 Hoja del mes</button>${puede('recurrentes') ? `<button class="btn btn-p btn-sm" onclick="editarRec()">+ Nuevo recurrente</button>` : ''}</div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${puede('cxp') ? '<button class="btn btn-p btn-sm" onclick="openSubirPagos()">⬆ Subir pagos</button>' : ''}<button class="btn btn-s btn-sm" onclick="openTransferencias()">Honorarios y nómina</button><button class="btn btn-s btn-sm" onclick="imprimirRecurrentes()">🖨 Hoja del mes</button>${puede('recurrentes') ? `<button class="btn btn-p btn-sm" onclick="editarRec()">+ Nuevo recurrente</button>` : ''}</div></div>
   <div class="pad"><div class="tc">${body}</div></div>`;
 }
 // Recurrentes ligados a COE Nómina (notas 'nom:<empleado>' o 'nom:fijo')
@@ -1834,7 +1842,7 @@ function openTransferencias() {
   }).join('');
   modal('Transferencias de honorarios y nómina', `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px;flex-wrap:wrap">
       <div class="mini" style="max-width:520px">Sube aquí el comprobante de cada transferencia. En honorarios, la Contadora recibe en automático el <b>pendiente crítico</b> «Solicitar facturas de nómina» por las transferencias del 15 y del fin de mes, con límite el <b>${fmtD(finISO)}</b>; se cierra solo al subir los XML.</div>
-      <div style="display:flex;gap:6px;align-items:center"><button class="btn btn-s btn-sm" onclick="VIEW.trOff--;openTransferencias()">‹</button><b style="text-transform:capitalize;min-width:120px;text-align:center">${mesTxt}</b><button class="btn btn-s btn-sm" onclick="VIEW.trOff++;openTransferencias()">›</button></div></div>
+      <div style="display:flex;gap:6px;align-items:center">${puede('cxp') ? '<button class="btn btn-p btn-sm" onclick="openSubirPagos()">⬆ Subir varios comprobantes</button>' : ''}<button class="btn btn-s btn-sm" onclick="VIEW.trOff--;openTransferencias()">‹</button><b style="text-transform:capitalize;min-width:120px;text-align:center">${mesTxt}</b><button class="btn btn-s btn-sm" onclick="VIEW.trOff++;openTransferencias()">›</button></div></div>
     ${filas ? `<div class="tc"><table><thead><tr><th>Prestador</th><th>Quincena 15</th><th>Quincena fin de mes</th><th>Factura</th></tr></thead><tbody>${filas}</tbody></table></div>` : '<div class="emp">Sin pagos de nómina u honorarios en este mes</div>'}`, '', 'lg');
 }
 const diasRec = r => r.frecuencia === 'mensual_ultimo' ? 'último día' : r.frecuencia === 'semanal' ? ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'][r.dia_vencimiento || 0] : (r.dia_vencimiento ? 'día ' + r.dia_vencimiento : '') + (r.dia_vencimiento_2 ? ' y ' + r.dia_vencimiento_2 : '') + (r.mes_vencimiento ? ' de ' + MESES[r.mes_vencimiento - 1] : '');
@@ -2049,7 +2057,7 @@ function dashDirectorFin(sel) {
   const d = datosCumplimiento('mensual'), pct = d.tar.length ? Math.round(d.aTiempo.length / d.tar.length * 100) : 100;
   const topProv = Object.entries(cxp.reduce((o, f) => { o[f.entidad_id] = (o[f.entidad_id] || 0) + saldo(f); return o; }, {})).sort((a, b) => b[1] - a[1]).slice(0, 6);
   const ult = CIE[0];
-  return cabDash('Tablero del Director · Finanzas', esc(RS[0]?.nombre || ''), segDir() + sel + (puede('cxp') ? `<button class="btn btn-p btn-sm" onclick="openTransferencias()">⬆ Transferencias de honorarios y nómina</button>` : '')) + `<div class="pad">
+  return cabDash('Tablero del Director · Finanzas', esc(RS[0]?.nombre || ''), segDir() + sel + (puede('cxp') ? `<button class="btn btn-p btn-sm" onclick="openSubirPagos()">⬆ Subir pagos</button><button class="btn btn-s btn-sm" onclick="openTransferencias()">Honorarios y nómina</button>` : '')) + `<div class="pad">
     <div class="dg">
       ${kpi('Requiere tu firma', String(pedAut.length + prop.length), `${pedAut.length} pedidos · ${prop.length} pagos propuestos`, (pedAut.length + prop.length) ? 'var(--wn)' : 'var(--sc)')}
       ${kpi('Propuesta de pagos', $$(sumS(prop)), prop.length ? 'preparada por la contadora' : 'sin propuesta', '', "document.getElementById('bxProp').scrollIntoView({behavior:'smooth'})")}
@@ -3515,7 +3523,7 @@ function helloDir(sel) {
   const h = new Date().getHours(), saludo = h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
   const nom = String(cu.nombre || '').replace(/^(dr|dra)\.?\s+/i, '').split(' ').slice(0, 2).join(' ');
   return `<div class="hello"><div style="display:flex;gap:12px;align-items:center"><img src="assets/coe-logo.png" alt="COE" style="height:40px;width:auto"><div><div class="muted">${new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · Centro Ocular Especializado</div><h2>${saludo}, ${esc(nom)}</h2></div></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${segDir()}${sel}${puede('cxp') ? `<button class="btn btn-s btn-sm" onclick="openTransferencias()">⬆ Transferencias</button>` : ''}<button class="btn btn-s btn-sm" onclick="ventanaTuDia('aviso',true)">Tu día</button></div></div>${bannerAvisos()}`;
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${segDir()}${sel}${puede('cxp') ? `<button class="btn btn-p btn-sm" onclick="openSubirPagos()">⬆ Subir pagos</button>` : ''}<button class="btn btn-s btn-sm" onclick="ventanaTuDia('aviso',true)">Tu día</button></div></div>${bannerAvisos()}`;
 }
 function dashPanorama(sel) {
   const P = panoramaVigente(), hoy = hoyISO(), mes = hoy.slice(0, 7);
@@ -3652,5 +3660,186 @@ function dashPanorama(sel) {
   </div>`;
 }
 const ESC_T = { carro_vencido: 'Carro rojo vencido', carro_por_vencer: 'Carro rojo por vencer', carro_revision: 'Revisión de carro rojo', inventario_completo: 'Inventario completo', inventario_criticos: 'Inventario de críticos', lio_vencido: 'LIO vencido', lio_por_caducar: 'LIO por caducar' };
+
+// ══ SUBIR PAGOS: uno o varios comprobantes (transferencias, depósitos, efectivo) ══
+// Cada archivo se lee (monto, fecha, forma, referencia, beneficiario) y el sistema sugiere a qué corresponde:
+// quincena de honorarios/nómina, pago recurrente, cuenta por pagar abierta o un pago nuevo a un proveedor (con alta si no existe).
+// Al aplicar, el pago queda registrado con su comprobante y, si el proveedor factura, entra a «Facturas por solicitar»
+// con límite el fin del mes del pago: la Contadora la recaba.
+let SP = { items: [], oc: [] };
+const finMesDe = f => { const d = new Date((f || hoyISO()) + 'T12:00:00'); return isoD(new Date(d.getFullYear(), d.getMonth() + 1, 0)); };
+function openSubirPagos() {
+  if (!puede('cxp')) { toast('No tienes permiso para registrar pagos', 'warning'); return; }
+  SP = { items: [], oc: buildRecOcurrencias(25).filter(o => o.estado !== 'pagado' && o.diasDiff >= -60 && (!o.factura || saldo(o.factura) > 0.01)) };
+  modal('Subir pagos y transferencias', `<div class="mini" style="margin-bottom:12px">Sube uno o varios comprobantes (PDF o foto). El sistema lee el monto y sugiere a qué corresponde; si no está seguro, elige tú: quincena de honorarios o nómina, pago recurrente, cuenta por pagar o pago nuevo a un proveedor (y si no existe, lo das de alta aquí). Lo que necesite factura pasa a <b>Facturas por solicitar</b> de la Contadora con límite el fin de mes.</div>
+    <div class="drop" id="spDrop"><input type="file" multiple accept="application/pdf,image/*" onchange="spAgregar(this.files);this.value=''">
+      <div class="big">⬆</div><div><b>Arrastra o elige los comprobantes</b></div><div class="mini">Puedes elegir varios a la vez · PDF del banco, captura de pantalla o foto</div></div>
+    <div id="spList"></div>
+    <div class="mini" style="margin-top:10px"><a href="#" onclick="openTransferencias();return false">Ver el control de honorarios y nómina del mes ›</a></div>`,
+    `<button class="btn btn-s" onclick="CM('mGen')">Cerrar</button><button class="btn btn-p" id="spGo" onclick="spAplicar()" disabled>Firmar y registrar</button>`, 'xl');
+  const dz = document.getElementById('spDrop');
+  ['dragenter', 'dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('over'); }));
+  dz.addEventListener('drop', e => spAgregar(e.dataTransfer.files));
+}
+async function spAgregar(lista) {
+  const nuevos = Array.from(lista || []).filter(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name) || f.type.startsWith('image/'));
+  if (!nuevos.length) { toast('Solo PDF o imágenes', 'warning'); return; }
+  const its = nuevos.map(file => ({ id: Math.random().toString(36).slice(2), file, url: URL.createObjectURL(file), estado: 'leyendo…', sel: '', metodo: 'Transferencia', fecha: hoyISO(), monto: '', ref: '', concepto: '', cat: '', ent: '', alta: { nombre: '', rfc: '', nf: false } }));
+  SP.items.push(...its); spPintar();
+  for (const it of its) {
+    try {
+      it.sha = await sha256Hex(await it.file.arrayBuffer());
+      const ya = ABO.find(a => !a.anulado && String(a.comprobante_url || '').includes(it.sha.slice(0, 12)));
+      const rep = SP.items.find(x => x !== it && x.sha === it.sha);
+      if (rep) it.dup = `Es el mismo archivo que «${rep.file.name}»`;
+      else if (ya) { const f = FAC.find(x => x.id === ya.factura_id); it.dup = `Este comprobante ya está registrado: ${f ? nomEnt(f.entidad_id) + ' · ' : ''}${$$(ya.monto)} el ${fmtD(ya.fecha_pago)}`; }
+      it.lect = await leerComprobante(it.file, p => { it.estado = p; spPintar(); });
+    } catch (e) { it.lect = {}; }
+    const L = it.lect || {};
+    it.monto = L.monto || ''; it.fecha = L.fecha || hoyISO(); it.metodo = L.metodo || 'Transferencia'; it.ref = L.referencia || '';
+    it.estado = L.monto ? `leído · ${$$(L.monto)}${L.beneficiario ? ' · ' + L.beneficiario : ''}` : 'no se leyó el monto · escríbelo';
+    spSugerir(it);
+    spPintar();
+  }
+}
+// Proveedor que aparece en el comprobante (CLABE, RFC o nombre)
+function spEntDe(it) {
+  const T = normTx((it.lect?.texto || '') + ' ' + (it.lect?.beneficiario || '')), Tn = T.replace(/\s/g, '');
+  const prov = ENT.filter(e => e.activo !== false && e.tipo !== 'cliente');
+  return prov.find(e => e.clabe && String(e.clabe).length >= 10 && Tn.includes(String(e.clabe).replace(/\D/g, '').slice(-10)))
+    || prov.find(e => e.rfc && e.rfc.length >= 12 && Tn.includes(normTx(e.rfc).replace(/\s/g, '')))
+    || prov.find(e => normTx(e.nombre).length >= 6 && T.includes(normTx(e.nombre)))
+    || (it.lect?.beneficiario ? prov.find(e => simil(e.nombre, it.lect.beneficiario) >= 0.6) : null) || null;
+}
+const spEsperado = o => o.factura ? saldo(o.factura) : nomRef(o.rec) ? montoNomina(o.rec, isoD(o.fecha)) : o.rec.monto ? num(o.rec.monto) : null;
+function spOpciones(it) {
+  const m = num(it.monto), eDet = it.entDet;
+  const sc = (eid, esperado, nombre) => (m && esperado && casi(esperado, m, 1) ? 3 : m && esperado && Math.abs(esperado - m) <= esperado * 0.03 ? 1 : 0) + (eDet && eid === eDet.id ? 3 : 0) + (it.lect?.beneficiario && simil(nombre, it.lect.beneficiario) >= 0.5 ? 2 : 0);
+  const O = [];
+  SP.oc.forEach((o, i) => { const ref = nomRef(o.rec), esp = spEsperado(o), n = ref === 'fijo' ? 'Nómina personal fijo' : nomEnt(o.rec.entidad_id);
+    O.push({ v: 'oc:' + i, g: ref ? 'hon' : 'rec', s: sc(o.rec.entidad_id, esp, n), t: `${ref === 'fijo' ? 'Nómina · personal fijo' : ref ? 'Honorarios · ' + n : n + ' · ' + o.rec.descripcion} · ${fmtD(isoD(o.fecha))}${esp ? ' · ' + $$(esp) : ''}` }); });
+  abiertas('egreso').filter(f => !f.recurrente_id).forEach(f => O.push({ v: 'cxp:' + f.id, g: 'cxp', s: sc(f.entidad_id, saldo(f), nomEnt(f.entidad_id)), t: `${nomEnt(f.entidad_id)} · ${String(f.descripcion || '').slice(0, 50)} · saldo ${$$(saldo(f))}${f.fecha_vencimiento ? ' · vence ' + fmtD(f.fecha_vencimiento) : ''}` }));
+  return O;
+}
+function spSugerir(it) {
+  it.entDet = spEntDe(it);
+  if (it.dup) { it.sel = 'nada'; return; }
+  const O = spOpciones(it).sort((a, b) => b.s - a.s);
+  it.sugerido = O[0] && O[0].s >= 3 ? O[0].v : null;
+  if (it.sugerido) { it.sel = it.sugerido; return; }
+  it.sel = 'nuevo';
+  if (it.entDet) { it.ent = it.entDet.id; it.cat = it.entDet.categoria || ''; }
+}
+function spDestino(it) {
+  if (it.sel.startsWith('oc:')) { const o = SP.oc[+it.sel.slice(3)]; return { o, eid: o.rec.entidad_id, nf: nomRef(o.rec) === 'fijo' || !!ent(o.rec.entidad_id)?.no_factura, esp: spEsperado(o) }; }
+  if (it.sel.startsWith('cxp:')) { const f = FAC.find(x => x.id === it.sel.slice(4)); return { f, eid: f?.entidad_id, nf: !!ent(f?.entidad_id)?.no_factura || !!f?.uuid_cfdi || !!f?.xml_url, esp: f ? saldo(f) : null }; }
+  if (it.sel === 'nuevo') return { eid: it.ent === '__alta' ? null : it.ent, nf: it.ent === '__alta' ? it.alta.nf : !!ent(it.ent)?.no_factura };
+  return {};
+}
+function spProblema(it) {
+  if (/leyendo|preparando/.test(it.estado)) return 'leyendo';
+  if (it.sel === 'nada') return null;
+  if (!it.sel) return 'Elige a qué corresponde';
+  if (!(num(it.monto) > 0)) return 'Escribe el monto';
+  if (!it.fecha) return 'Escribe la fecha del pago';
+  if (it.sel === 'nuevo') {
+    if (!it.ent) return 'Elige el proveedor';
+    if (it.ent === '__alta' && !it.alta.nombre.trim()) return 'Escribe el nombre del proveedor nuevo';
+    if (!it.concepto.trim()) return 'Escribe el concepto del pago';
+  }
+  const D = spDestino(it);
+  if (D.f && num(it.monto) > saldo(D.f) + 1) return `El monto es mayor que el saldo de la cuenta (${$$(saldo(D.f))})`;
+  return null;
+}
+function spPintar() {
+  const el = document.getElementById('spList'); if (!el) return;
+  const G = { hon: 'Honorarios y nómina (quincenas sin pago)', rec: 'Pagos recurrentes sin pagar', cxp: 'Cuentas por pagar abiertas' };
+  el.innerHTML = SP.items.map((it, i) => {
+    const O = spOpciones(it), D = spDestino(it), p = spProblema(it), img = it.file.type.startsWith('image/');
+    const opts = `<option value="">— Elige a qué corresponde —</option>${it.sugerido ? `<option value="${it.sugerido}" ${it.sel === it.sugerido ? 'selected' : ''}>★ Sugerido: ${esc(O.find(o => o.v === it.sugerido)?.t || '')}</option>` : ''}
+      <option value="nuevo" ${it.sel === 'nuevo' ? 'selected' : ''}>＋ Pago nuevo a un proveedor (sin cuenta previa)</option>
+      ${Object.entries(G).map(([g, t]) => { const L = O.filter(o => o.g === g && o.v !== it.sugerido).sort((a, b) => b.s - a.s); return L.length ? `<optgroup label="${t}">${L.map(o => `<option value="${o.v}" ${it.sel === o.v ? 'selected' : ''}>${esc(o.t)}</option>`).join('')}</optgroup>` : ''; }).join('')}
+      <option value="nada" ${it.sel === 'nada' ? 'selected' : ''}>✕ No registrar este archivo</option>`;
+    const fac = it.sel === 'nada' || !it.sel ? '' : D.nf ? '<span class="mini">Sin factura (proveedor que no factura o nómina por plantilla)</span>' : `<span class="mini">Factura: la Contadora la solicita antes del <b>${fmtD(finMesDe(it.fecha))}</b></span>`;
+    return `<div class="spit ${p && p !== 'leyendo' ? 'err' : ''} ${it.sel === 'nada' ? 'off' : ''}">
+      <a class="spth" href="${it.url}" target="_blank" rel="noopener" title="Abrir">${img ? `<img src="${it.url}" alt="">` : '<span>PDF</span>'}</a>
+      <div class="spbd">
+        <div class="sphd"><b>${esc(it.file.name)}</b><span class="mini">${esc(it.estado)}</span><span class="mcls" title="Quitar" onclick="SP.items.splice(${i},1);spPintar()">✕</span></div>
+        ${it.dup ? `<div class="warnbox" style="margin:6px 0">${esc(it.dup)}</div>` : ''}
+        <div class="fgrd">
+          <div class="fgrp sp2"><label>Corresponde a</label><select onchange="SP.items[${i}].sel=this.value;spPintar()">${opts}</select></div>
+          ${it.sel === 'nuevo' ? `<div class="fgrp"><label>Proveedor</label><select onchange="const it=SP.items[${i}];it.ent=this.value;it.cat=ent(this.value)?.categoria||it.cat;if(this.value==='__alta'&&!it.alta.nombre)it.alta.nombre=it.lect?.beneficiario||'';spPintar()"><option value="">— Elige —</option><option value="__alta" ${it.ent === '__alta' ? 'selected' : ''}>＋ Dar de alta proveedor nuevo…</option>${ENT.filter(e => e.activo !== false && e.tipo !== 'cliente').sort((a, b) => a.nombre.localeCompare(b.nombre)).map(e => `<option value="${e.id}" ${it.ent === e.id ? 'selected' : ''}>${esc(e.nombre)}${it.entDet?.id === e.id ? ' ★' : ''}</option>`).join('')}</select></div>
+            <div class="fgrp"><label>Categoría</label><select onchange="SP.items[${i}].cat=this.value">${catOpts(it.cat)}</select></div>
+            ${it.ent === '__alta' ? `<div class="fgrp"><label>Nombre del proveedor nuevo</label><input type="text" value="${esc(it.alta.nombre)}" placeholder="${esc(it.lect?.beneficiario || 'Razón social o nombre')}" oninput="SP.items[${i}].alta.nombre=this.value" onchange="spPintar()"></div>
+              <div class="fgrp"><label>RFC (opcional)</label><input type="text" value="${esc(it.alta.rfc)}" oninput="SP.items[${i}].alta.rfc=this.value.toUpperCase()"></div>
+              <div class="fgrp sp2"><label style="display:flex;gap:8px;align-items:center;cursor:pointer"><input type="checkbox" style="width:auto" ${it.alta.nf ? 'checked' : ''} onchange="SP.items[${i}].alta.nf=this.checked;spPintar()"> Este proveedor no da factura</label></div>` : ''}
+            <div class="fgrp sp2"><label>Concepto</label><input type="text" value="${esc(it.concepto)}" placeholder="Ej. Mantenimiento del aire acondicionado" oninput="SP.items[${i}].concepto=this.value" onchange="spPintar()"></div>` : ''}
+          ${it.sel !== 'nada' ? `<div class="fgrp"><label>Monto${D.esp ? ` <span class="mini">(esperado ${$$(D.esp)})</span>` : ''}</label><div class="ipfx"><span>$</span><input type="number" step="0.01" value="${it.monto}" onchange="SP.items[${i}].monto=this.value;spPintar()"></div></div>
+          <div class="fgrp"><label>Fecha del pago</label><input type="date" value="${it.fecha}" onchange="SP.items[${i}].fecha=this.value;spPintar()"></div>
+          <div class="fgrp"><label>Forma de pago</label><select onchange="SP.items[${i}].metodo=this.value">${['Transferencia', 'Efectivo', 'Tarjeta', 'Cheque', 'Domiciliado'].map(x => `<option ${it.metodo === x ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
+          <div class="fgrp"><label>Referencia / rastreo</label><input type="text" value="${esc(it.ref)}" oninput="SP.items[${i}].ref=this.value"></div>` : ''}
+        </div>
+        <div class="spft">${p && p !== 'leyendo' ? `<b style="color:var(--dg)">${esc(p)}</b>` : fac}</div>
+      </div></div>`;
+  }).join('');
+  const go = document.getElementById('spGo');
+  if (go) { const v = SP.items.filter(it => it.sel !== 'nada'); go.disabled = !v.length || SP.items.some(it => spProblema(it)); go.textContent = v.length ? `Firmar y registrar ${v.length} pago(s)` : 'Firmar y registrar'; }
+}
+let _spAplicando = false;
+async function spAplicar() {
+  if (_spAplicando) return;
+  const L = SP.items.filter(it => it.sel !== 'nada');
+  if (!L.length || SP.items.some(it => spProblema(it))) return;
+  let pin; try { pin = await askPin('Firmar pagos', `${L.length} pago(s) · ${$$(L.reduce((s, it) => s + num(it.monto), 0))}`); } catch { return; }
+  _spAplicando = true;
+  const go = document.getElementById('spGo'); go.disabled = true; go.textContent = 'Registrando…';
+  const R = (fn, a) => rpcConPin(fn, a, pin, ['fin_crear_cxp', 'fin_pagar'].includes(fn) ? null : undefined);
+  const ok = [], fallas = [], altas = {};
+  for (const it of L) {
+    try {
+      const m = num(it.monto);
+      const up = await subirArchivo(it.file, 'pagos');
+      let fid, nombre;
+      if (it.sel.startsWith('oc:')) {
+        const o = SP.oc[+it.sel.slice(3)], r = o.rec; nombre = nomRef(r) === 'fijo' ? 'Nómina personal fijo' : nomEnt(r.entidad_id);
+        fid = o.factura?.id;
+        if (!fid) {
+          const c = await R('fin_crear_cxp', { p_datos: { tipo: 'egreso', entidad_id: r.entidad_id, descripcion: `${r.descripcion} — ${fmtD(isoD(o.fecha))}`, monto_total: m, fecha_vencimiento: isoD(o.fecha), categoria: r.categoria, documento_tipo: 'sin_factura', recurrente_id: r.id, recurrente_periodo: isoD(o.fecha), origen: 'recurrente' } });
+          if (!c.ok) throw new Error(/duplicate|recurrente_periodo_uq/.test(c.error || '') ? 'ese periodo ya estaba registrado' : (ERR[c.error] || c.error));
+          fid = c.id;
+        }
+      } else if (it.sel.startsWith('cxp:')) {
+        fid = it.sel.slice(4); nombre = nomEnt(FAC.find(f => f.id === fid)?.entidad_id);
+      } else {
+        let eid = it.ent;
+        if (eid === '__alta') {
+          const k = normTx(it.alta.nombre);
+          if (!altas[k]) {
+            const r = await R('fin_guardar_proveedor', { p_datos: { nombre: it.alta.nombre.trim(), rfc: it.alta.rfc, categoria: it.cat, no_factura: it.alta.nf, desde_cfdi: true } });
+            if (!r.ok) throw new Error(ERR[r.error] || r.error);
+            altas[k] = r.id; ENT.push({ id: r.id, nombre: it.alta.nombre.trim(), tipo: 'proveedor', no_factura: it.alta.nf, activo: true });
+          }
+          eid = altas[k];
+        }
+        nombre = nomEnt(eid);
+        const c = await R('fin_crear_cxp', { p_datos: { tipo: 'egreso', entidad_id: eid, descripcion: it.concepto.trim(), monto_total: m, fecha_vencimiento: it.fecha, categoria: it.cat || ent(eid)?.categoria || '', documento_tipo: 'sin_factura', sede: cu.sede || '' } });
+        if (!c.ok) throw new Error(ERR[c.error] || c.error);
+        fid = c.id;
+      }
+      const p = await R('fin_pagar', { p_factura: fid, p_monto: m, p_fecha: it.fecha, p_metodo: it.metodo, p_referencia: it.ref || '', p_comprobante_url: up.url, p_sha256: up.sha });
+      if (!p.ok) throw new Error(ERR[p.error] || p.error);
+      ok.push(`${nombre} · ${$$(m)}${spDestino(it).nf ? '' : ' · factura por solicitar'}`);
+      it.sel = 'nada'; it.hecho = true;
+    } catch (e) { fallas.push(`${it.file.name}: ${e.message}`); if (/PIN|bloqueado/i.test(e.message)) break; }
+  }
+  _spAplicando = false;
+  await cargarTodo();
+  document.getElementById('mGenB').innerHTML = `${ok.length ? `<div class="okbox"><b>${ok.length} pago(s) registrados con su comprobante</b><br>${ok.map(esc).join('<br>')}</div>` : ''}${fallas.length ? `<div class="errbox">${fallas.map(esc).join('<br>')}</div>` : ''}
+    <div class="mini" style="margin-top:10px">Los pagos que requieren factura ya están en «Facturas por solicitar» de la Contadora, con límite el fin del mes del pago.</div>`;
+  document.getElementById('mGenF').innerHTML = `${fallas.length ? '<button class="btn btn-w" onclick="spReabrir()">Corregir los que faltaron</button>' : ''}<button class="btn btn-s" onclick="openSubirPagos()">Subir más</button><button class="btn btn-p" onclick="CM('mGen')">Listo</button>`;
+  toast(fallas.length ? 'Registrado con observaciones' : 'Pagos registrados', fallas.length ? 'warning' : 'success');
+}
+function spReabrir() { const rest = SP.items.filter(it => !it.hecho); openSubirPagos(); SP.items = rest.map(it => (it.sel === 'nada' && !it.dup ? (spSugerir(it), it) : it)); spPintar(); }
 </script>
 </body></html>
