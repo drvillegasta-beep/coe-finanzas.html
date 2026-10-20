@@ -1065,19 +1065,23 @@ async function cargarTodo(silencioso) {
     q('fin_solicitudes_baja', x => x.order('solicitado_at', { ascending: false }).limit(300)),
     q('nom_empleados', x => x.select('id,nombre,esquema,activo')),
     q('nom_periodos', x => x.select('fecha_pago,salario_neto,tipo,empleado_id').gte('fecha_pago', isoD(new Date(Date.now() - 200 * 86400000)))),
-    q('far_productos', x => x.select('id,clave,nombre,categoria,minimo,critico,servicio,activo').eq('activo', true)),
-    q('far_lotes', x => x.select('id,producto_id,lote,caducidad,cantidad,ejemplo')),
+    q('far_productos', x => x.select('id,clave,nombre,categoria,minimo,minimo_alm,critico,servicio,activo').eq('activo', true)),
+    q('far_lotes', x => x.select('id,producto_id,lote,caducidad,cantidad,ejemplo,ubicacion')),
     q('far_pedidos', x => x.order('created_at', { ascending: false }).limit(200)),
     q('inventario', x => x.select('id,nombre,codigo,categoria,existencia,minimo,unidad,caducidad,lote,activo').eq('activo', true)),
     q('lotes', x => x.select('id,item_id,numero,caducidad,cantidad')),
     q('lentes', x => x.select('id,codigo,marca,modelo,poder,existencia,minimo,caducidad,activo').eq('activo', true)),
     q('pedidos', x => x.order('created_at', { ascending: false }).limit(200)),
+    q('far_solicitudes_alm', x => x.in('estado', ['pendiente', 'parcial']).order('created_at', { ascending: false }).limit(200)),
+    q('qx_materiales', x => x.select('id,nombre,unidad,stock_minimo,stock_critico,critico,activo').eq('activo', true)),
+    q('qx_lotes', x => x.select('material_id,lote,caducidad,cantidad').gt('cantidad', 0)),
+    q('qx_lio_unidades', x => x.select('marca,modelo,dioptria,serie,caducidad,estado').in('estado', ['disponible', 'reservado'])),
     q('qui_pedidos_lio', x => x.select('id,folio,paciente_nombre,lio_modelo,lio_power,estado,solicitado_at,fecha_entrega_estimada,created_at').order('created_at', { ascending: false }).limit(200)),
   ]);
   [ENT, FAC, ABO, REC, PED, TAR, DOCS, RS, CIE, SUC] = r;
   if (silencioso !== 'sinusr') { await cargarUsuarios(); const yo = USR.find(u => u.id === cu.id); if (!yo || yo.activo === false || yo.debe_cambiar) { try { localStorage.removeItem(SESSION_KEY); } catch { } alert('Tu acceso fue cambiado por Dirección General. Entra de nuevo.'); location.reload(); return; } if (yo) { cu.permisos = yo.permisos || {}; cu.rol = yo.rol; cu.sede = yo.sede || null; aplicarPermisosMenu(); } }
   CORR = r[11]; AVA = r[12]; CJ = r[13]; SOLB = r[14]; NOM_EMP = r[15] || []; NOM = r[16] || [];
-  INV = { farProd: r[17] || [], farLotes: r[18] || [], farPed: r[19] || [], quiInv: r[20] || [], quiLotes: r[21] || [], quiLentes: r[22] || [], quiPed: r[23] || [], quiLio: r[24] || [] };
+  INV = { farProd: r[17] || [], farLotes: r[18] || [], farPed: r[19] || [], quiInv: r[20] || [], quiLotes: r[21] || [], quiLentes: r[22] || [], quiPed: r[23] || [], farSol: r[24] || [], qxMat: r[25] || [], qxLot: r[26] || [], qxLio: r[27] || [], quiLio: r[28] || [] };
   r[10].forEach(c => { CFG[c.clave] = c.valor; });
   if (!RS.length) RS = [{ id: null, nombre: 'José Antonio Villegas Ávila', rfc: 'VIAA870425115' }];
   lastSync = new Date();
@@ -2234,7 +2238,7 @@ function faltantesContadora(U) {
   vivas().filter(porSolicitar).forEach(f => { const d = diasA(limFps(f)); if (d > 7) return;
     I.push({ cat: 'fact', d, crit: false, t: `${nomEnt(f.entidad_id)} · ${$$(f.monto_pagado || f.monto_total)}`, m: `Factura por pedir · límite ${fmtD(limFps(f))}${d < 0 ? ' · VENCIDA' : ''}`, go: `verCuenta('${f.id}')` }); });
   // Inventario: caducados, acabados sin pedido, por acabarse sin pedido, pedidos pendientes
-  [['far', 'Farmacia'], ['qui', 'Quirófano']].forEach(([a, nom]) => {
+  [['far', 'Farmacia'], ['alm', 'Almacén de farmacia'], ['qui', 'Quirófano']].forEach(([a, nom]) => {
     const D = datosInventario(a), go = `VIEW.invSec['${a}']='X';renderTab();setTimeout(()=>document.getElementById('inv-${a}')?.scrollIntoView({behavior:'smooth'}),60)`;
     D.caducado.forEach(x => I.push({ cat: 'cad', d: -1, crit: true, t: `${nom}: ${x.t}`, m: 'CADUCADO · ' + x.m + ' · retirar y reponer', go: go.replace('X', 'caducado') }));
     D.acabado.filter(x => !x.pedido).forEach(x => I.push({ cat: 'med', d: -1, crit: true, t: `${nom}: ${x.t}`, m: 'Acabado y sin pedido · hacer pedido', go: go.replace('X', 'acabado') }));
@@ -2252,7 +2256,7 @@ function cumplimientoContadora(U) {
   const fLim = vivas().filter(f => f.tipo === 'egreso' && f.factura_limite && f.factura_limite >= ini && f.factura_limite < hoy);
   const fOk = fLim.filter(tieneXML).length;
   const ayer = isoD(new Date(Date.now() - 864e5)), hab = ayer < ini ? 0 : diasHabiles(ini, ayer), cie = CJ.filter(c => c.usuario_id === U.id && c.fecha >= ini && c.fecha < hoy).length;
-  const sinPed = ['far', 'qui'].reduce((s, a) => s + datosInventario(a).acabado.filter(x => !x.pedido).length, 0);
+  const sinPed = ['far', 'alm', 'qui'].reduce((s, a) => s + datosInventario(a).acabado.filter(x => !x.pedido).length, 0);
   const C = [
     ['Pendientes cumplidos a tiempo y con evidencia', tOk, tTot, 'Se mide contra la fecha original aunque se reprograme.'],
     ['Pagos recurrentes registrados con comprobante en su fecha', rOk, oc.length, 'Efectivo: comprobante firmado · electrónico: transferencia. Desde ' + fmtD(ini) + '.'],
@@ -2299,7 +2303,7 @@ function dashContadora(sel) {
       <div class="cdash-main">${calSemaforo(misT)}${tablaDia(misT)}</div>
       ${ladoMisTareas(misP)}
     </div>
-    <div class="cfgg" style="margin-top:20px"><div id="inv-far">${cajaInventario('far')}</div><div id="inv-qui">${cajaInventario('qui')}</div></div>
+    <div class="cfgg" style="margin-top:20px"><div id="inv-far">${cajaInventario('far')}</div><div id="inv-alm">${cajaInventario('alm')}</div><div id="inv-qui">${cajaInventario('qui')}</div></div>
     <div class="cfgg" style="margin-top:20px">
       ${caja(`Facturas por solicitar (${fps.length})`, lista(fps.slice().sort((a, b) => limFps(a).localeCompare(limFps(b))).slice(0, 8), f => `<div class="aitem ${diasA(limFps(f)) < 0 ? 'r' : 'a'}" onclick="verCuenta('${f.id}')"><div style="flex:1"><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(f.monto_pagado)}</div><div class="am">${esc(f.descripcion)} · pagado ${fmtD(f.fecha_pago)} · límite ${fmtD(limFps(f))}</div></div><div class="rowact" onclick="event.stopPropagation()"><button class="btn btn-s btn-sm" onclick="correoProveedor('${f.entidad_id}','${f.id}',null,'factura')">✉</button><button class="btn btn-p btn-sm" onclick="openUpload('${f.id}')">⬆ XML</button></div></div>`, 'Lista en cero'), `<button class="btn btn-s btn-sm" onclick="goTab('fps')">Ver todas</button>`)}
       ${(() => { const cobV = abiertas('ingreso').filter(f => semaforo(f) === 'r'); return caja(`Cobros vencidos (${cobV.length})`, lista(cobV, f => `<div class="aitem r" onclick="verCuenta('${f.id}')"><div><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(saldo(f))}</div><div class="am">${esc(f.descripcion)} · venció ${fmtD(f.fecha_vencimiento)}</div></div></div>`, 'Sin cobros vencidos')); })()}
@@ -2387,13 +2391,22 @@ function datosInventario(area) {
   const hoy = hoyISO(), R = { porAcabarse: [], acabado: [], porCaducar: [], caducado: [], pedidos: [], ejemplo: false };
   const cad = (nombre, lote, f, cant) => { if (!f || !(num(cant) > 0)) return; const d = diasA(f); if (d < 0) R.caducado.push({ t: nombre, m: `${lote ? 'Lote ' + lote + ' · ' : ''}${num(cant)} pza · caducó ${fmtD(f)}`, s: 'r' }); else if (d <= DIAS_CADUCAR) R.porCaducar.push({ t: nombre, m: `${lote ? 'Lote ' + lote + ' · ' : ''}${num(cant)} pza · caduca ${fmtD(f)} (${d} d)`, s: d <= 30 ? 'r' : 'a', d }); };
   const stockMin = (nombre, ex, min, crit, uni) => { ex = num(ex); if (ex <= 0) R.acabado.push({ n: nombre, t: nombre, m: `Sin existencia${num(min) ? ' · mínimo ' + num(min) : ''}`, s: 'r' }); else if (num(min) && ex <= num(min)) R.porAcabarse.push({ n: nombre, t: nombre, m: `Quedan ${ex} ${uni || 'pza'} · mínimo ${num(min)}${crit ? ' · crítico ' + num(crit) : ''}`, s: crit && ex <= num(crit) ? 'r' : 'a' }); };
-  if (area === 'far') {
-    const L = INV.farLotes || [];
+  if (area === 'alm') {
+    // Almacén de farmacia (COE Farmacia): lotes con ubicación 'almacen', mínimo propio y solicitudes de la farmacia por surtir
+    const L = (INV.farLotes || []).filter(l => l.ubicacion === 'almacen');
+    R.ejemplo = L.length > 0 && L.every(l => l.ejemplo);
+    (INV.farProd || []).filter(p => !p.servicio).forEach(p => { const ls = L.filter(l => l.producto_id === p.id); if (!(num(p.minimo_alm) > 0) && !ls.length) return; stockMin(p.nombre, ls.reduce((s, l) => s + num(l.cantidad), 0), p.minimo_alm, null); ls.forEach(l => cad(p.nombre, String(l.lote || '').replace(' ·ALM', ''), l.caducidad, l.cantidad)); });
+    (INV.farSol || []).forEach(x => { const p = (INV.farProd || []).find(z => z.id === x.producto_id); R.pedidos.push({ t: `Surtir a farmacia: ${p ? p.nombre : 'producto'}`, m: `${num(x.cantidad) - num(x.surtido)} pza por surtir${x.estado === 'parcial' ? ' (parcial)' : ''} · pidió ${esc(x.solicitante || '')} · ${fmtD(String(x.created_at || '').slice(0, 10))}`, s: 'a' }); });
+  } else if (area === 'far') {
+    const L = (INV.farLotes || []).filter(l => l.ubicacion !== 'almacen');
     R.ejemplo = L.length > 0 && L.every(l => l.ejemplo);
     (INV.farProd || []).filter(p => !p.servicio).forEach(p => { const ls = L.filter(l => l.producto_id === p.id); stockMin(p.nombre, ls.reduce((s, l) => s + num(l.cantidad), 0), p.minimo, p.critico); ls.forEach(l => cad(p.nombre, l.lote, l.caducidad, l.cantidad)); });
     (INV.farPed || []).filter(x => !PED_CERRADO.includes(String(x.estado || '').toLowerCase())).forEach(x => R.pedidos.push({ t: (x.folio ? x.folio + ' · ' : '') + (Array.isArray(x.items) ? x.items.length + ' artículo(s)' : 'Pedido de farmacia'), m: `${x.estado || 'pendiente'}${x.monto ? ' · ' + $$(x.monto) : ''} · ${fmtD(String(x.created_at || '').slice(0, 10))}`, s: x.prioridad === 'urgente' || x.prioridad === 'critico' ? 'r' : 'a' }));
     PED.filter(p => /farm/i.test(p.area || '') && !PED_CERRADO.includes(p.estado)).forEach(p => R.pedidos.push({ t: `${p.folio} · ${p.descripcion || ''}`, m: `${(PED_EST[p.estado] || [p.estado])[0]} · ${$$(p.monto_estimado)}`, s: p.urgente ? 'r' : 'a', go: `verPedido('${p.id}')` }));
   } else {
+    // COE Quirófano v2: materiales con mínimo/crítico, lotes con caducidad y LIO en existencia
+    (INV.qxMat || []).forEach(m => { const ls = (INV.qxLot || []).filter(l => l.material_id === m.id), ex = ls.reduce((s, l) => s + num(l.cantidad), 0); if (num(m.stock_minimo) > 0 || ex > 0) stockMin(m.nombre, ls.reduce((s, l) => s + num(l.cantidad), 0), m.stock_minimo, m.stock_critico, m.unidad); ls.forEach(l => cad(m.nombre, l.lote, l.caducidad, l.cantidad)); });
+    (INV.qxLio || []).forEach(l => cad(`LIO ${[l.marca, l.modelo, l.dioptria !== null && l.dioptria !== undefined ? l.dioptria + ' D' : ''].filter(Boolean).join(' ')}`, l.serie, l.caducidad, 1));
     const L = INV.quiLotes || [];
     (INV.quiInv || []).forEach(i => { const ls = L.filter(l => l.item_id === i.id); const ex = ls.length ? ls.reduce((s, l) => s + num(l.cantidad), 0) : i.existencia; stockMin(i.nombre, ex, i.minimo, null, i.unidad); if (ls.length) ls.forEach(l => cad(i.nombre, l.numero, l.caducidad, l.cantidad)); else cad(i.nombre, i.lote, i.caducidad, i.existencia); });
     (INV.quiLentes || []).forEach(l => { const n = `LIO ${[l.marca, l.modelo, l.poder ? l.poder + ' D' : ''].filter(Boolean).join(' ')}`; stockMin(n, l.existencia, l.minimo); cad(n, l.codigo, l.caducidad, l.existencia); });
@@ -2402,22 +2415,23 @@ function datosInventario(area) {
     PED.filter(p => /quir/i.test(p.area || '') && !PED_CERRADO.includes(p.estado)).forEach(p => R.pedidos.push({ t: `${p.folio} · ${p.descripcion || ''}`, m: `${(PED_EST[p.estado] || [p.estado])[0]} · ${$$(p.monto_estimado)}`, s: p.urgente ? 'r' : 'a', go: `verPedido('${p.id}')` }));
   }
   // ¿Ya está pedido? Busca el nombre en los pedidos abiertos del área
-  const abiertosTxt = normTx(JSON.stringify(area === 'far'
+  const abiertosTxt = normTx(JSON.stringify(area === 'far' || area === 'alm'
     ? [(INV.farPed || []).filter(x => !PED_CERRADO.includes(String(x.estado || '').toLowerCase())), PED.filter(p => /farm/i.test(p.area || '') && !PED_CERRADO.includes(p.estado)).map(p => [p.descripcion, p.partidas])]
     : [(INV.quiPed || []).filter(x => !PED_CERRADO.includes(String(x.estado || '').toLowerCase())), PED.filter(p => /quir/i.test(p.area || '') && !PED_CERRADO.includes(p.estado)).map(p => [p.descripcion, p.partidas])]));
   R.acabado.concat(R.porAcabarse).forEach(x => { x.pedido = abiertosTxt.includes(normTx(x.n)); x.m += x.pedido ? ' · <b style="color:var(--sc)">pedido hecho</b>' : ' · <b style="color:var(--dg)">sin pedido</b>'; });
   R.porCaducar.sort((a, b) => a.d - b.d);
   return R;
 }
-VIEW.invSec = { far: 'porAcabarse', qui: 'porAcabarse' };
+VIEW.invSec = { far: 'porAcabarse', alm: 'porAcabarse', qui: 'porAcabarse' };
+const INV_TIT = { far: 'Farmacia', alm: 'Almacén de farmacia', qui: 'Quirófano' };
 function cajaInventario(area) {
-  const D = datosInventario(area), tit = area === 'far' ? 'Farmacia' : 'Quirófano';
-  const SEC = [['porAcabarse', 'Por acabarse', 'a'], ['acabado', 'Acabado', 'r'], ['porCaducar', 'Por caducar', 'a'], ['caducado', 'Caducado', 'r'], ['pedidos', 'Pedidos', 'p']];
+  const D = datosInventario(area), tit = INV_TIT[area];
+  const SEC = [['porAcabarse', 'Por acabarse', 'a'], ['acabado', 'Acabado', 'r'], ['porCaducar', 'Por caducar', 'a'], ['caducado', 'Caducado', 'r'], ['pedidos', area === 'alm' ? 'Por surtir a farmacia' : 'Pedidos', 'p']];
   const total = SEC.reduce((s, [k]) => s + D[k].length, 0);
-  const sinDatos = area === 'far' ? !(INV.farProd || []).length : !((INV.quiInv || []).length || (INV.quiLentes || []).length || (INV.quiPed || []).length || (INV.quiLio || []).length || PED.some(p => /quir/i.test(p.area || '')));
+  const sinDatos = area === 'qui' ? !((INV.qxMat || []).length || (INV.quiInv || []).length || (INV.quiLentes || []).length || (INV.quiPed || []).length || (INV.quiLio || []).length || PED.some(p => /quir/i.test(p.area || ''))) : area === 'alm' ? !(INV.farLotes || []).some(l => l.ubicacion === 'almacen') && !(INV.farSol || []).length : area === 'far' ? !(INV.farProd || []).length : !((INV.quiInv || []).length || (INV.quiLentes || []).length || (INV.quiPed || []).length || (INV.quiLio || []).length || PED.some(p => /quir/i.test(p.area || '')));
   let sel = VIEW.invSec[area]; if (!D[sel].length) { const f = SEC.find(([k]) => D[k].length); if (f) sel = f[0]; }
   const L = D[sel];
-  const cuerpo = sinDatos ? `<div class="mini">Sin datos aún: la lista se llena sola cuando COE ${tit} registre su inventario${area === 'qui' ? ' (inventario, lotes, LIO y pedidos)' : ''}.</div>`
+  const cuerpo = sinDatos ? `<div class="mini">Sin datos aún: la lista se llena sola cuando ${area === 'alm' ? 'COE Farmacia registre existencias en el almacén' : 'COE ' + tit + ' registre su inventario'}${area === 'qui' ? ' (inventario, lotes, LIO y pedidos)' : ''}.</div>`
     : `<div class="invchips">${SEC.map(([k, l, c]) => `<button class="invchip ${D[k].length ? c : 'z'} ${k === sel ? 'act' : ''}" onclick="VIEW.invSec['${area}']='${k}';renderTab()"><b>${D[k].length}</b><span>${l}</span></button>`).join('')}</div>
       ${L.length ? `<div class="alist" style="margin-top:10px">${L.slice(0, 8).map(x => `<div class="aitem ${x.s === 'r' ? 'r' : x.s === 'a' ? 'a' : 'i'}" ${x.go ? `onclick="${x.go}"` : ''}><div><div class="at">${esc(x.t)}</div><div class="am">${x.m}</div></div></div>`).join('')}${L.length > 8 ? `<div class="mini">y ${L.length - 8} más…</div>` : ''}</div>` : `<div class="mini" style="margin-top:10px">✓ ${total ? 'Nada en esta lista' : 'Inventario sin alertas'}</div>`}`;
   return caja(`Inventario de ${tit.toLowerCase()}${D.ejemplo ? ' <span class="bdg bdg-pnd" style="font-size:10px">datos de ejemplo</span>' : ''}`, cuerpo);
@@ -2949,7 +2963,7 @@ function imprimirInforme(id) {
   if (P === 'quincenal') {
     cuerpo += h('4. Nómina y honorarios') + tbl(['Prestador', 'Concepto', 'Pagado', 'Factura', 'Monto'], D.nom.map(f => `<tr><td>${esc(nomEnt(f.entidad_id))}</td><td>${esc(f.descripcion)}</td><td>${f.fecha_pago ? fmtD(f.fecha_pago) : '<span class="rojo">pendiente</span>'}</td><td>${tieneXML(f) ? '✓' : ent(f.entidad_id)?.no_factura ? 'no aplica' : '<span class="rojo">falta</span>'}</td><td class="r">${$$(f.monto_total)}</td></tr>`), 'Sin pagos de nómina en el periodo.');
   }
-  if (P === 'semanal') cuerpo += h('4. Conciliación de cirugías de la semana') + lineas(4) + h('5. Inventario (farmacia y quirófano)') + `<div class="p">${['far', 'qui'].map(x => { const I = datosInventario(x); return `<b>${x === 'far' ? 'Farmacia' : 'Quirófano'}:</b> ${I.porAcabarse.length} por acabarse · ${I.acabado.length} acabados · ${I.porCaducar.length} por caducar · ${I.caducado.length} caducados · ${I.pedidos.length} pedidos abiertos`; }).join('<br>')}</div>`;
+  if (P === 'semanal') cuerpo += h('4. Conciliación de cirugías de la semana') + lineas(4) + h('5. Inventario (farmacia, almacén y quirófano)') + `<div class="p">${['far', 'alm', 'qui'].map(x => { const I = datosInventario(x); return `<b>${INV_TIT[x]}:</b> ${I.porAcabarse.length} por acabarse · ${I.acabado.length} acabados · ${I.porCaducar.length} por caducar · ${I.caducado.length} caducados · ${I.pedidos.length} pedidos abiertos`; }).join('<br>')}</div>`;
   if (P === 'mensual' || P === 'trimestral') {
     const meses = []; for (let d = new Date(a + 'T12:00:00'); isoD(d) <= b; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) { const i = isoD(new Date(d.getFullYear(), d.getMonth(), 1)), f = isoD(new Date(d.getFullYear(), d.getMonth() + 1, 0)); meses.push([MESES[d.getMonth()], i, f]); }
     cuerpo += h('2. Ingresos y egresos por mes') + tbl(['Mes', 'Ingresos cajas', 'Cobros', 'Egresos pagados', 'Facturas recabadas', 'Pendientes cumplidos / vencidos'], meses.map(([n, i, f]) => { const M = datosPeriodo(i, f, uid); return `<tr><td style="text-transform:capitalize">${n}</td><td class="r">${$$(M.caja)}</td><td class="r">${$$(M.totIngC)}</td><td class="r">${$$(M.totEgr)}</td><td class="r">${M.xml.length}</td><td class="r">${M.cumpl.length} / ${M.venc.length}</td></tr>`; }), '');
@@ -3611,7 +3625,9 @@ function dashPanorama(sel) {
     A.push(areaCard({ ico: '℞', t: 'Farmacia', sub: 'Inventario y pedidos', score: nP ? pctDe(nP - malos, nP) : null, scoreLbl: 'Productos con existencia suficiente', app: 'far',
       cuerpo: nP ? sbar('Productos', [{ t: 'Suficiente', n: Math.max(0, nP - malos), c: 'sb-ok' }, { t: 'Por acabarse', n: D.porAcabarse.length, c: 'sb-warn' }, { t: 'Acabado', n: D.acabado.length, c: 'sb-crit' }]) + kvA([
         ['Caducados', String(D.caducado.length), D.caducado.length > 0], ['Por caducar (90 d)', String(D.porCaducar.length)],
-        ['Acabados sin pedido', String(D.acabado.filter(x => !x.pedido).length), D.acabado.some(x => !x.pedido)], ['Pedidos abiertos', String(D.pedidos.length)]])
+        ['Acabados sin pedido', String(D.acabado.filter(x => !x.pedido).length), D.acabado.some(x => !x.pedido)], ['Pedidos abiertos', String(D.pedidos.length)],
+        (() => { const AL = datosInventario('alm'); return ['Almacén: bajo mínimo / acabado', `${AL.porAcabarse.length} / ${AL.acabado.length}`, AL.acabado.length > 0]; })(),
+        ['Almacén: por surtir a farmacia', String((INV.farSol || []).length)]])
         : '<div class="mini">Sin inventario registrado aún en COE Farmacia.</div>' }));
   }
   if (P) {
