@@ -667,6 +667,8 @@ i.dot{flex:0 0 10px;height:10px;border-radius:50%;margin-top:6px;align-self:flex
 @media(max-width:1100px){.cdash-full>.cdash-side{max-height:none;overflow:visible;order:-1}}
 .cdash-full .kgrid{grid-template-columns:repeat(auto-fit,minmax(165px,1fr))!important}
 .cdash-full .avgrid{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.almbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 12px;background:var(--sf);border:1px solid var(--br);border-radius:14px}
+.almbar .seg{margin-right:auto}
 </style>
 </head>
 <body>
@@ -1079,8 +1081,8 @@ async function cargarTodo(silencioso) {
     q('fin_solicitudes_baja', x => x.order('solicitado_at', { ascending: false }).limit(300)),
     q('nom_empleados', x => x.select('id,nombre,esquema,activo')),
     q('nom_periodos', x => x.select('fecha_pago,salario_neto,tipo,empleado_id').gte('fecha_pago', isoD(new Date(Date.now() - 200 * 86400000)))),
-    q('far_productos', x => x.select('id,clave,nombre,categoria,minimo,minimo_alm,critico,costo,ventas_4s,servicio,activo').eq('activo', true)),
-    q('far_lotes', x => x.select('id,producto_id,lote,caducidad,cantidad,costo,ejemplo,ubicacion')),
+    q('far_productos', x => x.select('id,clave,nombre,categoria,principio,presentacion,via,minimo,minimo_alm,critico,costo,venta,ventas_4s,servicio,activo,tipo_insumo,unidad,marca,proveedor_id,registro_sanitario,controlado,red_fria,ubicacion_fisica').eq('activo', true)),
+    q('far_lotes', x => x.select('id,producto_id,lote,caducidad,cantidad,costo,factura,ejemplo,ubicacion,serie,proveedor_id,fecha_entrada,garantia_hasta')),
     q('far_pedidos', x => x.order('created_at', { ascending: false }).limit(200)),
     q('inventario', x => x.select('id,nombre,codigo,categoria,existencia,minimo,unidad,caducidad,lote,activo').eq('activo', true)),
     q('lotes', x => x.select('id,item_id,numero,caducidad,cantidad')),
@@ -1226,8 +1228,9 @@ function calcAlertas() {
   buildRecOcurrencias(aviso).filter(o => o.estado === 'vencido' || o.estado === 'proximo').forEach(o => A.push({ n: o.estado === 'vencido' ? 'r' : 'a', t: `Recurrente ${o.estado === 'vencido' ? 'vencido' : 'por vencer'}: ${o.rec.descripcion}`, m: `${nomEnt(o.rec.entidad_id)} · ${fmtD(isoD(o.fecha))}`, go: () => goTab('rec') }));
   if (cu.rol === 'contadora' || esAdmin()) vivas().filter(f => f.revision === 'observado').forEach(f => A.push({ n: 'a', t: `Observación pendiente: ${nomEnt(f.entidad_id)}`, m: f.revision_nota || f.descripcion, go: () => verCuenta(f.id) }));
   if (esAdmin()) SOLB.filter(s => s.estado === 'pendiente').forEach(s => { const x = descSolicitud(s); A.push({ n: 'a', t: `Solicitud de baja: ${nomUsr(s.solicitado_por)}`, m: `${x.txt} · ${s.motivo}`, go: () => x.f.id && verCuenta(x.f.id) }); });
+  if (puede('pedidos')) try { almAlertas('alm').forEach(a => A.push(a)); } catch (e) { console.warn(e); }
   const orden = { r: 0, a: 1, i: 2, v: 3 };
-  const modDe = a => /^Pago|^Vence/.test(a.t) ? 'cxp' : /^Cobro/.test(a.t) ? 'cxc' : /edido/.test(a.t) ? 'pedidos' : /^Factura/.test(a.t) ? 'fps' : /^Pendiente|cerrado su día/.test(a.t) ? 'tareas' : /^Solicitud de baja/.test(a.t) ? 'cxp' : /^Recurrente/.test(a.t) ? 'recurrentes' : 'revision';
+  const modDe = a => /^Almac/.test(a.t) ? 'pedidos' : /^Pago|^Vence/.test(a.t) ? 'cxp' : /^Cobro/.test(a.t) ? 'cxc' : /edido/.test(a.t) ? 'pedidos' : /^Factura/.test(a.t) ? 'fps' : /^Pendiente|cerrado su día/.test(a.t) ? 'tareas' : /^Solicitud de baja/.test(a.t) ? 'cxp' : /^Recurrente/.test(a.t) ? 'recurrentes' : 'revision';
   A.splice(0, A.length, ...A.filter(a => niv(modDe(a)) >= 1));
   ALR = A.sort((a, b) => orden[a.n] - orden[b.n]);
   const urg = ALR.filter(a => a.n === 'r').length;
@@ -2416,7 +2419,7 @@ function datosInventario(area) {
     const L = (INV.farLotes || []).filter(l => l.ubicacion !== 'almacen');
     R.ejemplo = L.length > 0 && L.every(l => l.ejemplo);
     (INV.farProd || []).filter(p => !p.servicio).forEach(p => { const ls = L.filter(l => l.producto_id === p.id); stockMin(p.nombre, ls.reduce((s, l) => s + num(l.cantidad), 0), p.minimo, p.critico); ls.forEach(l => cad(p.nombre, l.lote, l.caducidad, l.cantidad)); });
-    (INV.farPed || []).filter(x => !PED_CERRADO.includes(String(x.estado || '').toLowerCase())).forEach(x => R.pedidos.push({ t: (x.folio ? x.folio + ' · ' : '') + (Array.isArray(x.items) ? x.items.length + ' artículo(s)' : 'Pedido de farmacia'), m: `${x.estado || 'pendiente'}${x.monto ? ' · ' + $$(x.monto) : ''} · ${fmtD(String(x.created_at || '').slice(0, 10))}`, s: x.prioridad === 'urgente' || x.prioridad === 'critico' ? 'r' : 'a' }));
+    (INV.farPed || []).filter(x => !PED_CERRADO.includes(String(x.estado || '').toLowerCase()) && Number(x.estado || 0) < 3 && !PED.some(p => String(p.far_pedido_id) === String(x.id))).forEach(x => R.pedidos.push({ t: (x.folio ? x.folio + ' · ' : '') + (Array.isArray(x.items) ? x.items.length + ' artículo(s)' : 'Pedido de farmacia'), m: `${x.estado || 'pendiente'}${x.monto ? ' · ' + $$(x.monto) : ''} · ${fmtD(String(x.created_at || '').slice(0, 10))}`, s: x.prioridad === 'urgente' || x.prioridad === 'critico' ? 'r' : 'a' }));
     PED.filter(p => /farm/i.test(p.area || '') && !PED_CERRADO.includes(p.estado)).forEach(p => R.pedidos.push({ t: `${p.folio} · ${p.descripcion || ''}`, m: `${(PED_EST[p.estado] || [p.estado])[0]} · ${$$(p.monto_estimado)}`, s: p.urgente ? 'r' : 'a', go: `verPedido('${p.id}')` }));
   } else {
     // COE Quirófano v2: materiales con mínimo/crítico, lotes con caducidad y LIO en existencia
@@ -3891,8 +3894,8 @@ function almFilas(area) {
       const ex = area === 'alm' ? alm : most;
       if (area === 'alm' && !min && !alm && !c4) return;          // producto que no se guarda en almacén
       const tot = alm + most, dias = rate > 0 ? Math.floor((area === 'alm' ? tot : most) / rate) : null;
-      const lotes = (area === 'alm' ? lA : lF).map(l => ({ lote: String(l.lote || '').replace(' ·ALM', ''), cad: l.caducidad, q: num(l.cantidad), costo: num(l.costo) || num(p.costo) }));
-      R.push({ id: p.id, n: p.nombre, cat: p.categoria, ex, alm, most, tot, min, crit, c4, rate, dias, lotes, costo: num(p.costo) });
+      const lotes = (area === 'alm' ? lA : lF).map(l => ({ lote: String(l.lote || '').replace(' ·ALM', ''), cad: l.caducidad, q: num(l.cantidad), costo: num(l.costo) || num(p.costo), serie: l.serie, gar: l.garantia_hasta, factura: l.factura, entrada: l.fecha_entrada }));
+      R.push({ p, id: p.id, n: p.nombre, cat: TIPO_INS[p.tipo_insumo] || ({ col: 'Colirio', med: 'Medicamento', var: 'Varios' })[p.categoria] || p.categoria, unidad: p.unidad, ex, alm, most, tot, min, crit, c4, rate, dias, lotes, costo: num(p.costo) });
     });
   } else {
     (INV.qxMat || []).forEach(m => {
@@ -3943,12 +3946,14 @@ function rAlm() {
     <td class="amt" style="text-align:right">${almNum(r.ex)}</td>${A === 'alm' ? `<td class="amt" style="text-align:right">${almNum(r.most)}</td>` : ''}
     <td class="amt" style="text-align:right">${r.min ? almNum(r.min) : '<span class="mini">—</span>'}</td>
     ${conPron ? `<td class="amt" style="text-align:right">${r.c4 ? almNum(r.c4 / 4) : '<span class="mini">0</span>'}</td><td style="text-align:right">${r.dias !== null ? `<b style="${r.dias <= DIAS_ALERTA_FIN ? 'color:var(--dg)' : r.dias <= 45 ? 'color:var(--wn)' : ''}">${r.dias} d</b><div class="mini">${fmtD(r.fin)}</div>` : '<span class="mini">sin consumo</span>'}</td>` : ''}
-    <td>${fCad(r)}</td><td><span class="bdg ${EST_ALM[r.est][1]}">${EST_ALM[r.est][0]}</span>${r.caducado.length ? ' <span class="bdg bdg-ven">Caducado</span>' : ''}</td></tr>`;
+    <td>${fCad(r)}</td><td><span class="bdg ${EST_ALM[r.est][1]}">${EST_ALM[r.est][0]}</span>${r.caducado.length ? ' <span class="bdg bdg-ven">Caducado</span>' : ''}</td>
+    ${A !== 'qui' && puede('pedidos') ? `<td style="text-align:right;white-space:nowrap" onclick="event.stopPropagation()"><button class="btn btn-s btn-sm" title="Solicitar a proveedor" onclick="almSolicitar('${A}',['${r.id}'])">Solicitar</button>${A === 'alm' && r.ex > 0 ? ` <button class="btn btn-s btn-sm" title="Traspasar a mostrador" onclick="almTraspaso({${r.id}:1})">⇄</button>` : ''}</td>` : ''}</tr>`;
   const segs = [{ t: 'Suficiente', n: R.filter(r => r.est === 'ok').length, c: 'sb-ok' }, { t: 'Se acaba pronto', n: R.filter(r => r.est === 'pronto').length, c: 'sb-warn' }, { t: 'Bajo mínimo', n: bajo.length, c: 'sb-ser' }, { t: 'Crítico o acabado', n: acab.length + crit.length, c: 'sb-crit' }];
   return `<div class="ph"><div><div class="ptit">Almacén e inventarios</div><div class="psub">Qué se va a terminar y qué va a caducar · lee COE Farmacia y COE Quirófano en tiempo real</div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><div class="seg">${ALM_AREAS.map(([k, t]) => `<button class="${A === k ? 'on' : ''}" onclick="VIEW.almA='${k}';renderTab()">${t}</button>`).join('')}</div>
-    <button class="btn btn-s btn-sm" onclick="imprimirAlm()">🖨 Imprimir</button>${puede('pedidos') && A !== 'qui' ? `<button class="btn btn-p btn-sm" onclick="almPedido('${A}')">+ Pedido de lo que falta</button>` : ''}</div></div>
-  <div class="pad">
+    <button class="btn btn-s btn-sm" onclick="imprimirAlm()">🖨 Imprimir</button></div></div>
+  ${almBarra(A)}
+  ${A === 'alm' && VIEW.almV === 'agregar' ? almVistaAgregar() : `<div class="pad">
     ${sinDatos ? `<div class="warnbox" style="margin-bottom:14px">${A === 'alm' ? 'COE Farmacia todavía no tiene existencias registradas en el almacén. En cuanto se capturen lotes en «Almacén», aquí aparece el pronóstico.' : `Sin existencias registradas en COE ${A === 'qui' ? 'Quirófano' : 'Farmacia'}.`}</div>` : ''}
     <div class="kps">
       ${kp('Se acaban en ' + DIAS_ALERTA_FIN + ' días', conPron ? String(pronto.length) : '—', conPron ? (pronto[0] ? `primero: ${esc(pronto[0].n)} (${pronto[0].dias} d)` : 'según salidas de 4 semanas') : 'sin registro de consumo', "VIEW.almF='acaba';renderTab()", pronto.length ? 't-amar' : '')}
@@ -3963,9 +3968,9 @@ function rAlm() {
     </div>
     ${sol.length ? dcard('La farmacia pidió al almacén', sol.map(x => { const p = (INV.farProd || []).find(z => z.id === x.producto_id); return `<div class="list-item"><i class="dot hi"></i><div class="grow"><b>${esc(p ? p.nombre : 'Producto')}</b><div class="muted">${num(x.cantidad) - num(x.surtido)} pza por surtir${x.estado === 'parcial' ? ' (surtido parcial)' : ''} · ${esc(x.solicitante || '')} · ${fmtD(String(x.created_at || '').slice(0, 10))}</div></div></div>`; }).join(''), sol.length) : ''}
     <div class="ph3" style="margin:16px 0 10px;flex-wrap:wrap"><h3 style="font-size:16px;flex:0 0 auto">${esc(nom)}</h3><div class="seg" style="flex-wrap:wrap">${[['riesgo', 'Con alerta'], ['acaba', 'Se acaba'], ['caduca', 'Caduca'], ['todo', 'Todo']].map(([k, t]) => `<button class="${F === k ? 'on' : ''}" onclick="VIEW.almF='${k}';renderTab()">${t}</button>`).join('')}</div><span style="flex:1"></span><span class="muted">${T.length} de ${R.length}</span></div>
-    <div class="tc" style="overflow-x:auto">${T.length ? `<table><thead><tr><th>Producto</th><th style="text-align:right">${A === 'alm' ? 'Almacén' : 'Existencia'}</th>${A === 'alm' ? '<th style="text-align:right">Mostrador</th>' : ''}<th style="text-align:right">Mínimo</th>${conPron ? '<th style="text-align:right">Salida / semana</th><th style="text-align:right">Alcanza para</th>' : ''}<th>Próxima caducidad</th><th>Estado</th></tr></thead><tbody>${T.map(fila).join('')}</tbody></table>` : '<div class="emp">Sin productos en esta lista</div>'}</div>
+    <div class="tc" style="overflow-x:auto">${T.length ? `<table><thead><tr><th>Producto</th><th style="text-align:right">${A === 'alm' ? 'Almacén' : 'Existencia'}</th>${A === 'alm' ? '<th style="text-align:right">Mostrador</th>' : ''}<th style="text-align:right">Mínimo</th>${conPron ? '<th style="text-align:right">Salida / semana</th><th style="text-align:right">Alcanza para</th>' : ''}<th>Próxima caducidad</th><th>Estado</th>${A !== 'qui' && puede('pedidos') ? '<th></th>' : ''}</tr></thead><tbody>${T.map(fila).join('')}</tbody></table>` : '<div class="emp">Sin productos en esta lista</div>'}</div>
     <div class="mini" style="margin:10px 0 24px">${conPron ? `«Alcanza para» = existencia total (almacén + mostrador) entre las salidas diarias promedio de las últimas 4 semanas. «No se alcanzan a vender» = piezas que, al ritmo actual, seguirán en existencia el día que caduquen.` : 'Quirófano aún no registra consumo por cirugía, por eso no hay pronóstico de días; se usan mínimo y crítico.'}</div>
-  </div>`;
+  </div>`}`;
 }
 function almDetalle(area, id) {
   const r = almFilas(area).find(x => String(x.id) === String(id)); if (!r) return;
@@ -3974,9 +3979,10 @@ function almDetalle(area, id) {
       ${area === 'alm' ? `<b>En mostrador</b><div>${almNum(r.most)}</div>` : ''}
       <b>Mínimo${r.crit ? ' · crítico' : ''}</b><div>${r.min ? almNum(r.min) : '—'}${r.crit ? ' · ' + almNum(r.crit) : ''}</div>
       ${area !== 'qui' ? `<b>Salidas últimas 4 semanas</b><div>${almNum(r.c4 || 0)} (${almNum((r.c4 || 0) / 4)} por semana)</div><b>Alcanza para</b><div>${r.dias !== null ? `<b>${r.dias} días</b> · se acaba aprox. el ${fmtD(r.fin)}` : 'sin consumo registrado'}</div>` : ''}
-      <b>Estado</b><div><span class="bdg ${EST_ALM[r.est][1]}">${EST_ALM[r.est][0]}</span></div></div>
-    <div class="tc"><table><thead><tr><th>Lote</th><th style="text-align:right">Cantidad</th><th>Caducidad</th><th></th></tr></thead><tbody>${r.lotes.length ? r.lotes.sort((a, b) => String(a.cad || '9') < String(b.cad || '9') ? -1 : 1).map(l => `<tr><td>${esc(l.lote || '—')}</td><td class="amt" style="text-align:right">${almNum(l.q)}</td><td>${l.cad ? fmtD(l.cad) : '—'}</td><td class="mini">${l.cad && diasA(l.cad) < 0 ? '<b style="color:var(--dg)">caducado · retirar</b>' : l.cad && diasA(l.cad) <= DIAS_CADUCAR ? `caduca en ${diasA(l.cad)} d${l.sobra ? ` · <b>${l.sobra} no se alcanzan a vender</b>` : ''}` : ''}</td></tr>`).join('') : '<tr><td colspan="4" class="mini">Sin lotes en existencia</td></tr>'}</tbody></table></div>`,
-    `<button class="btn btn-p" onclick="CM('mGen')">Cerrar</button>`, 'sm');
+      <b>Estado</b><div><span class="bdg ${EST_ALM[r.est][1]}">${EST_ALM[r.est][0]}</span></div>
+      ${r.p ? [['Tipo', TIPO_INS[r.p.tipo_insumo] || r.cat], ['Clave', r.p.clave], ['Presentación', r.p.presentacion], ['Principio activo', r.p.principio], ['Marca', r.p.marca], ['Registro sanitario', r.p.registro_sanitario], ['Proveedor', r.p.proveedor_id ? nomEnt(r.p.proveedor_id) : ''], ['Ubicación', r.p.ubicacion_fisica], ['Cuidados', [r.p.red_fria ? 'Red fría' : '', r.p.controlado ? 'Controlado' : ''].filter(Boolean).join(' · ')]].filter(x => x[1]).map(([k, v]) => `<b>${k}</b><div>${esc(v)}</div>`).join('') : ''}</div>
+    <div class="tc"><table><thead><tr><th>Lote</th><th style="text-align:right">Cantidad</th><th>Caducidad</th><th></th></tr></thead><tbody>${r.lotes.length ? r.lotes.sort((a, b) => String(a.cad || '9') < String(b.cad || '9') ? -1 : 1).map(l => `<tr><td>${esc(l.lote || '—')}${l.serie && l.serie !== l.lote ? `<div class="mini">serie ${esc(l.serie)}</div>` : ''}${l.factura ? `<div class="mini">factura ${esc(l.factura)}</div>` : ''}${l.gar ? `<div class="mini">garantía ${fmtD(l.gar)}</div>` : ''}</td><td class="amt" style="text-align:right">${almNum(l.q)}</td><td>${l.cad ? fmtD(l.cad) : '—'}</td><td class="mini">${l.cad && diasA(l.cad) < 0 ? '<b style="color:var(--dg)">caducado · retirar</b>' : l.cad && diasA(l.cad) <= DIAS_CADUCAR ? `caduca en ${diasA(l.cad)} d${l.sobra ? ` · <b>${l.sobra} no se alcanzan a vender</b>` : ''}` : ''}</td></tr>`).join('') : '<tr><td colspan="4" class="mini">Sin lotes en existencia</td></tr>'}</tbody></table></div>`,
+    `${area !== 'qui' && puede('pedidos') ? `<button class="btn btn-s" onclick="CM('mGen');almSolicitar('${area}',['${r.id}'])">📦 Solicitar</button>${area === 'alm' && r.ex > 0 ? `<button class="btn btn-s" onclick="CM('mGen');almTraspaso({${r.id}:1})">⇄ Traspasar</button>` : ''}` : ''}<button class="btn btn-p" onclick="CM('mGen')">Cerrar</button>`, 'sm');
 }
 // Prellena un pedido con lo que está acabado, crítico, bajo mínimo o por terminarse
 function almPedido(area) {
@@ -4009,7 +4015,305 @@ function ladoAlmacen() {
     <div class="body">${sinDatos ? '<div class="mini">COE Farmacia aún no tiene existencias capturadas en el almacén. En cuanto se registren, aquí verás lo que se acaba y lo que caduca.</div>'
       : `<div class="almchips">${chips.map(([c, v, t, f]) => `<button class="almchip ${v ? c : 'z'}" onclick="${f};VIEW.almA='alm';goTab('alm')"><b>${v}</b><span>${t}</span></button>`).join('')}</div>
       <div class="mtl almlist">${items.length ? items.join('') : '<div class="mini">✓ Almacén completo: nada por terminarse ni por caducar.</div>'}</div>`}</div>
-    <div style="padding:0 16px 14px;display:flex;gap:6px"><button class="btn btn-s btn-sm" style="flex:1" onclick="VIEW.almA='alm';goTab('alm')">Ver almacén</button>${!sinDatos && falta.length && puede('pedidos') ? `<button class="btn btn-p btn-sm" style="flex:1" onclick="almPedido('alm')">+ Pedido</button>` : ''}</div></div>`;
+    <div style="padding:0 16px 14px;display:flex;gap:6px"><button class="btn btn-s btn-sm" style="flex:1" onclick="VIEW.almA='alm';goTab('alm')">Ver almacén</button>${!sinDatos && falta.length && puede('pedidos') ? `<button class="btn btn-p btn-sm" style="flex:1" onclick="almSolicitar('alm')">+ Pedido</button>` : ''}</div></div>`;
+}
+
+// ══ ALMACÉN: carga de inventario, alta manual, traspasos a mostrador, solicitudes a proveedor y avisos ══
+// Escribe en las tablas de COE Farmacia (far_productos / far_lotes / far_movimientos) por medio de funciones firmadas con PIN:
+// fin_alm_entrada (sumar = entrada de mercancía · fijar = inventario físico) y fin_alm_traspaso (almacén → mostrador, primero lo que caduca antes).
+const TIPO_INS = { medicamento: 'Medicamento', insumo: 'Insumo', material_quirurgico: 'Material quirúrgico', equipo: 'Equipo' };
+VIEW.almV = VIEW.almV || 'tablero';
+const almTipoDe = t => { const s = normTx(t); return /EQUIP/.test(s) ? 'equipo' : /QUIRUR|MATERIAL/.test(s) ? 'material_quirurgico' : /INSUMO|CURACI|DESECH|VARIO/.test(s) ? 'insumo' : 'medicamento'; };
+const almReqCad = t => t !== 'equipo';
+const provs = () => ENT.filter(e => e.activo !== false && e.tipo !== 'cliente').sort((a, b) => a.nombre.localeCompare(b.nombre));
+const optProv = sel => `<option value="">— Sin proveedor —</option>${provs().map(e => `<option value="${e.id}" ${sel === e.id ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}`;
+function almBarra(A) {
+  if (A === 'qui' || !puede('pedidos')) return '';
+  const sol = A === 'alm' ? (INV.farSol || []).length : 0;
+  return `<div class="pad" style="padding-bottom:0"><div class="almbar">
+    ${A === 'alm' ? `<div class="seg">${[['tablero', 'Tablero'], ['agregar', 'Agregar manualmente']].map(([k, t]) => `<button class="${VIEW.almV === k ? 'on' : ''}" onclick="VIEW.almV='${k}';renderTab()">${t}</button>`).join('')}</div>
+      <button class="btn btn-p btn-sm" onclick="almSubir()">⬆ Subir inventario</button>
+      <button class="btn btn-s btn-sm" onclick="almTraspaso()">⇄ Traspaso a mostrador${sol ? ` <span class="nbdg" style="position:static;display:inline-block">${sol}</span>` : ''}</button>` : ''}
+    <button class="btn btn-s btn-sm" onclick="almSolicitar('${A}')">📦 Solicitar a proveedor</button>
+    <button class="btn btn-s btn-sm" onclick="almAvisos('${A}')">🔔 Avisos</button></div></div>`;
+}
+
+// ── Avisos: caducados, por caducar, acabados, bajo mínimo, garantías ──
+function almAvisosDatos(A) {
+  const R = almFilas(A), L = R.flatMap(r => r.lotes.map(l => ({ r, ...l })));
+  return [
+    ['Caducados · retirar del almacén', 'r', L.filter(l => l.cad && diasA(l.cad) < 0).sort((a, b) => a.cad < b.cad ? -1 : 1).map(l => [l.r, `${l.lote ? 'Lote ' + l.lote + ' · ' : ''}${almNum(l.q)} ${l.r.unidad || 'pza'}`, 'caducó ' + fmtD(l.cad)])],
+    ['Caducan en 30 días', 'r', L.filter(l => l.cad && diasA(l.cad) >= 0 && diasA(l.cad) <= 30).sort((a, b) => a.cad < b.cad ? -1 : 1).map(l => [l.r, `${l.lote ? 'Lote ' + l.lote + ' · ' : ''}${almNum(l.q)} pza${l.sobra ? ' · ' + l.sobra + ' no se alcanzan a usar' : ''}`, fmtD(l.cad) + ' (' + diasA(l.cad) + ' d)'])],
+    ['Caducan en 31 a 90 días', 'a', L.filter(l => l.cad && diasA(l.cad) > 30 && diasA(l.cad) <= 90).sort((a, b) => a.cad < b.cad ? -1 : 1).map(l => [l.r, `${l.lote ? 'Lote ' + l.lote + ' · ' : ''}${almNum(l.q)} pza`, fmtD(l.cad) + ' (' + diasA(l.cad) + ' d)'])],
+    ['Acabados o críticos', 'r', R.filter(r => r.est === 'acabado' || r.est === 'critico').map(r => [r, `Quedan ${almNum(r.ex)}${r.min ? ' · mínimo ' + almNum(r.min) : ''}`, EST_ALM[r.est][0]])],
+    ['Bajo mínimo', 'a', R.filter(r => r.est === 'bajo').map(r => [r, `Quedan ${almNum(r.ex)} · mínimo ${almNum(r.min)}`, r.dias !== null ? 'alcanza ' + r.dias + ' d' : ''])],
+    ['Se acaban en ' + DIAS_ALERTA_FIN + ' días', 'a', R.filter(r => r.dias !== null && r.dias <= DIAS_ALERTA_FIN && r.est !== 'acabado').map(r => [r, `Quedan ${almNum(r.tot || r.ex)} · salen ${almNum((r.c4 || 0) / 4)} por semana`, 'se acaba ' + fmtD(r.fin)])],
+    ['Equipos con garantía por vencer (60 días)', 'a', L.filter(l => l.gar && diasA(l.gar) <= 60).map(l => [l.r, 'Serie ' + (l.serie || l.lote || '—'), (diasA(l.gar) < 0 ? 'venció ' : 'vence ') + fmtD(l.gar)])],
+  ];
+}
+function almAvisos(A) {
+  const S = almAvisosDatos(A), tot = S.reduce((s, x) => s + x[2].length, 0);
+  modal('Avisos · ' + ALM_AREAS.find(x => x[0] === A)[1], tot ? S.filter(x => x[2].length).map(([t, c, L]) => `<div class="dsec">${t} (${L.length})</div><div class="alist" style="margin-bottom:12px">${L.map(([r, m, d]) => `<div class="aitem ${c}" onclick="CM('mGen');almDetalle('${A}','${esc(r.id)}')"><div style="flex:1"><div class="at">${esc(r.n)}</div><div class="am">${m}</div></div><b style="white-space:nowrap;font-size:12px">${d}</b></div>`).join('')}</div>`).join('') : '<div class="okbox">Sin avisos: nada caducado, por caducar ni por terminarse.</div>',
+    `<button class="btn btn-s" onclick="imprimirAlm()">🖨 Imprimir</button>${tot ? `<button class="btn btn-s" onclick="CM('mGen');almSolicitar('${A}')">📦 Solicitar lo que falta</button>` : ''}<button class="btn btn-p" onclick="CM('mGen')">Cerrar</button>`, 'lg');
+}
+function almAlertas(A) {   // para la campana de Alertas
+  const out = [], S = almAvisosDatos('alm'), g = (i, n, txt) => { const L = S[i][2]; if (L.length) out.push({ n, t: `Almacén: ${L.length} ${txt}`, m: L.slice(0, 3).map(x => x[0].n + ' (' + x[2] + ')').join(' · ') + (L.length > 3 ? '…' : ''), go: () => { VIEW.almA = 'alm'; goTab('alm'); setTimeout(() => almAvisos('alm'), 80); } }); };
+  g(0, 'r', 'lote(s) caducados en existencia'); g(1, 'r', 'lote(s) caducan en 30 días'); g(3, 'r', 'producto(s) acabados o críticos'); g(4, 'a', 'producto(s) bajo mínimo'); g(5, 'a', 'producto(s) se acaban en ' + DIAS_ALERTA_FIN + ' días'); g(6, 'a', 'equipo(s) con garantía por vencer');
+  const sol = INV.farSol || []; if (sol.length) out.push({ n: 'i', t: `Almacén: ${sol.length} solicitud(es) de farmacia por surtir`, m: 'Hacer el traspaso a mostrador', go: () => { VIEW.almA = 'alm'; goTab('alm'); setTimeout(() => almTraspaso(), 80); } });
+  return out;
+}
+
+// ── Fechas y números de una hoja de cálculo ──
+function almFecha(v) {
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v === 'number' && window.XLSX) { const d = XLSX.SSF.parse_date_code(v); if (d) return `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`; }
+  if (v instanceof Date) return isoD(v);
+  const s = String(v).trim(), MM = { ENE: 1, FEB: 2, MAR: 3, ABR: 4, MAY: 5, JUN: 6, JUL: 7, AGO: 8, SEP: 9, OCT: 10, NOV: 11, DIC: 12 };
+  let m;
+  if ((m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+  if ((m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/))) { const y = m[3].length === 2 ? '20' + m[3] : m[3]; return `${y}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`; }
+  const fin = (y, mo) => isoD(new Date(+y, +mo, 0));
+  if ((m = s.match(/^(\d{1,2})[\/\-.](\d{4})$/))) return fin(m[2], m[1]);                         // 03/2027 → último día del mes
+  if ((m = s.match(/^(\d{4})[\/\-.](\d{1,2})$/))) return fin(m[1], m[2]);
+  if ((m = normTx(s).match(/^(ENE|FEB|MAR|ABR|MAY|JUN|JUL|AGO|SEP|OCT|NOV|DIC)[A-Z]*\s*(?:DE\s*)?(\d{2,4})$/))) return fin(m[2].length === 2 ? '20' + m[2] : m[2], MM[m[1]]);
+  return null;
+}
+const ALM_COLS = [
+  ['clave', /^(CLAVE|CODIGO|COD|SKU|EAN|CODIGO DE BARRAS)\b/], ['nombre', /(NOMBRE|PRODUCTO|DESCRIPCION|ARTICULO|MEDICAMENTO|MATERIAL|INSUMO)/], ['tipo', /^(TIPO|CATEGORIA|CLASIFICACION)/],
+  ['principio', /(PRINCIPIO|SUSTANCIA|ACTIVO|GENERICO)/], ['presentacion', /PRESENTACION/], ['unidad', /^(UNIDAD|UM|U M)\b/], ['marca', /(MARCA|LABORATORIO|FABRICANTE)/],
+  ['lote', /^LOTE/], ['serie', /SERIE/], ['caducidad', /(CADUC|VENCE|VENCIMIENTO|EXPIRA|CAD\b)/], ['cantidad', /(CANTIDAD|EXISTENCIA|PIEZAS|CONTEO|STOCK|INVENTARIO|PZAS)/],
+  ['costo', /(COSTO|PRECIO COMPRA|PRECIO UNIT|P UNIT)/], ['factura', /FACTURA/], ['proveedor', /PROVEEDOR/], ['registro_sanitario', /(REGISTRO|COFEPRIS)/],
+  ['minimo_alm', /MINIMO/], ['ubicacion_fisica', /(UBICACION|ANAQUEL|ESTANTE|RACK)/], ['red_fria', /(RED FRIA|REFRIGER)/], ['controlado', /(CONTROLAD|PSICOTROP|FRACCION)/], ['garantia_hasta', /GARANT/],
+];
+function almPlantilla() {
+  const H = ['Clave o código de barras', 'Nombre del producto', 'Tipo (Medicamento / Insumo / Material quirúrgico / Equipo)', 'Principio activo', 'Presentación', 'Unidad', 'Marca o laboratorio', 'Lote', 'Número de serie (equipos)', 'Caducidad (dd/mm/aaaa o mm/aaaa)', 'Cantidad', 'Costo unitario', 'Factura', 'Proveedor', 'Registro sanitario', 'Mínimo en almacén', 'Ubicación (anaquel)', 'Red fría (sí/no)', 'Controlado (sí/no)', 'Garantía hasta (equipos)'];
+  const ej = [['7501001234567', 'Tropicamida 1% gotas', 'Medicamento', 'Tropicamida', 'Frasco 15 ml', 'frasco', 'Sophia', 'A2345', '', '31/03/2027', 12, 85, 'F-1234', 'Distribuidora Ejemplo', '123M2015 SSA', 6, 'A-2', 'no', 'no', ''], ['', 'Gasas estériles 10x10', 'Insumo', '', 'Paquete 10 pzas', 'paquete', 'Protec', 'G778', '', '08/2028', 40, 12.5, '', '', '', 20, 'B-1', 'no', 'no', ''], ['', 'Cuchillete 2.75 mm', 'Material quirúrgico', '', 'Pieza', 'pza', 'Alcon', 'K9912', '', '30/11/2027', 15, 320, '', '', '', 10, 'Q-3', 'no', 'no', ''], ['', 'Lámpara de fotocurado', 'Equipo', '', '', 'pza', 'Marca X', '', 'SN-00123', '', 1, 4500, '', '', '', 0, 'Bodega', 'no', 'no', '31/12/2027']];
+  const wb = XLSX.utils.book_new(), ws = XLSX.utils.aoa_to_sheet([H, ...ej]);
+  ws['!cols'] = H.map(h => ({ wch: Math.max(12, Math.min(34, h.length)) }));
+  XLSX.utils.book_append_sheet(wb, ws, 'Inventario almacén'); XLSX.writeFile(wb, 'Plantilla inventario almacen COE.xlsx');
+}
+let ALM_UP = { filas: [], modo: 'fijar' };
+function almSubir() {
+  ALM_UP = { filas: [], modo: 'fijar' };
+  modal('Subir inventario del almacén', `<div class="mini" style="margin-bottom:10px">Sube un Excel o CSV con lo que hay en el almacén: medicamentos, insumos, material quirúrgico y equipos. Datos importantes: <b>nombre, tipo, lote, caducidad, cantidad</b> y, en equipos, <b>número de serie</b>. También se leen clave, presentación, unidad, marca, costo, factura, proveedor, registro sanitario, mínimo, ubicación, red fría y controlado.</div>
+    <div class="fgrd" style="margin-bottom:12px"><div class="fgrp sp2"><label>¿Qué estás subiendo?</label>
+      <label class="opt sel" style="cursor:pointer;text-transform:none;letter-spacing:0;font-size:13px;font-weight:400;color:var(--tx)"><input type="radio" name="almModo" checked onchange="ALM_UP.modo='fijar';almPintarUp()"><span><b>Inventario físico</b> (conteo): la cantidad de cada lote queda como dice el archivo.</span></label>
+      <label class="opt" style="cursor:pointer;margin-top:6px;text-transform:none;letter-spacing:0;font-size:13px;font-weight:400;color:var(--tx)"><input type="radio" name="almModo" onchange="ALM_UP.modo='sumar';almPintarUp()"><span><b>Entrada de mercancía</b>: las cantidades se suman a lo que ya hay.</span></label></div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><button class="btn btn-s btn-sm" onclick="almPlantilla()">⬇ Descargar plantilla de Excel</button></div>
+    <div class="drop"><input type="file" accept=".xlsx,.xls,.csv" onchange="almLeerArchivo(this.files[0]);this.value=''"><div class="big">⬆</div><div><b>Elige el archivo de inventario</b></div><div class="mini">Excel (.xlsx) o CSV · una fila por lote</div></div>
+    <div id="almUpRes"></div>`, `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" id="almUpGo" onclick="almAplicarUp()" disabled>Firmar y cargar</button>`, 'xl');
+}
+async function almLeerArchivo(file) {
+  if (!file) return;
+  try {
+    const wb = /\.csv$/i.test(file.name) || /csv|text/.test(file.type) ? XLSX.read(await file.text(), { type: 'string', raw: true }) : XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: false });
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '', raw: true });
+    const hi = rows.findIndex(r => r.filter(c => String(c).trim()).length >= 2 && r.some(c => /NOMBRE|PRODUCTO|DESCRIPCION|ARTICULO/.test(normTx(c))));
+    if (hi < 0) { toast('No encontré la fila de encabezados (debe tener una columna Nombre o Producto)', 'error'); return; }
+    const H = rows[hi].map(c => normTx(c)), idx = {};
+    ALM_COLS.forEach(([k, rx]) => { const i = H.findIndex((h, j) => rx.test(h) && !Object.values(idx).includes(j)); if (i >= 0) idx[k] = i; });
+    const si = v => /^(SI|S|X|1|TRUE|VERDADERO)$/.test(normTx(v));
+    ALM_UP.filas = rows.slice(hi + 1).filter(r => r.some(c => String(c).trim())).map(r => {
+      const g = k => idx[k] !== undefined ? r[idx[k]] : '';
+      const tipo = almTipoDe(g('tipo') || ''), prov = String(g('proveedor') || '').trim(), e = prov ? ENT.find(x => normTx(x.nombre) === normTx(prov)) || ENT.find(x => simil(x.nombre, prov) >= 0.75) : null;
+      return { nombre: String(g('nombre') || '').trim(), clave: String(g('clave') || '').trim(), tipo_insumo: tipo, principio: String(g('principio') || '').trim(), presentacion: String(g('presentacion') || '').trim(),
+        unidad: String(g('unidad') || '').trim(), marca: String(g('marca') || '').trim(), lote: String(g('lote') || '').trim(), serie: String(g('serie') || '').trim(), caducidad: almFecha(g('caducidad')),
+        cadTxt: String(g('caducidad') || ''), cantidad: num(g('cantidad')), costo: num(g('costo')) || '', factura: String(g('factura') || '').trim(), proveedor: prov, proveedor_id: e ? e.id : '',
+        registro_sanitario: String(g('registro_sanitario') || '').trim(), minimo_alm: g('minimo_alm') === '' ? '' : num(g('minimo_alm')), ubicacion_fisica: String(g('ubicacion_fisica') || '').trim(),
+        red_fria: idx.red_fria !== undefined ? si(g('red_fria')) : null, controlado: idx.controlado !== undefined ? si(g('controlado')) : null, garantia_hasta: almFecha(g('garantia_hasta')) };
+    });
+    ALM_UP.cols = Object.keys(idx);
+    almPintarUp();
+  } catch (e) { toast('No se pudo leer el archivo: ' + e.message, 'error'); }
+}
+function almRevisar(f, modo) {
+  const err = [], av = [];
+  if (!f.nombre) err.push('Falta el nombre');
+  if (modo === 'sumar' ? !(f.cantidad > 0) : !(f.cantidad >= 0)) err.push('Cantidad no válida');
+  if (almReqCad(f.tipo_insumo) && !f.caducidad) (f.cadTxt ? err : av).push(f.cadTxt ? 'Caducidad ilegible: ' + f.cadTxt : 'Sin caducidad');
+  if (f.tipo_insumo === 'equipo' && !f.serie) av.push('Equipo sin número de serie');
+  if (f.tipo_insumo !== 'equipo' && !f.lote) av.push('Sin lote');
+  if (f.caducidad && diasA(f.caducidad) < 0) av.push('CADUCADO');
+  else if (f.caducidad && diasA(f.caducidad) <= 90) av.push('caduca en ' + diasA(f.caducidad) + ' d');
+  if (f.proveedor && !f.proveedor_id) av.push('Proveedor no registrado: ' + f.proveedor);
+  const p = (INV.farProd || []).find(x => (f.clave && x.clave === f.clave) || normTx(x.nombre) === normTx(f.nombre));
+  return { err, av, p };
+}
+function almPintarUp() {
+  const el = document.getElementById('almUpRes'); if (!el) return;
+  document.querySelectorAll('input[name="almModo"]').forEach((r, i) => r.closest('.opt').classList.toggle('sel', (i === 0) === (ALM_UP.modo === 'fijar')));
+  const F = ALM_UP.filas; if (!F.length) { el.innerHTML = ''; return; }
+  const R = F.map(f => ({ f, ...almRevisar(f, ALM_UP.modo) })), ok = R.filter(x => !x.err.length), nuevos = new Set(ok.filter(x => !x.p).map(x => normTx(x.f.nombre))).size;
+  const cad = ok.filter(x => x.f.caducidad && diasA(x.f.caducidad) < 0).length, xcad = ok.filter(x => x.f.caducidad && diasA(x.f.caducidad) >= 0 && diasA(x.f.caducidad) <= 90).length;
+  el.innerHTML = `<div class="kv" style="margin:14px 0 10px"><b>Filas leídas</b><div>${F.length} · columnas reconocidas: ${ALM_UP.cols.length}</div><b>Se cargan</b><div><b>${ok.length}</b> lote(s)${nuevos ? ' · ' + nuevos + ' producto(s) nuevo(s) se dan de alta' : ''}</div>
+    ${R.length - ok.length ? `<b>Con error (no se cargan)</b><div style="color:var(--dg)"><b>${R.length - ok.length}</b></div>` : ''}${cad || xcad ? `<b>Caducidades</b><div>${cad ? `<b style="color:var(--dg)">${cad} caducado(s)</b> · ` : ''}${xcad} caducan en 90 días</div>` : ''}</div>
+    <div class="tc" style="max-height:46vh;overflow:auto"><table><thead><tr><th>Producto</th><th>Tipo</th><th>Lote / serie</th><th>Caducidad</th><th style="text-align:right">Cantidad</th><th style="text-align:right">Costo</th><th>Revisión</th></tr></thead><tbody>
+    ${R.slice(0, 400).map(x => `<tr style="${x.err.length ? 'opacity:.6' : ''}"><td><b>${esc(x.f.nombre || '—')}</b><div class="mini">${x.p ? 'existe' + (x.p.clave ? ' · ' + esc(x.p.clave) : '') : '<b style="color:var(--in)">nuevo</b>'}${x.f.presentacion ? ' · ' + esc(x.f.presentacion) : ''}${x.f.marca ? ' · ' + esc(x.f.marca) : ''}</div></td>
+      <td class="mini">${TIPO_INS[x.f.tipo_insumo]}</td><td>${esc(x.f.lote || '')}${x.f.serie ? `<div class="mini">serie ${esc(x.f.serie)}</div>` : ''}</td>
+      <td style="${x.f.caducidad && diasA(x.f.caducidad) < 0 ? 'color:var(--dg);font-weight:700' : x.f.caducidad && diasA(x.f.caducidad) <= 90 ? 'color:var(--wn)' : ''}">${x.f.caducidad ? fmtD(x.f.caducidad) : '<span class="mini">—</span>'}</td>
+      <td class="amt" style="text-align:right">${almNum(x.f.cantidad)}</td><td class="amt" style="text-align:right">${x.f.costo ? $$(x.f.costo) : ''}</td>
+      <td class="mini">${x.err.map(e => `<b style="color:var(--dg)">${esc(e)}</b>`).concat(x.av.map(a => esc(a))).join(' · ') || '<span style="color:var(--sc)">✓</span>'}</td></tr>`).join('')}</tbody></table></div>
+    ${F.length > 400 ? `<div class="mini">Se muestran 400 de ${F.length}; se cargan todas las filas válidas.</div>` : ''}
+    <div class="mini" style="margin-top:8px">${ALM_UP.modo === 'fijar' ? 'Inventario físico: cada lote del archivo queda con la cantidad contada; los lotes que no vienen en el archivo no se tocan.' : 'Entrada: cada cantidad se suma al lote correspondiente (o crea el lote).'} Los lotes caducados se cargan para que aparezcan como «retirar».</div>`;
+  const go = document.getElementById('almUpGo'); if (go) { go.disabled = !ok.length; go.textContent = `Firmar y cargar ${ok.length} lote(s)`; }
+}
+async function almAplicarUp() {
+  const ok = ALM_UP.filas.filter(f => !almRevisar(f, ALM_UP.modo).err.length).map(f => { const p = almRevisar(f, ALM_UP.modo).p; const o = { ...f, producto_id: p ? p.id : '' }; delete o.cadTxt; delete o.proveedor; return o; });
+  if (!ok.length) return;
+  let pin; try { pin = await askPin(ALM_UP.modo === 'fijar' ? 'Firmar inventario del almacén' : 'Firmar entrada al almacén', `${ok.length} lote(s)`); } catch { return; }
+  const go = document.getElementById('almUpGo'); go.disabled = true; go.textContent = 'Cargando…';
+  let lotes = 0, nuevos = 0, errores = [];
+  for (let i = 0; i < ok.length; i += 150) {
+    const r = await rpcConPin('fin_alm_entrada', { p_items: ok.slice(i, i + 150), p_modo: ALM_UP.modo, p_motivo: ALM_UP.modo === 'fijar' ? 'Inventario físico de almacén (archivo)' : 'Entrada al almacén (archivo)' }, pin);
+    if (!r.ok) { toast(ERR[r.error] || r.error, 'error'); go.disabled = false; go.textContent = 'Firmar y cargar'; return; }
+    lotes += r.lotes; nuevos += r.nuevos; errores = errores.concat((r.errores || []).map(e => ({ ...e, fila: e.fila + i })));
+  }
+  await cargarTodo();
+  document.getElementById('mGenB').innerHTML = `<div class="okbox"><b>${lotes} lote(s) cargados al almacén</b>${nuevos ? `<br>${nuevos} producto(s) nuevo(s) dados de alta` : ''}</div>${errores.length ? `<div class="errbox">${errores.slice(0, 30).map(e => `Fila ${e.fila}${e.nombre ? ' · ' + esc(e.nombre) : ''}: ${esc(e.error)}`).join('<br>')}</div>` : ''}<div class="mini">Ya se ven en COE Farmacia (almacén) y en este tablero.</div>`;
+  document.getElementById('mGenF').innerHTML = `<button class="btn btn-p" onclick="CM('mGen')">Listo</button>`;
+  toast('Inventario cargado', 'success');
+}
+
+// ── Agregar manualmente (pestaña) ──
+let ALM_N = { filas: [], pedido: '' };
+function almVistaAgregar() {
+  const P = INV.farProd || [], pend = PED.filter(p => /farm/i.test(p.area || '') && ['autorizado', 'enviado', 'recibido'].includes(p.estado));
+  return `<div class="pad"><div class="cfgg" style="grid-template-columns:minmax(0,1.25fr) minmax(0,1fr)">
+    <div class="cfg-section"><h3>Agregar al almacén</h3><div class="body">
+      ${pend.length ? `<div class="fgrp" style="margin-bottom:12px"><label>¿Viene de un pedido?</label><select id="anPed" onchange="almDesdePedido(this.value)"><option value="">— No / entrada suelta —</option>${pend.map(p => `<option value="${p.id}" ${ALM_N.pedido === p.id ? 'selected' : ''}>${esc(p.folio)} · ${esc(String(p.descripcion).slice(0, 60))} · ${(PED_EST[p.estado] || [p.estado])[0]}</option>`).join('')}</select></div>` : ''}
+      <div class="fgrd">
+        <div class="fgrp"><label>Tipo</label><select id="anT" onchange="almCamposTipo()">${Object.entries(TIPO_INS).map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select></div>
+        <div class="fgrp"><label>Producto</label><input type="text" id="anN" list="anLista" placeholder="Escribe o elige uno existente" oninput="almPrefill(this.value)"><datalist id="anLista">${P.map(p => `<option value="${esc(p.nombre)}">`).join('')}</datalist></div>
+        <div class="fgrp"><label>Clave / código de barras</label><input type="text" id="anC"></div>
+        <div class="fgrp"><label>Presentación</label><input type="text" id="anPr" placeholder="Ej. Frasco 15 ml, caja 10 pzas"></div>
+        <div class="fgrp an-med"><label>Principio activo</label><input type="text" id="anPa"></div>
+        <div class="fgrp"><label>Marca / laboratorio</label><input type="text" id="anMa"></div>
+        <div class="fgrp"><label>Unidad</label><input type="text" id="anU" placeholder="pza, frasco, caja…"></div>
+        <div class="fgrp an-lote"><label>Lote</label><input type="text" id="anL"></div>
+        <div class="fgrp an-cad"><label>Caducidad</label><input type="date" id="anCa"></div>
+        <div class="fgrp an-eq" style="display:none"><label>Número de serie</label><input type="text" id="anS"></div>
+        <div class="fgrp an-eq" style="display:none"><label>Garantía hasta</label><input type="date" id="anG"></div>
+        <div class="fgrp"><label>Cantidad</label><input type="number" id="anQ" min="1" step="1"></div>
+        <div class="fgrp"><label>Costo unitario</label><div class="ipfx"><span>$</span><input type="number" id="anCo" step="0.01"></div></div>
+        <div class="fgrp"><label>Factura</label><input type="text" id="anF"></div>
+        <div class="fgrp"><label>Proveedor</label><select id="anPv">${optProv('')}</select></div>
+        <div class="fgrp"><label>Mínimo en almacén</label><input type="number" id="anMi" min="0" step="1"></div>
+        <div class="fgrp"><label>Ubicación (anaquel)</label><input type="text" id="anUb"></div>
+        <div class="fgrp an-med"><label>Registro sanitario</label><input type="text" id="anRs"></div>
+        <div class="fgrp sp2" style="display:flex;gap:18px;flex-wrap:wrap"><label style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="anRf" style="width:auto"> Red fría (refrigeración)</label><label class="an-med" style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="anCt" style="width:auto"> Medicamento controlado</label></div>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px"><button class="btn btn-s" onclick="almAgregarFila()">+ Agregar a la lista</button></div>
+    </div></div>
+    <div class="cfg-section"><h3 style="display:flex;justify-content:space-between;align-items:center">Lista por registrar (${ALM_N.filas.length})${ALM_N.filas.length ? `<button class="btn btn-s btn-sm" onclick="ALM_N.filas=[];renderTab()">Vaciar</button>` : ''}</h3><div class="body">
+      ${ALM_N.filas.length ? `<div class="alist">${ALM_N.filas.map((f, i) => `<div class="aitem ${f.caducidad && diasA(f.caducidad) < 0 ? 'r' : f.caducidad && diasA(f.caducidad) <= 90 ? 'a' : 'i'}"><div style="flex:1"><div class="at">${esc(f.nombre)} · ${almNum(f.cantidad)} ${esc(f.unidad || 'pza')}</div><div class="am">${TIPO_INS[f.tipo_insumo]}${f.lote ? ' · lote ' + esc(f.lote) : ''}${f.serie ? ' · serie ' + esc(f.serie) : ''}${f.caducidad ? ' · caduca ' + fmtD(f.caducidad) : ''}${f.costo ? ' · ' + $$(f.costo) + ' c/u' : ''}${f.producto_id ? '' : ' · <b>producto nuevo</b>'}</div></div><span class="mcls" onclick="ALM_N.filas.splice(${i},1);renderTab()">✕</span></div>`).join('')}</div>
+        <div class="mini" style="margin:10px 0">Total ${$$(ALM_N.filas.reduce((s, f) => s + num(f.costo) * num(f.cantidad), 0))} a costo</div>
+        <button class="btn btn-p" style="width:100%" onclick="almGuardarManual()">Firmar y registrar entrada al almacén</button>` : '<div class="mini">Agrega uno o varios productos con su lote y caducidad. Al firmar, entran al almacén y COE Farmacia los ve al momento.</div>'}
+    </div></div></div></div>`;
+}
+function almCamposTipo() {
+  const t = document.getElementById('anT')?.value;
+  document.querySelectorAll('.an-eq').forEach(e => e.style.display = t === 'equipo' ? '' : 'none');
+  document.querySelectorAll('.an-cad').forEach(e => e.style.display = t === 'equipo' ? 'none' : '');
+  document.querySelectorAll('.an-med').forEach(e => e.style.display = t === 'medicamento' ? '' : 'none');
+}
+function almPrefill(nombre) {
+  const p = (INV.farProd || []).find(x => normTx(x.nombre) === normTx(nombre)); if (!p) return;
+  const set = (id, v) => { const e = document.getElementById(id); if (e && v !== null && v !== undefined && v !== '') e.value = v; };
+  set('anT', p.tipo_insumo || (p.categoria === 'var' ? 'insumo' : 'medicamento')); set('anC', p.clave); set('anPr', p.presentacion); set('anPa', p.principio); set('anMa', p.marca); set('anU', p.unidad);
+  set('anPv', p.proveedor_id); set('anMi', p.minimo_alm); set('anUb', p.ubicacion_fisica); set('anRs', p.registro_sanitario); if (num(p.costo)) set('anCo', p.costo);
+  document.getElementById('anRf').checked = !!p.red_fria; document.getElementById('anCt').checked = !!p.controlado; almCamposTipo();
+}
+function almAgregarFila() {
+  const v = id => (document.getElementById(id)?.value || '').trim(), t = v('anT'), nombre = v('anN');
+  if (!nombre) return toast('Escribe el producto', 'warning');
+  if (!(num(v('anQ')) > 0)) return toast('Escribe la cantidad', 'warning');
+  if (almReqCad(t) && !v('anCa')) return toast('La caducidad es obligatoria en medicamentos, insumos y material quirúrgico', 'warning');
+  if (t === 'equipo' && !v('anS')) return toast('Escribe el número de serie del equipo', 'warning');
+  if (t !== 'equipo' && !v('anL')) return toast('Escribe el lote', 'warning');
+  const p = (INV.farProd || []).find(x => (v('anC') && x.clave === v('anC')) || normTx(x.nombre) === normTx(nombre));
+  ALM_N.filas.push({ producto_id: p ? p.id : '', nombre, tipo_insumo: t, clave: v('anC'), presentacion: v('anPr'), principio: v('anPa'), marca: v('anMa'), unidad: v('anU'), lote: v('anL'), caducidad: t === 'equipo' ? null : v('anCa'),
+    serie: v('anS'), garantia_hasta: v('anG') || null, cantidad: num(v('anQ')), costo: num(v('anCo')) || '', factura: v('anF'), proveedor_id: v('anPv'), minimo_alm: v('anMi') === '' ? '' : num(v('anMi')),
+    ubicacion_fisica: v('anUb'), registro_sanitario: v('anRs'), red_fria: document.getElementById('anRf').checked, controlado: t === 'medicamento' && document.getElementById('anCt').checked });
+  renderTab(); toast('Agregado a la lista', 'success');
+}
+function almDesdePedido(id) {
+  ALM_N.pedido = id; const p = PED.find(x => x.id === id); if (!p) { renderTab(); return; }
+  (p.partidas || []).forEach(x => { const pr = (INV.farProd || []).find(z => String(z.id) === String(x.far_producto_id)) || (INV.farProd || []).find(z => normTx(z.nombre) === normTx(x.descripcion));
+    if (!ALM_N.filas.some(f => f.nombre === (pr ? pr.nombre : x.descripcion))) ALM_N.filas.push({ producto_id: pr ? pr.id : '', nombre: pr ? pr.nombre : x.descripcion, tipo_insumo: pr?.tipo_insumo || 'medicamento', unidad: x.unidad || pr?.unidad || '', cantidad: num(x.cantidad) || 1, costo: num(x.costo) || '', proveedor_id: p.entidad_id || '', lote: '', caducidad: '', _falta: true }); });
+  renderTab(); toast('Partidas del pedido agregadas: captura lote y caducidad de cada una', 'info');
+}
+async function almGuardarManual() {
+  const falta = ALM_N.filas.filter(f => f._falta && ((almReqCad(f.tipo_insumo) && !f.caducidad) || (!f.lote && !f.serie)));
+  if (falta.length) { const f = falta[0]; ALM_N.filas = ALM_N.filas.filter(x => x !== f); renderTab(); setTimeout(() => { document.getElementById('anN').value = f.nombre; almPrefill(f.nombre); document.getElementById('anQ').value = f.cantidad; if (f.costo) document.getElementById('anCo').value = f.costo; if (f.proveedor_id) document.getElementById('anPv').value = f.proveedor_id; document.getElementById('anL').focus(); }, 50); return toast(`Falta lote y caducidad de «${f.nombre}»`, 'warning'); }
+  let pin; try { pin = await askPin('Firmar entrada al almacén', `${ALM_N.filas.length} producto(s)`); } catch { return; }
+  const ped = PED.find(x => x.id === ALM_N.pedido);
+  const r = await rpcConPin('fin_alm_entrada', { p_items: ALM_N.filas.map(({ _falta, ...f }) => f), p_modo: 'sumar', p_motivo: ped ? 'Entrada del pedido ' + ped.folio : 'Entrada manual al almacén (COE Finanzas)' }, pin);
+  if (!r.ok) return toast(ERR[r.error] || r.error, 'error');
+  if (ped && ped.estado !== 'recibido') await rpcConPin('fin_pedido_estado', { p_pedido: ped.id, p_estado: 'recibido', p_datos: {} }, pin);
+  if ((r.errores || []).length) toast(r.errores.map(e => (e.nombre || 'Fila ' + e.fila) + ': ' + e.error).join(' · '), 'warning');
+  else toast(`${r.lotes} lote(s) registrados en el almacén${ped ? ' · pedido ' + ped.folio + ' recibido' : ''}`, 'success');
+  ALM_N = { filas: [], pedido: '' }; VIEW.almV = 'tablero'; await cargarTodo();
+}
+
+// ── Traspaso almacén → farmacia mostrador ──
+function almTraspaso(pre) {
+  const R = almFilas('alm').filter(r => r.lotes.some(l => !l.cad || diasA(l.cad) >= 0)), sol = INV.farSol || [];
+  const vig = r => r.lotes.filter(l => !l.cad || diasA(l.cad) >= 0).reduce((s, l) => s + l.q, 0);
+  const pedido = id => sol.filter(s => String(s.producto_id) === String(id)).reduce((s, x) => s + num(x.cantidad) - num(x.surtido), 0);
+  const L = R.sort((a, b) => pedido(b.id) - pedido(a.id) || a.n.localeCompare(b.n));
+  modal('Traspaso del almacén a farmacia mostrador', `<div class="mini" style="margin-bottom:10px">Escribe cuántas piezas pasan a mostrador. Sale primero lo que caduca antes (los lotes caducados no se traspasan). Las solicitudes de la farmacia aparecen arriba con la cantidad pedida.</div>
+    <input type="text" placeholder="Buscar producto…" oninput="const q=normTx(this.value);document.querySelectorAll('#trL tr[data-n]').forEach(t=>t.style.display=t.dataset.n.includes(q)?'':'none')" style="margin-bottom:10px">
+    <div class="tc" style="max-height:52vh;overflow:auto"><table><thead><tr><th>Producto</th><th style="text-align:right">En almacén</th><th style="text-align:right">En mostrador</th><th>Pidió farmacia</th><th style="text-align:right;width:120px">Traspasar</th></tr></thead><tbody id="trL">
+    ${L.length ? L.map(r => { const pq = pedido(r.id), v0 = pre && pre[r.id] !== undefined ? Math.min(vig(r), pre[r.id]) : pq ? Math.min(vig(r), pq) : ''; return `<tr data-n="${esc(normTx(r.n))}"><td><b>${esc(r.n)}</b><div class="mini">${r.lotes.filter(l => !l.cad || diasA(l.cad) >= 0).sort((a, b) => String(a.cad || '9') < String(b.cad || '9') ? -1 : 1).slice(0, 3).map(l => `${esc(l.lote)} (${almNum(l.q)}${l.cad ? ', ' + fmtD(l.cad) : ''})`).join(' · ')}</div></td>
+      <td class="amt" style="text-align:right">${almNum(vig(r))}</td><td class="amt" style="text-align:right">${almNum(r.most)}</td><td>${pq ? `<span class="bdg bdg-pnd">${pq} pza</span>` : ''}</td>
+      <td><input type="number" min="0" max="${vig(r)}" step="1" class="trQ" data-id="${r.id}" value="${v0}" style="text-align:right"></td></tr>`; }).join('') : '<tr><td colspan="5" class="mini">No hay existencias vigentes en el almacén.</td></tr>'}</tbody></table></div>`,
+    `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="almTraspasoFirmar()">Firmar traspaso</button>`, 'xl');
+}
+async function almTraspasoFirmar() {
+  const sol = INV.farSol || [];
+  const items = [...document.querySelectorAll('.trQ')].filter(i => num(i.value) > 0).map(i => { const s = sol.find(x => String(x.producto_id) === i.dataset.id); return { producto_id: +i.dataset.id, cantidad: Math.round(num(i.value)), solicitud: s ? s.id : null }; });
+  if (!items.length) return toast('Escribe al menos una cantidad', 'warning');
+  let pin; try { pin = await askPin('Firmar traspaso a mostrador', `${items.length} producto(s) · ${items.reduce((s, x) => s + x.cantidad, 0)} pza`); } catch { return; }
+  const r = await rpcConPin('fin_alm_traspaso', { p_items: items }, pin);
+  if (!r.ok) return toast(ERR[r.error] || r.error, 'error');
+  await cargarTodo();
+  document.getElementById('mGenB').innerHTML = `${r.piezas ? `<div class="okbox"><b>${r.piezas} pieza(s) traspasadas a farmacia mostrador</b><br>${(r.hechos || []).map(h => { const p = (INV.farProd || []).find(z => z.id === h.producto_id); return esc(p ? p.nombre : '') + ': ' + h.cantidad + ' (' + (h.lotes || []).map(l => 'lote ' + l.lote).join(', ') + ')'; }).join('<br>')}</div>` : ''}${(r.errores || []).length ? `<div class="errbox">${r.errores.map(e => { const p = (INV.farProd || []).find(z => z.id === e.producto_id); return esc(p ? p.nombre : '') + ': ' + esc(e.error); }).join('<br>')}</div>` : ''}`;
+  document.getElementById('mGenF').innerHTML = `<button class="btn btn-p" onclick="CM('mGen')">Listo</button>`;
+}
+
+// ── Solicitar a proveedor: crea los pedidos (uno por proveedor) para autorización ──
+function almSolicitar(A, ids) {
+  const R = almFilas(A), L = ids ? R.filter(r => ids.map(String).includes(String(r.id))) : R.filter(r => r.est !== 'ok');
+  if (!L.length) return toast('Nada por solicitar: todo está sobre su mínimo', 'info');
+  const sug = r => Math.max(1, Math.ceil(Math.max(r.min * 2, r.c4 ? r.c4 / 2 : 0, r.min + 1) - (A === 'alm' ? (r.tot || r.ex) : r.ex)));
+  window._almSol = L;
+  modal('Solicitar a proveedor', `<div class="mini" style="margin-bottom:10px">Revisa cantidades y proveedor. Se crea un pedido por proveedor y pasa a <b>Pedidos</b> para su autorización y envío.</div>
+    <div class="tc" style="max-height:50vh;overflow:auto"><table><thead><tr><th>Producto</th><th style="text-align:right">Hay</th><th style="width:90px">Pedir</th><th>Proveedor</th><th style="width:110px">Costo c/u</th></tr></thead><tbody>
+    ${L.map((r, i) => `<tr><td><b>${esc(r.n)}</b><div class="mini">${EST_ALM[r.est][0]}${r.min ? ' · mínimo ' + almNum(r.min) : ''}${r.dias !== null ? ' · alcanza ' + r.dias + ' d' : ''}</div></td><td class="amt" style="text-align:right">${almNum(A === 'alm' ? r.ex : r.ex)}</td>
+      <td><input type="number" min="0" step="1" id="sQ${i}" value="${sug(r)}" style="text-align:right"></td><td><select id="sP${i}">${optProv(r.p?.proveedor_id || '')}</select></td>
+      <td><div class="ipfx"><span>$</span><input type="number" step="0.01" id="sC${i}" value="${num(r.costo) || ''}"></div></td></tr>`).join('')}</tbody></table></div>
+    <div class="fgrd" style="margin-top:12px"><div class="fgrp"><label>Fecha requerida</label><input type="date" id="sF" value="${isoD(new Date(Date.now() + 7 * 864e5))}"></div>
+      <div class="fgrp"><label style="display:flex;gap:8px;align-items:center;margin-top:26px;cursor:pointer"><input type="checkbox" id="sU" style="width:auto" ${L.some(r => r.est === 'acabado' || r.est === 'critico') ? 'checked' : ''}> Urgente</label></div>
+      <div class="fgrp sp2"><label>Notas para el proveedor</label><input type="text" id="sN" placeholder="Opcional"></div></div>`,
+    `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="almSolicitarFirmar('${A}')">Firmar y crear pedido(s)</button>`, 'xl');
+}
+async function almSolicitarFirmar(A) {
+  const L = window._almSol || [], g = {};
+  L.forEach((r, i) => { const q = Math.round(num(document.getElementById('sQ' + i).value)); if (q <= 0) return; const pv = document.getElementById('sP' + i).value || ''; (g[pv] = g[pv] || []).push({ r, q, c: num(document.getElementById('sC' + i).value) }); });
+  const grupos = Object.entries(g); if (!grupos.length) return toast('Escribe al menos una cantidad', 'warning');
+  let pin; try { pin = await askPin('Firmar solicitud a proveedor', `${grupos.length} pedido(s)`); } catch { return; }
+  const ok = [], fallas = [], nomA = A === 'alm' ? 'almacén de farmacia' : 'farmacia';
+  for (const [pv, items] of grupos) {
+    const d = { area: 'Farmacia', entidad_id: pv || null, urgente: document.getElementById('sU').checked, fecha_requerida: document.getElementById('sF').value || null,
+      descripcion: `Reposición de ${nomA}: ` + items.map(x => x.r.n).slice(0, 4).join(', ') + (items.length > 4 ? ` y ${items.length - 4} más` : ''),
+      partidas: items.map(x => ({ descripcion: x.r.n, cantidad: x.q, unidad: x.r.unidad || x.r.p?.unidad || 'pza', far_producto_id: x.r.p ? x.r.p.id : null, costo: x.c || null, tipo: x.r.p?.tipo_insumo || null })),
+      monto_estimado: items.reduce((s, x) => s + x.q * (x.c || 0), 0), notas: [`Solicitado desde Almacén e inventarios (${nomA})`, document.getElementById('sN').value].filter(Boolean).join('\n') };
+    const r = await rpcConPin('fin_pedido_crear', { p_datos: d }, pin);
+    if (r.ok) ok.push(`${r.folio} · ${pv ? nomEnt(pv) : 'sin proveedor'} · ${items.length} producto(s)`); else { fallas.push((ERR[r.error] || r.error)); if (/pin|bloq/i.test(r.error)) break; }
+  }
+  await cargarTodo();
+  document.getElementById('mGenB').innerHTML = `${ok.length ? `<div class="okbox"><b>Pedido(s) creados, pendientes de autorización</b><br>${ok.map(esc).join('<br>')}</div>` : ''}${fallas.length ? `<div class="errbox">${fallas.map(esc).join('<br>')}</div>` : ''}`;
+  document.getElementById('mGenF').innerHTML = `<button class="btn btn-s" onclick="CM('mGen');goTab('ped')">Ver pedidos</button><button class="btn btn-p" onclick="CM('mGen')">Listo</button>`;
 }
 </script>
 </body></html>

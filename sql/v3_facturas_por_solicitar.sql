@@ -109,3 +109,15 @@ alter table public.fin_tareas add column if not exists requiere_conformidad bool
 --   Devuelve métricas agregadas (sin datos de pacientes) de: Conciliación (con_turnos, con_cierres_dia, con_alertas),
 --   Quirófano (qx_cotizaciones, qx_cirugias, qx_materiales/qx_lotes, qx_lio_unidades, qx_escalamientos),
 --   Óptica (opt_trabajos, opt_pagos, opt_examenes) y Nómina (nom_empleados, nom_nominas, nom_asistencias, nom_incidencias).
+-- 13) (20/10/2026) Pedidos de COE Farmacia → COE Finanzas
+--   Causa: COE Farmacia guardaba sus pedidos solo en far_pedidos; Finanzas solo lee fin_pedidos, así que nunca llegaban.
+--   fin_pedidos: columnas far_pedido_id (bigint) y origen.
+--   trg_far_pedido_a_finanzas (after insert en far_pedidos) → crea el pedido en fin_pedidos (área Farmacia, partidas desde detalle, urgente si prioridad Urgente/Crítico).
+--   trg_pedido_estado_a_farmacia (fin_pedidos.estado) → refleja el avance en far_pedidos.estado (0 Enviado, 1 Autorizado, 2 Pedido al proveedor, 3 Recibido) o anota rechazo/cancelación.
+--   trg_far_pedido_recibido (far_pedidos.estado ≥ 3) → marca el pedido recibido en Finanzas.
+--   Se migró PF-0001 → OC-00001. COE Quirófano ya inserta directo en fin_pedidos (área Quirófano); se verificó que el alta funciona.
+-- 14) (20/10/2026) Almacén e inventarios desde Finanzas (escribe en las tablas de COE Farmacia)
+--   far_productos: tipo_insumo (medicamento/insumo/material_quirurgico/equipo), unidad, marca, proveedor_id, registro_sanitario, controlado, red_fria, ubicacion_fisica.
+--   far_lotes: serie, proveedor_id, fecha_entrada, garantia_hasta, notas.
+--   fin_alm_entrada(p_usuario, p_pin, p_items, p_modo 'sumar'|'fijar', p_motivo): entrada de mercancía o inventario físico del almacén; da de alta productos nuevos.
+--   fin_alm_traspaso(p_usuario, p_pin, p_items): almacén → farmacia mostrador (primero lo que caduca antes; no traspasa caducados); surte solicitudes de la farmacia.
