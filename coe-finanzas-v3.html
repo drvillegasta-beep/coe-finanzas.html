@@ -654,6 +654,19 @@ i.dot{flex:0 0 10px;height:10px;border-radius:50%;margin-top:6px;align-self:flex
 .spbd{flex:1;min-width:0}.sphd{display:flex;gap:10px;align-items:center;margin-bottom:8px}.sphd b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:45%}.sphd .mini{flex:1}
 .spft{margin-top:6px;font-size:12.5px}
 @media (max-width:600px){.spit{flex-direction:column}.spth{flex-basis:auto;height:140px;width:100%}}
+/* Barra lateral de la Contadora: almacén + mis tareas desde el inicio */
+.cdash-full{margin-top:0}
+.cdash-full>.cdash-side{display:flex;flex-direction:column;gap:14px;max-height:calc(100vh - 88px);overflow:auto;padding-bottom:4px}
+.cdash-full>.cdash-side .mtl{max-height:340px}
+.almside h3{font-size:14px}
+.almchips{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px}
+.almchip{background:var(--sf2);border:1px solid var(--br);border-radius:9px;padding:6px 4px;cursor:pointer;color:var(--tm);display:flex;flex-direction:column;align-items:center;gap:1px;font-family:var(--fn)}
+.almchip b{font-family:var(--mo);font-size:17px;font-weight:500}.almchip span{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.2px;text-align:center;line-height:1.15}
+.almchip.r{color:var(--dg);border-color:var(--dg);background:var(--dd)}.almchip.a{color:var(--wn);border-color:var(--wn);background:var(--wd)}.almchip.p{color:var(--in);border-color:var(--in);background:var(--id)}
+.almlist{max-height:300px!important}
+@media(max-width:1100px){.cdash-full>.cdash-side{max-height:none;overflow:visible;order:-1}}
+.cdash-full .kgrid{grid-template-columns:repeat(auto-fit,minmax(165px,1fr))!important}
+.cdash-full .avgrid{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
 </style>
 </head>
 <body>
@@ -2208,11 +2221,11 @@ function tablaDia(tareas) {
   return caja(tit, cuerpo, puede('tareas') ? `<button class="btn btn-s btn-sm" onclick="nuevoPendiente()">+ Pendiente</button>` : '');
 }
 function ladoMisTareas(misP) {
-  return `<aside class="cdash-side"><div class="cfg-section"><h3 style="display:flex;justify-content:space-between;align-items:center">Mis tareas (${misP.length})${puede('tareas') ? `<button class="btn btn-s btn-sm" onclick="nuevoPendiente()">+</button>` : ''}</h3>
+  return `<div class="cfg-section"><h3 style="display:flex;justify-content:space-between;align-items:center">Mis tareas (${misP.length})${puede('tareas') ? `<button class="btn btn-s btn-sm" onclick="nuevoPendiente()">+</button>` : ''}</h3>
     <div class="body mtl">${misP.length ? misP.map(t => { const s = semT(t); return `<div class="mt ${s}" onclick="verPendiente('${t.id}')">
       ${puede('tareas') ? `<button class="mtchk" title="Marcar hecho con evidencia" onclick="event.stopPropagation();cumplirTarea('${t.id}')"></button>` : ''}
       <div style="flex:1;min-width:0"><div class="mtt">${esc(t.titulo)}</div><div class="mini">${priBdg(t.prioridad, t.id)} ${s === 'r' ? `<b style="color:var(--dg)">venció ${fmtD(t.fecha_limite)}</b>` : 'vence ' + fmtD(t.fecha_limite)}${t.estado === 'bloqueado' ? ' · <b style="color:var(--dg)">bloqueado</b>' : ''}</div></div></div>`; }).join('') : '<div class="mini">✓ Sin tareas abiertas</div>'}</div>
-    <div style="padding:0 16px 14px"><button class="btn btn-s btn-sm" style="width:100%" onclick="VIEW.pAmb='mios';goTab('tar')">Ver todos mis pendientes</button></div></div></aside>`;
+    <div style="padding:0 16px 14px"><button class="btn btn-s btn-sm" style="width:100%" onclick="VIEW.pAmb='mios';goTab('tar')">Ver todos mis pendientes</button></div></div>`;
 }
 // ── Contadora ──
 // Motor de avisos: todo lo que le falta o está por faltarle, para que nunca incumpla por no tener la información.
@@ -2291,7 +2304,7 @@ function dashContadora(sel) {
   const avisos = I.slice().sort((a, b) => (b.crit - a.crit) || (a.d - b.d)).slice(0, 8);
   window._pp = new Set();
   const enPreview = U.id !== cu.id ? `<span class="bdg bdg-pnd">Vista de ${esc(U.nombre)}</span>` : '';
-  return cabDash('Mi día · Contadora', `faltan ${diasA(finMes)} días para fin de mes`, sel + enPreview + botonCierre() + (puede('cxp') ? `<button class="btn btn-p btn-sm" onclick="openUpload()">⬆ Subir factura de proveedor</button>` : '')) + `<div class="pad">
+  return cabDash('Mi día · Contadora', `faltan ${diasA(finMes)} días para fin de mes`, sel + enPreview + botonCierre() + (puede('cxp') ? `<button class="btn btn-p btn-sm" onclick="openUpload()">⬆ Subir factura de proveedor</button>` : '')) + `<div class="pad"><div class="cdash cdash-full"><div class="cdash-main">
     <div class="dg dg6 kgrid">
       ${kcard('crit', 'Críticos', crit, 'var(--dg)', [['cad', 'Caducados'], ['med', 'Medicamento sin pedido'], ['ped', 'Pedidos farmacia/quirófano'], ['pend', 'Pendientes críticos/contables']])}
       ${kcard('venc', 'Vencidos', venc, 'var(--dg)', [['fact', 'Facturas no pedidas'], ['pago', 'Pagos no hechos'], ['med', 'Medicamento no pedido'], ['pend', 'Pendientes vencidos']])}
@@ -2302,15 +2315,14 @@ function dashContadora(sel) {
         <details class="kdet"><summary>Criterios de cumplimiento</summary>${cu2.C.map(([t, o, n, h]) => `<div class="kcr"><div><b>${t}</b><div class="mini">${h}</div></div><span style="color:${n ? colPct(Math.round(o / n * 100)) : 'var(--tm)'}">${o}/${n}</span></div>`).join('')}<div class="mini" style="margin-top:6px">Lo que no se registra a tiempo (comprobante, factura, evidencia o cierre) cuenta como no cumplido.</div></details></div>
     </div>
     ${avisos.length ? `<div class="cfg-section avbox"><h3 style="display:flex;justify-content:space-between;align-items:center">⚠ Lo que te falta o está por faltarte <button class="btn btn-s btn-sm" onclick="verFaltantes('venc')">Ver vencidos</button></h3><div class="body"><div class="avgrid">${avisos.map(x => `<div class="aitem ${x.d < 0 || x.crit ? 'r' : x.d === 0 ? 'a' : 'i'}" onclick="${x.go}"><div><div class="at"><span class="mini" style="text-transform:uppercase;letter-spacing:.4px">${CAT_F[x.cat]}</span><br>${esc(x.t)}</div><div class="am">${x.m}</div></div></div>`).join('')}</div></div></div>` : ''}
-    <div class="cdash" style="margin-top:20px">
-      <div class="cdash-main">${calSemaforo(misT)}${tablaDia(misT)}</div>
-      ${ladoMisTareas(misP)}
-    </div>
+    <div style="margin-top:20px">${calSemaforo(misT)}${tablaDia(misT)}</div>
     <div class="cfgg" style="margin-top:20px"><div id="inv-far">${cajaInventario('far')}</div><div id="inv-alm">${cajaInventario('alm')}</div><div id="inv-qui">${cajaInventario('qui')}</div></div>
     <div class="cfgg" style="margin-top:20px">
       ${caja(`Facturas por solicitar (${fps.length})`, lista(fps.slice().sort((a, b) => limFps(a).localeCompare(limFps(b))).slice(0, 8), f => `<div class="aitem ${diasA(limFps(f)) < 0 ? 'r' : 'a'}" onclick="verCuenta('${f.id}')"><div style="flex:1"><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(f.monto_pagado)}</div><div class="am">${esc(f.descripcion)} · pagado ${fmtD(f.fecha_pago)} · límite ${fmtD(limFps(f))}</div></div><div class="rowact" onclick="event.stopPropagation()"><button class="btn btn-s btn-sm" onclick="correoProveedor('${f.entidad_id}','${f.id}',null,'factura')">✉</button><button class="btn btn-p btn-sm" onclick="openUpload('${f.id}')">⬆ XML</button></div></div>`, 'Lista en cero'), `<button class="btn btn-s btn-sm" onclick="goTab('fps')">Ver todas</button>`)}
       ${(() => { const cobV = abiertas('ingreso').filter(f => semaforo(f) === 'r'); return caja(`Cobros vencidos (${cobV.length})`, lista(cobV, f => `<div class="aitem r" onclick="verCuenta('${f.id}')"><div><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(saldo(f))}</div><div class="am">${esc(f.descripcion)} · venció ${fmtD(f.fecha_vencimiento)}</div></div></div>`, 'Sin cobros vencidos')); })()}
     </div>
+    </div>
+    <aside class="cdash-side">${ladoAlmacen()}${ladoMisTareas(misP)}</aside></div>
     <div class="mini" style="margin-top:16px">Propuesta de pagos y Por revisar están en sus pestañas del menú.</div></div>`;
 }
 // ── Pestañas separadas: Propuesta de pagos y Por revisar ──
@@ -3981,6 +3993,23 @@ function imprimirAlm() {
   imprimir(`${nom} · ${fmtD(hoyISO())}`, `<h2 style="margin:0 0 4px">${esc(nom)} · qué se termina y qué caduca</h2><div class="p">Corte al ${fmtD(hoyISO())}</div>
     <h3>Se va a terminar (${fin.length})</h3><table><thead><tr><th>Producto</th><th class="r">Hay</th><th class="r">Mínimo</th><th class="r">Alcanza</th><th>Estado</th></tr></thead><tbody>${fin.map(r => `<tr><td>${esc(r.n)}</td><td class="r">${almNum(r.ex)}</td><td class="r">${r.min ? almNum(r.min) : '—'}</td><td class="r">${r.dias !== null ? r.dias + ' d' : '—'}</td><td>${EST_ALM[r.est][0]}</td></tr>`).join('') || '<tr><td colspan="5">Nada</td></tr>'}</tbody></table>
     <h3>Caducados y por caducar en 90 días (${cad.length})</h3><table><thead><tr><th>Producto</th><th>Lote</th><th class="r">Cantidad</th><th>Caducidad</th></tr></thead><tbody>${cad.map(l => `<tr><td>${esc(l.r.n)}</td><td>${esc(l.lote || '')}</td><td class="r">${almNum(l.q)}</td><td>${fmtD(l.cad)}${diasA(l.cad) < 0 ? ' · CADUCADO' : ''}</td></tr>`).join('') || '<tr><td colspan="4">Nada</td></tr>'}</tbody></table>`);
+}
+// ── Barra lateral del tablero de la Contadora: lo que le falta al almacén, visible desde que entra ──
+function ladoAlmacen() {
+  const R = almFilas('alm'), sol = INV.farSol || [];
+  const falta = R.filter(r => r.est !== 'ok').sort((a, b) => a.riesgo - b.riesgo || (a.dias ?? 9999) - (b.dias ?? 9999));
+  const cad = R.flatMap(r => r.caducado.concat(r.xCad.filter(l => diasA(l.cad) <= 30)).map(l => ({ r, ...l }))).sort((a, b) => a.cad < b.cad ? -1 : 1);
+  const n = k => R.filter(r => r.est === k).length;
+  const chips = [['r', n('acabado') + n('critico'), 'Acabado / crítico', "VIEW.almF='acaba'"], ['a', n('bajo'), 'Bajo mínimo', "VIEW.almF='acaba'"], ['a', n('pronto'), 'Se acaba ≤ ' + DIAS_ALERTA_FIN + ' d', "VIEW.almF='acaba'"], ['r', cad.filter(l => diasA(l.cad) < 0).length, 'Caducado', "VIEW.almF='caduca'"], ['a', cad.filter(l => diasA(l.cad) >= 0).length, 'Caduca ≤ 30 d', "VIEW.almF='caduca'"], ['p', sol.length, 'Por surtir', "VIEW.almF='riesgo'"]];
+  const sinDatos = !R.some(r => r.alm > 0) && !sol.length;
+  const items = falta.map(r => `<div class="mt ${r.est === 'acabado' || r.est === 'critico' ? 'r' : 'a'}" onclick="almDetalle('alm','${esc(r.id)}')"><div style="flex:1;min-width:0"><div class="mtt">${esc(r.n)}</div><div class="mini">${r.est === 'acabado' ? '<b style="color:var(--dg)">Acabado en almacén</b>' : 'Quedan ' + almNum(r.ex)}${r.min ? ' · mín ' + almNum(r.min) : ''}${r.dias !== null ? ` · alcanza <b>${r.dias} d</b>` : ''}${r.most ? ' · mostrador ' + almNum(r.most) : ''}</div></div></div>`)
+    .concat(cad.map(l => `<div class="mt ${diasA(l.cad) < 0 ? 'r' : 'a'}" onclick="almDetalle('alm','${esc(l.r.id)}')"><div style="flex:1;min-width:0"><div class="mtt">${esc(l.r.n)}</div><div class="mini">${diasA(l.cad) < 0 ? '<b style="color:var(--dg)">Caducado</b> · retirar' : 'Caduca ' + fmtD(l.cad) + ' (' + diasA(l.cad) + ' d)'} · ${almNum(l.q)} pza${l.lote ? ' · lote ' + esc(l.lote) : ''}</div></div></div>`))
+    .concat(sol.map(x => { const p = (INV.farProd || []).find(z => z.id === x.producto_id); return `<div class="mt p" onclick="VIEW.almA='alm';goTab('alm')"><div style="flex:1;min-width:0"><div class="mtt">Surtir a farmacia: ${esc(p ? p.nombre : 'producto')}</div><div class="mini">${num(x.cantidad) - num(x.surtido)} pza · pidió ${esc(x.solicitante || '')}</div></div></div>`; }));
+  return `<div class="cfg-section almside"><h3 style="display:flex;justify-content:space-between;align-items:center;gap:8px">Almacén · lo que falta <span class="mini" style="font-weight:600">${falta.length + cad.length + sol.length || ''}</span></h3>
+    <div class="body">${sinDatos ? '<div class="mini">COE Farmacia aún no tiene existencias capturadas en el almacén. En cuanto se registren, aquí verás lo que se acaba y lo que caduca.</div>'
+      : `<div class="almchips">${chips.map(([c, v, t, f]) => `<button class="almchip ${v ? c : 'z'}" onclick="${f};VIEW.almA='alm';goTab('alm')"><b>${v}</b><span>${t}</span></button>`).join('')}</div>
+      <div class="mtl almlist">${items.length ? items.join('') : '<div class="mini">✓ Almacén completo: nada por terminarse ni por caducar.</div>'}</div>`}</div>
+    <div style="padding:0 16px 14px;display:flex;gap:6px"><button class="btn btn-s btn-sm" style="flex:1" onclick="VIEW.almA='alm';goTab('alm')">Ver almacén</button>${!sinDatos && falta.length && puede('pedidos') ? `<button class="btn btn-p btn-sm" style="flex:1" onclick="almPedido('alm')">+ Pedido</button>` : ''}</div></div>`;
 }
 </script>
 </body></html>
