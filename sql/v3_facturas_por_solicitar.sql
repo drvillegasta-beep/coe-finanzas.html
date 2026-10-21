@@ -121,3 +121,10 @@ alter table public.fin_tareas add column if not exists requiere_conformidad bool
 --   far_lotes: serie, proveedor_id, fecha_entrada, garantia_hasta, notas.
 --   fin_alm_entrada(p_usuario, p_pin, p_items, p_modo 'sumar'|'fijar', p_motivo): entrada de mercancía o inventario físico del almacén; da de alta productos nuevos.
 --   fin_alm_traspaso(p_usuario, p_pin, p_items): almacén → farmacia mostrador (primero lo que caduca antes; no traspasa caducados); surte solicitudes de la farmacia.
+-- 15) (21/10/2026) Almacén de Contabilidad (Administración) de COE Quirófano desde Finanzas
+--   Usa la ubicación qx_ubicaciones area='administracion' («Almacén de Administración», creada por COE Quirófano v3.12).
+--   fin_qx_entrada(p_usuario, p_pin, p_items, p_modo 'sumar'|'fijar', p_motivo, p_pedido): llegada o inventario físico; da de alta materiales nuevos en qx_materiales;
+--     marca recibido el pedido de Finanzas si se indica. Movimientos qx_movimientos 'entrada'/'ajuste'.
+--   fin_qx_envio(p_usuario, p_pin, p_items, p_destino, p_recibe): envío a almacén/sala de quirófano (primero lo que caduca antes, sin caducados),
+--     folio ENV-…, movimientos 'traspaso_sal'/'traspaso_ent' con el folio (igual que el vale de COE Quirófano).
+-- 16) (21/10/2026) Eliminar facturas o pagos mal capturados: botón en Por pagar / Por cobrar; usa fin_anular (Dirección, con PIN) o fin_solicitar_baja (otros usuarios).
