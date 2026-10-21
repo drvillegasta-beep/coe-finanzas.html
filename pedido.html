@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Orden de compra · COE</title>
+<link rel="icon" href="assets/coe-logo.png">
+<style>
+:root{--ink:#1d2733;--gris:#5b6672;--linea:#dde2e7;--pr:#2F6F66;--fondo:#F3F1EC}
+*{box-sizing:border-box}body{margin:0;background:var(--fondo);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}
+.hoja{max-width:820px;margin:16px auto;background:#fff;border-radius:14px;padding:22px;box-shadow:0 6px 24px rgba(0,0,0,.06)}
+.hd{display:flex;gap:14px;align-items:center;border-bottom:2px solid var(--ink);padding-bottom:12px;margin-bottom:14px}.hd img{height:58px}.hd h1{font-size:19px;margin:0}.hd .s{font-size:12px;color:var(--gris)}
+.est{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 14px}.paso{flex:1;min-width:120px;border:1px solid var(--linea);border-radius:10px;padding:8px 10px;font-size:12px;color:var(--gris)}.paso b{display:block;color:var(--ink);font-size:13px}.paso.on{border-color:var(--pr);background:rgba(47,111,102,.08)}.paso.on b{color:var(--pr)}
+.kv{display:grid;grid-template-columns:150px 1fr;gap:4px 12px;font-size:14px}.kv b{color:var(--gris);font-size:11px;text-transform:uppercase;letter-spacing:.4px;padding-top:3px}
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px}th{background:#eef1f4;text-align:left;font-size:11px;text-transform:uppercase;padding:7px}td{padding:7px;border-bottom:1px solid var(--linea)}.r{text-align:right}.tot td{font-weight:700;border-top:2px solid var(--ink)}
+.nota{background:#f6f8fa;border-radius:10px;padding:10px 12px;font-size:13px}.urg{color:#b42318;font-weight:700}
+.btn{display:inline-block;background:var(--pr);color:#fff;border:0;border-radius:10px;padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer;margin-top:12px}
+.qr{text-align:center;font-size:11px;color:var(--gris)}.qr img{width:120px;height:120px}
+.pie{font-size:11px;color:var(--gris);text-align:center;margin-top:14px}
+@media(max-width:600px){.kv{grid-template-columns:1fr}.hoja{margin:0;border-radius:0}}
+@media print{body{background:#fff}.hoja{box-shadow:none;margin:0;max-width:none}.btn{display:none}}
+</style></head><body>
+<div class="hoja" id="h"><div class="hd"><img src="assets/coe-logo.png" alt="COE"><div><h1>Centro Ocular Especializado</h1><div class="s">Cargando orden de compra…</div></div></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script>
+const SB_URL='https://ckjkdenwqicdjvodflba.supabase.co',SB_KEY='sb_publishable_6kfSTYsmi2KxAeX0AMwymQ_dWPTAxYz';
+const q=new URLSearchParams(location.search),esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+const $$=n=>'$'+(Number(n)||0).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});
+const fD=s=>{if(!s)return '';const d=new Date(String(s).length<=10?s+'T12:00:00':s);return d.toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'})};
+(async()=>{
+  const h=document.getElementById('h');
+  try{
+    const r=await fetch(SB_URL+'/rest/v1/rpc/fin_pedido_publico',{method:'POST',headers:{'Content-Type':'application/json',apikey:SB_KEY,Authorization:'Bearer '+SB_KEY},body:JSON.stringify({p_folio:q.get('f')||'',p_token:q.get('t')||''})});
+    const p=await r.json();
+    if(!p||!p.ok){h.innerHTML=h.innerHTML.replace('Cargando orden de compra…','Orden no encontrada. Verifique la liga o el código QR.');return}
+    const E={solicitado:0,autorizado:1,enviado:2,recibido:3,facturado:4},e=E[p.estado]??(p.estado==='cancelado'||p.estado==='rechazado'?-1:0);
+    const pasos=[['Solicitado',p.solicitado_at],['Autorizado',p.autorizado_at],['Enviado al proveedor',p.enviado_at],['Recibido en clínica',p.recibido_at],['Facturado',null]];
+    const pt=(p.partidas&&p.partidas.length)?p.partidas:[{cantidad:1,descripcion:p.descripcion,precio:p.monto}];
+    const tot=pt.reduce((s,l)=>s+(Number(l.cantidad)||0)*(Number(l.precio)||0),0)||Number(p.monto)||0;
+    let qr='';try{const c=qrcode(0,'M');c.addData(location.href);c.make();qr=c.createDataURL(4,8)}catch(x){}
+    h.innerHTML=`<div class="hd"><img src="assets/coe-logo.png" alt="COE"><div style="flex:1"><h1>Orden de compra ${esc(p.folio)}</h1><div class="s">Centro Ocular Especializado · Av. Luis Donaldo Colosio 151, Col. La Purísima, Tacámbaro, Mich. · Tel. (443) 465 6645 · (459) 596 2268</div></div>${qr?`<div class="qr"><img src="${qr}"><br>Rastreo</div>`:''}</div>
+    ${e<0?`<div class="nota urg">Esta orden fue ${esc(p.estado)}. No surtir.</div>`:`<div class="est">${pasos.map((x,i)=>`<div class="paso ${i<=e?'on':''}"><b>${i<=e?'✓ ':''}${x[0]}</b>${x[1]?fD(x[1]):''}</div>`).join('')}</div>`}
+    <div class="kv"><b>Proveedor</b><div>${esc(p.proveedor||'—')}</div><b>Área</b><div>${esc(p.area||'')} · ${esc(p.sede||'')}</div><b>Entrega</b><div>${p.fecha_requerida?'a más tardar el '+fD(p.fecha_requerida):'a la brevedad'}${p.urgente?' · <span class="urg">URGENTE</span>':''}</div></div>
+    <table><thead><tr><th>Cant.</th><th>Descripción</th><th class="r">Precio</th><th class="r">Importe</th></tr></thead><tbody>${pt.map(l=>`<tr><td>${esc(l.cantidad)} ${esc(l.unidad||'')}</td><td>${esc(l.descripcion)}</td><td class="r">${Number(l.precio)?$$(l.precio):''}</td><td class="r">${Number(l.precio)?$$((Number(l.cantidad)||0)*Number(l.precio)):''}</td></tr>`).join('')}
+    <tr class="tot"><td colspan="3">Total (IVA incluido)</td><td class="r">${$$(tot)}</td></tr></tbody></table>
+    <div class="nota"><b>Facturar a:</b> ${esc(p.facturar?.nombre||'')} · RFC ${esc(p.facturar?.rfc||'')}${p.correo_facturas?'. Enviar XML y PDF a '+esc(p.correo_facturas):''}. Citar el folio <b>${esc(p.folio)}</b> en factura, remisión y entrega. En medicamentos y material indicar lote y caducidad.</div>
+    <button class="btn" onclick="print()">🖨 Imprimir o guardar en PDF</button>
+    <div class="pie">Documento generado por COE Finanzas · consulta ${new Date().toLocaleString('es-MX')}</div>`;
+  }catch(x){h.innerHTML=h.innerHTML.replace('Cargando orden de compra…','No se pudo cargar. Intente de nuevo.')}
+})();
+</script></body></html>

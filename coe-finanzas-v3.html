@@ -673,6 +673,8 @@ i.dot{flex:0 0 10px;height:10px;border-radius:50%;margin-top:6px;align-self:flex
 .elc{border:1px solid var(--br);border-radius:12px;background:var(--sf2);margin-bottom:8px;overflow:hidden}.elc.dup{border-color:var(--wn)}
 .elr{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:13px;font-weight:400;color:var(--tx);margin:0}
 .elr input{width:auto;margin-top:3px}.elr.sub{border-top:1px solid var(--br);padding-left:34px;background:var(--sf)}
+.almedit td{vertical-align:top}.almedit input,.almedit select{min-height:34px;padding:6px 8px;font-size:13px}
+.almedit td:first-child input{min-width:210px}.almedit select{min-width:120px}
 </style>
 </head>
 <body>
@@ -1094,7 +1096,7 @@ async function cargarTodo(silencioso) {
     q('pedidos', x => x.order('created_at', { ascending: false }).limit(200)),
     q('far_solicitudes_alm', x => x.in('estado', ['pendiente', 'parcial']).order('created_at', { ascending: false }).limit(200)),
     q('qx_materiales', x => x.select('id,nombre,categoria,unidad,stock_minimo,stock_critico,critico,costo,activo').eq('activo', true)),
-    q('qx_lotes', x => x.select('material_id,ubicacion_id,lote,caducidad,cantidad').gt('cantidad', 0)),
+    q('qx_lotes', x => x.select('material_id,ubicacion_id,lote,caducidad,cantidad,consignacion,proveedor_id').gt('cantidad', 0)),
     q('qx_lio_unidades', x => x.select('marca,modelo,dioptria,serie,caducidad,estado').in('estado', ['disponible', 'reservado'])),
     q('qx_ubicaciones', x => x.select('id,nombre,tipo,area,activa,orden').eq('activa', true).order('orden')),
     q('far_movimientos', x => x.select('producto_id,tipo,cantidad,ubicacion,created_at').eq('tipo', 'salida').gte('created_at', new Date(Date.now() - 28 * 864e5).toISOString()).limit(5000)),
@@ -1631,18 +1633,19 @@ function verPedido(id) {
   const ft = [
     p.estado === 'solicitado' && puede('pedidos', 3) ? `<button class="btn btn-p" onclick="autorizarPedido('${id}','autorizar')">Autorizar</button><button class="btn btn-d" onclick="autorizarPedido('${id}','rechazar')">Rechazar</button>` : '',
     ['autorizado', 'enviado', 'recibido', 'facturado'].includes(p.estado) ? `<button class="btn btn-s" onclick="imprimirOC('${id}')">🖨 Orden de compra</button>` : '',
-    p.estado === 'autorizado' && puede('pedidos') ? `<button class="btn btn-p" onclick="enviarPedido('${id}')">✉ Enviar al proveedor</button>` : '',
+    ['autorizado', 'enviado'].includes(p.estado) && puede('pedidos') ? `<button class="btn btn-p" onclick="enviarPedido('${id}')">📤 ${p.estado === 'enviado' ? 'Reenviar' : 'Enviar'} orden de compra</button>` : '',
     ['autorizado', 'enviado'].includes(p.estado) ? `<button class="btn btn-s" onclick="estadoPedido('${id}','recibido')">Recibido</button>` : '',
     ['enviado', 'recibido'].includes(p.estado) ? `<button class="btn btn-s" onclick="correoProveedor('${p.entidad_id}',null,'${id}','aclaracion')">✉ Aclaración</button>` : '',
     p.entidad_id ? `<button class="btn btn-s" onclick="cartaProveedor('${p.entidad_id}','devolucion','${id}')">Carta de devolución</button><button class="btn btn-s" onclick="cartaProveedor('${p.entidad_id}','garantia','${id}')">Carta de garantía</button>` : '',
     !['cancelado', 'rechazado', 'facturado'].includes(p.estado) ? `<button class="btn btn-d" onclick="estadoPedido('${id}','cancelado')">Cancelar</button>` : ''
   ].join('');
-  modal('Pedido ' + p.folio, b, ft, 'xl');
+  modal('Pedido ' + p.folio, b + cotPanel(p), ft, 'xl');
 }
 async function autorizarPedido(id, decision) {
   const p = PED.find(x => x.id === id);
   let nota = '';
   if (decision === 'rechazar') { nota = prompt('Motivo del rechazo:'); if (!nota) return; }
+  if (decision === 'autorizar' && !(p.cotizaciones || []).length && !confirm('Este pedido no tiene cotización adjunta.\n¿Autorizar de todos modos?')) return;
   const r = await rpcFirmado('fin_pedido_autorizar', { p_pedido: id, p_decision: decision, p_nota: nota },
     { titulo: decision === 'rechazar' ? 'Rechazar pedido' : 'Autorizar pedido', sub: `${p.folio} · ${$$(p.monto_estimado)}`, conDirector: true });
   if (!r) return;
@@ -1654,10 +1657,6 @@ async function estadoPedido(id, estado) {
   if (estado === 'cancelado') { datos.motivo = prompt('Motivo de la cancelación:'); if (!datos.motivo) return; }
   const r = await rpcFirmado('fin_pedido_estado', { p_pedido: id, p_estado: estado, p_datos: datos }, { titulo: 'Firmar cambio de estado' });
   if (r) { CM('mGen'); toast('Pedido ' + estado, 'success'); await cargarTodo(); }
-}
-function enviarPedido(id) {
-  const p = PED.find(x => x.id === id);
-  correoProveedor(p.entidad_id, null, id, 'pedido');
 }
 
 // ══ CORREO A PROVEEDOR (siempre con PIN) ═══════
@@ -2890,17 +2889,6 @@ function imprimir(titulo, cuerpo) {
   <script>window.onload=()=>setTimeout(()=>window.print(),400)<\/script></body></html>`);
   w.document.close();
 }
-function imprimirOC(id) {
-  const p = PED.find(x => x.id === id), e = ent(p.entidad_id) || {}, pt = Array.isArray(p.partidas) ? p.partidas : [];
-  imprimir('Orden de compra ' + p.folio, `
-    <div class="kv"><b>Proveedor</b><div>${esc(e.nombre || '—')} ${e.rfc ? '· RFC ' + esc(e.rfc) : ''}</div><b>Fecha</b><div>${fmtD(String(p.autorizado_at || p.created_at).slice(0, 10))}</div>
-    <b>Área solicitante</b><div>${esc(p.area)} · ${esc(p.sede || '')}</div><b>Requerido para</b><div>${fmtD(p.fecha_requerida)} ${p.urgente ? '<b class="rojo">· URGENTE</b>' : ''}</div><b>Descripción</b><div>${esc(p.descripcion)}</div></div>
-    <table><thead><tr><th>Cant.</th><th>Descripción</th><th class="r">Precio unitario</th><th class="r">Importe</th></tr></thead><tbody>
-    ${(pt.length ? pt : [{ cantidad: 1, descripcion: p.descripcion, precio: p.monto_estimado }]).map(l => `<tr><td>${l.cantidad}</td><td>${esc(l.descripcion)}</td><td class="r">${$$(l.precio)}</td><td class="r">${$$(l.cantidad * l.precio)}</td></tr>`).join('')}
-    <tr class="tot"><td colspan="3">Total estimado (IVA incluido)</td><td class="r">${$$(p.monto_estimado)}</td></tr></tbody></table>
-    <div class="p"><b>Facturar a:</b> ${esc(RS[0].nombre)} · RFC ${esc(RS[0].rfc)}. Enviar XML y PDF a ${esc(CFG.correo_alertas)}. Favor de citar el folio ${esc(p.folio)} en la factura y en la entrega.</div>
-    <div class="firmas"><div>Solicitó<br><b>${esc(nomUsr(p.solicitado_por))}</b></div><div>Autorizó<br><b>${esc(nomUsr(p.autorizado_por))}</b>${p.firma2_por ? '<br>2ª firma: ' + esc(nomUsr(p.firma2_por)) : ''}</div><div>Recibió (proveedor)<br>&nbsp;</div></div>`);
-}
 function cartaProveedor(entidadId, tipo, pedidoId) {
   const p = pedidoId ? PED.find(x => x.id === pedidoId) : null;
   modal(tipo === 'garantia' ? 'Carta de garantía' : 'Carta de devolución', `<div class="fgrd">
@@ -3913,7 +3901,7 @@ function almFilas(area) {
       const ls = area === 'adm' ? lA : lQ, ex = area === 'adm' ? qA : qQ;
       if (area === 'adm' && !qA && !(num(m.stock_minimo) > 0 && qQ <= num(m.stock_minimo))) return;
       if (area !== 'adm' && !(num(m.stock_minimo) > 0) && !ex) return;
-      R.push({ p: m, qx: true, id: m.id, n: m.nombre, cat: m.categoria, ex, most: area === 'adm' ? qQ : qA, tot: qA + qQ, base: area === 'adm' ? qA + qQ : undefined, min: num(m.stock_minimo), crit: num(m.stock_critico), c4: null, rate: 0, dias: null, unidad: m.unidad, costo: num(m.costo), lotes: ls.map(l => ({ lote: l.lote, cad: l.caducidad, q: num(l.cantidad), costo: num(m.costo) })) });
+      R.push({ p: m, qx: true, id: m.id, n: m.nombre, cat: m.categoria, ex, most: area === 'adm' ? qQ : qA, tot: qA + qQ, base: area === 'adm' ? qA + qQ : undefined, min: num(m.stock_minimo), crit: num(m.stock_critico), c4: null, rate: 0, dias: null, unidad: m.unidad, costo: num(m.costo), lotes: ls.map(l => ({ lote: l.lote, cad: l.caducidad, q: num(l.cantidad), costo: num(m.costo), cons: !!l.consignacion, prov: l.proveedor_id })) });
     });
     if (area === 'adm') return almCierre(R);
     const lio = INV.qxLio || [];
@@ -3998,7 +3986,7 @@ function almDetalle(area, id) {
       ${area === 'alm' || area === 'far' ? `<b>Salidas últimas 4 semanas</b><div>${almNum(r.c4 || 0)} (${almNum((r.c4 || 0) / 4)} por semana)</div><b>Alcanza para</b><div>${r.dias !== null ? `<b>${r.dias} días</b> · se acaba aprox. el ${fmtD(r.fin)}` : 'sin consumo registrado'}</div>` : ''}
       <b>Estado</b><div><span class="bdg ${EST_ALM[r.est][1]}">${EST_ALM[r.est][0]}</span></div>
       ${r.p ? [['Tipo', TIPO_INS[r.p.tipo_insumo] || r.cat], ['Clave', r.p.clave], ['Presentación', r.p.presentacion], ['Principio activo', r.p.principio], ['Marca', r.p.marca], ['Registro sanitario', r.p.registro_sanitario], ['Proveedor', r.p.proveedor_id ? nomEnt(r.p.proveedor_id) : ''], ['Ubicación', r.p.ubicacion_fisica], ['Cuidados', [r.p.red_fria ? 'Red fría' : '', r.p.controlado ? 'Controlado' : ''].filter(Boolean).join(' · ')]].filter(x => x[1]).map(([k, v]) => `<b>${k}</b><div>${esc(v)}</div>`).join('') : ''}</div>
-    <div class="tc"><table><thead><tr><th>Lote</th><th style="text-align:right">Cantidad</th><th>Caducidad</th><th></th></tr></thead><tbody>${r.lotes.length ? r.lotes.sort((a, b) => String(a.cad || '9') < String(b.cad || '9') ? -1 : 1).map(l => `<tr><td>${esc(l.lote || '—')}${l.serie && l.serie !== l.lote ? `<div class="mini">serie ${esc(l.serie)}</div>` : ''}${l.factura ? `<div class="mini">factura ${esc(l.factura)}</div>` : ''}${l.gar ? `<div class="mini">garantía ${fmtD(l.gar)}</div>` : ''}</td><td class="amt" style="text-align:right">${almNum(l.q)}</td><td>${l.cad ? fmtD(l.cad) : '—'}</td><td class="mini">${l.cad && diasA(l.cad) < 0 ? '<b style="color:var(--dg)">caducado · retirar</b>' : l.cad && diasA(l.cad) <= DIAS_CADUCAR ? `caduca en ${diasA(l.cad)} d${l.sobra ? ` · <b>${l.sobra} no se alcanzan a vender</b>` : ''}` : ''}</td></tr>`).join('') : '<tr><td colspan="4" class="mini">Sin lotes en existencia</td></tr>'}</tbody></table></div>`,
+    <div class="tc"><table><thead><tr><th>Lote</th><th style="text-align:right">Cantidad</th><th>Caducidad</th><th></th></tr></thead><tbody>${r.lotes.length ? r.lotes.sort((a, b) => String(a.cad || '9') < String(b.cad || '9') ? -1 : 1).map(l => `<tr><td>${esc(l.lote || '—')}${l.serie && l.serie !== l.lote ? `<div class="mini">serie ${esc(l.serie)}</div>` : ''}${l.factura ? `<div class="mini">factura ${esc(l.factura)}</div>` : ''}${l.gar ? `<div class="mini">garantía ${fmtD(l.gar)}</div>` : ''}${l.cons ? `<div class="mini"><b>en consigna</b>${l.prov ? ' · ' + esc(nomEnt(l.prov)) : ''}</div>` : ''}</td><td class="amt" style="text-align:right">${almNum(l.q)}</td><td>${l.cad ? fmtD(l.cad) : '—'}</td><td class="mini">${l.cad && diasA(l.cad) < 0 ? '<b style="color:var(--dg)">caducado · retirar</b>' : l.cad && diasA(l.cad) <= DIAS_CADUCAR ? `caduca en ${diasA(l.cad)} d${l.sobra ? ` · <b>${l.sobra} no se alcanzan a vender</b>` : ''}` : ''}</td></tr>`).join('') : '<tr><td colspan="4" class="mini">Sin lotes en existencia</td></tr>'}</tbody></table></div>`,
     `${area !== 'qui' && puede('pedidos') ? `<button class="btn btn-s" onclick="CM('mGen');almSolicitar('${area}',['${r.id}'])">📦 Solicitar</button>${area === 'alm' && r.ex > 0 ? `<button class="btn btn-s" onclick="CM('mGen');almTraspaso({${r.id}:1})">⇄ Traspasar</button>` : area === 'adm' && r.ex > 0 ? `<button class="btn btn-s" onclick="CM('mGen');almEnvio({'${r.id}':1})">⇄ Enviar a quirófano</button>` : ''}` : ''}<button class="btn btn-p" onclick="CM('mGen')">Cerrar</button>`, 'sm');
 }
 // Prellena un pedido con lo que está acabado, crítico, bajo mínimo o por terminarse
@@ -4117,7 +4105,8 @@ function almSubir(area) {
       <label class="opt sel" style="cursor:pointer;text-transform:none;letter-spacing:0;font-size:13px;font-weight:400;color:var(--tx)"><input type="radio" name="almModo" checked onchange="ALM_UP.modo='fijar';almPintarUp()"><span><b>Inventario físico</b> (conteo): la cantidad de cada lote queda como dice el archivo.</span></label>
       <label class="opt" style="cursor:pointer;margin-top:6px;text-transform:none;letter-spacing:0;font-size:13px;font-weight:400;color:var(--tx)"><input type="radio" name="almModo" onchange="ALM_UP.modo='sumar';almPintarUp()"><span><b>Entrada de mercancía</b>: las cantidades se suman a lo que ya hay.</span></label></div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><button class="btn btn-s btn-sm" onclick="almPlantilla()">⬇ Descargar plantilla de Excel</button></div>
-    <div class="drop"><input type="file" accept=".xlsx,.xls,.csv" onchange="almLeerArchivo(this.files[0]);this.value=''"><div class="big">⬆</div><div><b>Elige el archivo de inventario</b></div><div class="mini">Excel (.xlsx) o CSV · una fila por lote</div></div>
+    <div class="drop"><input type="file" multiple accept=".xlsx,.xls,.csv,application/pdf,image/*" onchange="almLeerArchivos(this.files);this.value=''"><div class="big">⬆</div><div><b>Elige el archivo o toma fotos</b></div><div class="mini">Excel o CSV (una fila por lote) · fotos o PDF de la remisión, factura o lista: el sistema lee nombre, lote, caducidad y piezas y tú lo revisas antes de cargar</div></div>
+    <div style="margin-top:8px"><button class="btn btn-s btn-sm" onclick="ALM_UP.foto=true;ALM_UP.filas.push(almFilaVacia());almPintarUp()">+ Agregar renglón a mano</button></div>
     <div id="almUpRes"></div>`, `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" id="almUpGo" onclick="almAplicarUp()" disabled>Firmar y cargar</button>`, 'xl');
 }
 async function almLeerArchivo(file) {
@@ -4153,6 +4142,8 @@ function almRevisar(f, modo) {
   if (f.caducidad && diasA(f.caducidad) < 0) av.push('CADUCADO');
   else if (f.caducidad && diasA(f.caducidad) <= 90) av.push('caduca en ' + diasA(f.caducidad) + ' d');
   if (f.proveedor && !f.proveedor_id) av.push('Proveedor no registrado: ' + f.proveedor);
+  if (f.consignacion && !f.proveedor_id) err.push('Consigna: indica el proveedor');
+  if (f.consignacion) av.push('en consigna');
   const p = ALM_UP.area === 'adm' ? (INV.qxMat || []).find(x => (f.clave && (x.codigo === f.clave || x.codigo_barras === f.clave)) || normTx(x.nombre) === normTx(f.nombre))
     : (INV.farProd || []).find(x => (f.clave && x.clave === f.clave) || normTx(x.nombre) === normTx(f.nombre));
   return { err, av, p };
@@ -4166,11 +4157,13 @@ function almPintarUp() {
   el.innerHTML = `<div class="kv" style="margin:14px 0 10px"><b>Filas leídas</b><div>${F.length} · columnas reconocidas: ${ALM_UP.cols.length}</div><b>Se cargan</b><div><b>${ok.length}</b> lote(s)${nuevos ? ' · ' + nuevos + ' producto(s) nuevo(s) se dan de alta' : ''}</div>
     ${R.length - ok.length ? `<b>Con error (no se cargan)</b><div style="color:var(--dg)"><b>${R.length - ok.length}</b></div>` : ''}${cad || xcad ? `<b>Caducidades</b><div>${cad ? `<b style="color:var(--dg)">${cad} caducado(s)</b> · ` : ''}${xcad} caducan en 90 días</div>` : ''}</div>
     <div class="tc" style="max-height:46vh;overflow:auto"><table><thead><tr><th>Producto</th><th>Tipo</th><th>Lote / serie</th><th>Caducidad</th><th style="text-align:right">Cantidad</th><th style="text-align:right">Costo</th><th>Revisión</th></tr></thead><tbody>
-    ${R.slice(0, 400).map(x => `<tr style="${x.err.length ? 'opacity:.6' : ''}"><td><b>${esc(x.f.nombre || '—')}</b><div class="mini">${x.p ? 'existe' + (x.p.clave || x.p.codigo ? ' · ' + esc(x.p.clave || x.p.codigo) : '') : '<b style="color:var(--in)">nuevo</b>'}${x.f.presentacion ? ' · ' + esc(x.f.presentacion) : ''}${x.f.marca ? ' · ' + esc(x.f.marca) : ''}</div></td>
+    ${R.slice(0, 400).map(x => x.f._foto ? almFilaEdit(x, F.indexOf(x.f)) : `<tr style="${x.err.length ? 'opacity:.6' : ''}"><td><b>${esc(x.f.nombre || '—')}</b><div class="mini">${x.p ? 'existe' + (x.p.clave || x.p.codigo ? ' · ' + esc(x.p.clave || x.p.codigo) : '') : '<b style="color:var(--in)">nuevo</b>'}${x.f.presentacion ? ' · ' + esc(x.f.presentacion) : ''}${x.f.marca ? ' · ' + esc(x.f.marca) : ''}</div></td>
       <td class="mini">${TIPO_INS[x.f.tipo_insumo]}</td><td>${esc(x.f.lote || '')}${x.f.serie ? `<div class="mini">serie ${esc(x.f.serie)}</div>` : ''}</td>
       <td style="${x.f.caducidad && diasA(x.f.caducidad) < 0 ? 'color:var(--dg);font-weight:700' : x.f.caducidad && diasA(x.f.caducidad) <= 90 ? 'color:var(--wn)' : ''}">${x.f.caducidad ? fmtD(x.f.caducidad) : '<span class="mini">—</span>'}</td>
       <td class="amt" style="text-align:right">${almNum(x.f.cantidad)}</td><td class="amt" style="text-align:right">${x.f.costo ? $$(x.f.costo) : ''}</td>
       <td class="mini">${x.err.map(e => `<b style="color:var(--dg)">${esc(e)}</b>`).concat(x.av.map(a => esc(a))).join(' · ') || '<span style="color:var(--sc)">✓</span>'}</td></tr>`).join('')}</tbody></table></div>
+    <datalist id="almUpCat">${(ALM_UP.area === 'adm' ? (INV.qxMat || []) : (INV.farProd || [])).map(m => `<option value="${esc(m.nombre)}">`).join('')}</datalist>
+    ${ALM_UP.foto ? `<div class="mini" style="margin-top:6px">Lo leído de fotos o PDF aparece editable: corrige nombre, lote, caducidad y piezas antes de firmar. Debajo de cada renglón se ve el texto original.</div>` : ''}
     ${F.length > 400 ? `<div class="mini">Se muestran 400 de ${F.length}; se cargan todas las filas válidas.</div>` : ''}
     <div class="mini" style="margin-top:8px">${ALM_UP.modo === 'fijar' ? 'Inventario físico: cada lote del archivo queda con la cantidad contada; los lotes que no vienen en el archivo no se tocan.' : 'Entrada: cada cantidad se suma al lote correspondiente (o crea el lote).'} Los lotes caducados se cargan para que aparezcan como «retirar».</div>`;
   const go = document.getElementById('almUpGo'); if (go) { go.disabled = !ok.length; go.textContent = `Firmar y cargar ${ok.length} lote(s)`; }
@@ -4203,7 +4196,7 @@ function almVistaAgregar(A) {
       ${pend.length ? `<div class="fgrp" style="margin-bottom:12px"><label>¿Viene de un pedido?</label><select id="anPed" onchange="almDesdePedido(this.value)"><option value="">— No / entrada suelta —</option>${pend.map(p => `<option value="${p.id}" ${ALM_N.pedido === p.id ? 'selected' : ''}>${esc(p.folio)} · ${esc(String(p.descripcion).slice(0, 60))} · ${(PED_EST[p.estado] || [p.estado])[0]}</option>`).join('')}</select></div>` : ''}
       <div class="fgrd">
         <div class="fgrp"><label>Tipo</label><select id="anT" onchange="almCamposTipo()">${Object.entries(TIPO_INS).map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select></div>
-        <div class="fgrp"><label>Producto</label><input type="text" id="anN" list="anLista" placeholder="Escribe o elige uno existente" oninput="almPrefill(this.value)"><datalist id="anLista">${P.map(p => `<option value="${esc(p.nombre)}">`).join('')}</datalist></div>
+        <div class="fgrp ${qx ? 'sp2' : ''}"><label>${qx ? 'Material del inventario de Quirófano' : 'Producto'}</label><input type="text" id="anN" list="anLista" placeholder="${qx ? 'Escribe para buscar y elige de la lista' : 'Escribe o elige uno existente'}" oninput="almPrefill(this.value)">${qx ? `<div id="anInfo" class="mini" style="margin-top:4px"></div><label style="display:flex;gap:6px;align-items:center;cursor:pointer;margin-top:6px;text-transform:none;letter-spacing:0;font-weight:400;font-size:12.5px"><input type="checkbox" id="anNuevo" style="width:auto"> Es un material nuevo (no está en el catálogo de Quirófano)</label>` : ''}<datalist id="anLista">${P.map(p => `<option value="${esc(p.nombre)}">`).join('')}</datalist></div>
         <div class="fgrp"><label>Clave / código de barras</label><input type="text" id="anC"></div>
         <div class="fgrp"><label>Presentación</label><input type="text" id="anPr" placeholder="Ej. Frasco 15 ml, caja 10 pzas"></div>
         <div class="fgrp an-med"><label>Principio activo</label><input type="text" id="anPa"></div>
@@ -4213,7 +4206,8 @@ function almVistaAgregar(A) {
         <div class="fgrp an-cad"><label>Caducidad</label><input type="date" id="anCa"></div>
         <div class="fgrp an-eq" style="display:none"><label>Número de serie</label><input type="text" id="anS"></div>
         <div class="fgrp an-eq" style="display:none"><label>Garantía hasta</label><input type="date" id="anG"></div>
-        <div class="fgrp"><label>Cantidad</label><input type="number" id="anQ" min="1" step="1"></div>
+        <div class="fgrp"><label>${qx ? 'Número de piezas' : 'Cantidad'}</label><input type="number" id="anQ" min="1" step="1"></div>
+        ${qx ? `<div class="fgrp"><label>Propiedad</label><label style="display:flex;gap:6px;align-items:center;cursor:pointer;text-transform:none;letter-spacing:0;font-weight:400;font-size:13px;margin-top:10px"><input type="checkbox" id="anCons" style="width:auto"> En consigna (del proveedor)</label></div>` : ''}
         <div class="fgrp"><label>Costo unitario</label><div class="ipfx"><span>$</span><input type="number" id="anCo" step="0.01"></div></div>
         <div class="fgrp"><label>Factura</label><input type="text" id="anF"></div>
         <div class="fgrp"><label>Proveedor</label><select id="anPv">${optProv('')}</select></div>
@@ -4225,7 +4219,7 @@ function almVistaAgregar(A) {
       <div style="margin-top:12px;display:flex;gap:8px"><button class="btn btn-s" onclick="almAgregarFila()">+ Agregar a la lista</button></div>
     </div></div>
     <div class="cfg-section"><h3 style="display:flex;justify-content:space-between;align-items:center">Lista por registrar (${ALM_N.filas.length})${ALM_N.filas.length ? `<button class="btn btn-s btn-sm" onclick="ALM_N.filas=[];renderTab()">Vaciar</button>` : ''}</h3><div class="body">
-      ${ALM_N.filas.length ? `<div class="alist">${ALM_N.filas.map((f, i) => `<div class="aitem ${f.caducidad && diasA(f.caducidad) < 0 ? 'r' : f.caducidad && diasA(f.caducidad) <= 90 ? 'a' : 'i'}"><div style="flex:1"><div class="at">${esc(f.nombre)} · ${almNum(f.cantidad)} ${esc(f.unidad || 'pza')}</div><div class="am">${TIPO_INS[f.tipo_insumo]}${f.lote ? ' · lote ' + esc(f.lote) : ''}${f.serie ? ' · serie ' + esc(f.serie) : ''}${f.caducidad ? ' · caduca ' + fmtD(f.caducidad) : ''}${f.costo ? ' · ' + $$(f.costo) + ' c/u' : ''}${f.producto_id ? '' : ' · <b>producto nuevo</b>'}</div></div><span class="mcls" onclick="ALM_N.filas.splice(${i},1);renderTab()">✕</span></div>`).join('')}</div>
+      ${ALM_N.filas.length ? `<div class="alist">${ALM_N.filas.map((f, i) => `<div class="aitem ${f.caducidad && diasA(f.caducidad) < 0 ? 'r' : f.caducidad && diasA(f.caducidad) <= 90 ? 'a' : 'i'}"><div style="flex:1"><div class="at">${esc(f.nombre)} · ${almNum(f.cantidad)} ${esc(f.unidad || 'pza')}</div><div class="am">${TIPO_INS[f.tipo_insumo]}${f.lote ? ' · lote ' + esc(f.lote) : ''}${f.serie ? ' · serie ' + esc(f.serie) : ''}${f.caducidad ? ' · caduca ' + fmtD(f.caducidad) : ''}${f.costo ? ' · ' + $$(f.costo) + ' c/u' : ''}${f.consignacion ? ' · <b>en consigna</b>' + (f.proveedor_id ? ' de ' + esc(nomEnt(f.proveedor_id)) : '') : ''}${f.producto_id || f.material_id ? '' : ' · <b>producto nuevo</b>'}</div></div><span class="mcls" onclick="ALM_N.filas.splice(${i},1);renderTab()">✕</span></div>`).join('')}</div>
         <div class="mini" style="margin:10px 0">Total ${$$(ALM_N.filas.reduce((s, f) => s + num(f.costo) * num(f.cantidad), 0))} a costo</div>
         <button class="btn btn-p" style="width:100%" onclick="almGuardarManual()">Firmar y registrar entrada al almacén</button>` : `<div class="mini">Agrega uno o varios productos con su lote y caducidad. Al firmar, entran al almacén y ${qx ? 'COE Quirófano' : 'COE Farmacia'} los ve al momento.</div>`}
     </div></div></div></div>`;
@@ -4238,7 +4232,9 @@ function almCamposTipo() {
 }
 function almPrefill(nombre) {
   const set = (id, v) => { const e = document.getElementById(id); if (e && v !== null && v !== undefined && v !== '') e.value = v; };
-  if (ALM_N.area === 'adm') { const m = (INV.qxMat || []).find(x => normTx(x.nombre) === normTx(nombre)); if (!m) return; set('anC', m.codigo); set('anU', m.unidad); set('anMi', m.stock_minimo); if (num(m.costo)) set('anCo', m.costo); set('anPv', m.proveedor_id); return; }
+  if (ALM_N.area === 'adm') { const m = (INV.qxMat || []).find(x => normTx(x.nombre) === normTx(nombre)), inf = document.getElementById('anInfo');
+    if (inf) { if (m) { const R = almFilas('adm').find(r => r.id === m.id), qq = (INV.qxLot || []).filter(l => l.material_id === m.id).reduce((s, l) => s + num(l.cantidad), 0); inf.innerHTML = `✓ En catálogo · ${esc(m.categoria || '')} · hay ${almNum(R ? R.ex : 0)} en Contabilidad y ${almNum(R ? R.most : qq)} en quirófano${num(m.stock_minimo) ? ' · mínimo ' + almNum(m.stock_minimo) : ''}`; inf.style.color = 'var(--sc)'; } else { inf.innerHTML = nombre ? 'No está en el catálogo: elige de la lista o marca «material nuevo»' : ''; inf.style.color = 'var(--wn)'; } }
+    if (!m) return; set('anC', m.codigo); set('anU', m.unidad); set('anMi', m.stock_minimo); if (num(m.costo)) set('anCo', m.costo); set('anPv', m.proveedor_id); return; }
   const p = (INV.farProd || []).find(x => normTx(x.nombre) === normTx(nombre)); if (!p) return;
   set('anT', p.tipo_insumo || (p.categoria === 'var' ? 'insumo' : 'medicamento')); set('anC', p.clave); set('anPr', p.presentacion); set('anPa', p.principio); set('anMa', p.marca); set('anU', p.unidad);
   set('anPv', p.proveedor_id); set('anMi', p.minimo_alm); set('anUb', p.ubicacion_fisica); set('anRs', p.registro_sanitario); if (num(p.costo)) set('anCo', p.costo);
@@ -4252,10 +4248,13 @@ function almAgregarFila() {
   if (t === 'equipo' && !v('anS')) return toast('Escribe el número de serie del equipo', 'warning');
   if (t !== 'equipo' && !v('anL')) return toast('Escribe el lote', 'warning');
   const qx = ALM_N.area === 'adm';
+  if (qx && !(INV.qxMat || []).some(x => normTx(x.nombre) === normTx(nombre)) && !document.getElementById('anNuevo')?.checked) return toast('Elige un material del inventario de Quirófano o marca «material nuevo»', 'warning');
+  const cons = qx && document.getElementById('anCons')?.checked;
+  if (cons && !v('anPv')) return toast('Indica el proveedor dueño del material en consigna', 'warning');
   const p = qx ? (INV.qxMat || []).find(x => (v('anC') && x.codigo === v('anC')) || normTx(x.nombre) === normTx(nombre)) : (INV.farProd || []).find(x => (v('anC') && x.clave === v('anC')) || normTx(x.nombre) === normTx(nombre));
   ALM_N.filas.push({ [qx ? 'material_id' : 'producto_id']: p ? p.id : '', producto_id: !qx && p ? p.id : '', categoria: qx ? QX_CAT[t] : undefined, minimo: qx ? (v('anMi') === '' ? '' : num(v('anMi'))) : undefined, nombre, tipo_insumo: t, clave: v('anC'), presentacion: v('anPr'), principio: v('anPa'), marca: v('anMa'), unidad: v('anU'), lote: v('anL'), caducidad: t === 'equipo' ? null : v('anCa'),
     serie: v('anS'), garantia_hasta: v('anG') || null, cantidad: num(v('anQ')), costo: num(v('anCo')) || '', factura: v('anF'), proveedor_id: v('anPv'), minimo_alm: v('anMi') === '' ? '' : num(v('anMi')),
-    ubicacion_fisica: v('anUb'), registro_sanitario: v('anRs'), red_fria: document.getElementById('anRf').checked, controlado: t === 'medicamento' && document.getElementById('anCt').checked });
+    ubicacion_fisica: v('anUb'), registro_sanitario: v('anRs'), red_fria: document.getElementById('anRf').checked, controlado: t === 'medicamento' && document.getElementById('anCt').checked, consignacion: !!cons });
   renderTab(); toast('Agregado a la lista', 'success');
 }
 function almDesdePedido(id) {
@@ -4381,6 +4380,60 @@ function valeEnvioQx(r, rec) {
     <div style="display:flex;gap:40px;margin-top:60px"><div style="flex:1;border-top:1px solid #222;text-align:center;padding-top:6px">Entrega · ${esc(cu.nombre)}</div><div style="flex:1;border-top:1px solid #222;text-align:center;padding-top:6px">Recibe · ${esc(rec)}</div></div>`);
 }
 
+// ── Fotos o PDF de remisión / lista: lectura y revisión editable ──
+const almFilaVacia = () => ({ nombre: '', clave: '', tipo_insumo: ALM_UP.area === 'adm' ? 'material_quirurgico' : 'medicamento', lote: '', serie: '', caducidad: '', cadTxt: '', cantidad: 0, costo: '', proveedor_id: '', consignacion: false, _foto: true });
+async function almLeerArchivos(files) {
+  const L = [...(files || [])]; if (!L.length) return;
+  const hojas = L.filter(f => /\.(xlsx|xls|csv)$/i.test(f.name)), docs = L.filter(f => !hojas.includes(f));
+  for (const f of hojas) await almLeerArchivo(f);
+  if (!docs.length) return;
+  const el = document.getElementById('almUpRes');
+  for (const [i, f] of docs.entries()) {
+    if (el) el.innerHTML = `<div class="mini" style="margin-top:12px">Leyendo ${esc(f.name)} (${i + 1} de ${docs.length})… las fotos tardan unos segundos.</div>`;
+    let tx = '';
+    try { tx = /pdf/.test(f.type) || /\.pdf$/i.test(f.name) ? await pdfTexto(f) : await ocrTexto(f, p => { if (el) el.innerHTML = `<div class="mini" style="margin-top:12px">${esc(f.name)}: ${esc(p)}</div>`; }); } catch (e) { toast('No se pudo leer ' + f.name, 'error'); continue; }
+    const rows = almParseTexto(tx);
+    ALM_UP.filas.push(...rows);
+    ALM_UP.docs = (ALM_UP.docs || []).concat(f);
+    if (!rows.length) toast(`En ${f.name} no reconocí renglones; agrégalos a mano`, 'warning');
+  }
+  ALM_UP.foto = true; ALM_UP.cols = ALM_UP.cols || ['foto'];
+  if (!ALM_UP.filas.length) ALM_UP.filas.push(almFilaVacia());
+  almPintarUp();
+}
+function almParseTexto(tx) {
+  const cat = ALM_UP.area === 'adm' ? (INV.qxMat || []).map(m => ({ id: m.id, n: m.nombre })) : (INV.farProd || []).map(p => ({ id: p.id, n: p.nombre }));
+  const out = [];
+  String(tx || '').split(/\n+/).map(l => l.replace(/\s+/g, ' ').trim()).filter(l => l.length >= 4).forEach(l => {
+    const U = l.toUpperCase();
+    if (/^(TOTAL|SUBTOTAL|IVA|FECHA|FOLIO|CLIENTE|RFC|DIRECCI|TEL|PAGINA|PÁGINA|DESCRIPCI.N\s+CANT)/.test(U)) return;
+    let resto = ' ' + l + ' ', cad = null, lote = '', cant = 0;
+    const mF = resto.match(/(\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}|\d{4}-\d{2}-\d{2}|\b\d{1,2}[\/\-.]\d{4}\b|\b(?:ENE|FEB|MAR|ABR|MAY|JUN|JUL|AGO|SEP|OCT|NOV|DIC)[A-Z]*[\s\/\-.]*\d{2,4})/i);
+    if (mF) { cad = almFecha(mF[1].toUpperCase()); resto = resto.replace(mF[0], ' '); }
+    resto = resto.replace(/\b(CAD(UCIDAD)?|EXP|VENCE|VTO)\.?:?\s*/gi, ' ');
+    const mL = resto.match(/\b(?:LOTE|LOT|L)\s*[:#.]?\s*([A-Z0-9][A-Z0-9\-]{2,15})/i);
+    if (mL) { lote = mL[1].toUpperCase(); resto = resto.replace(mL[0], ' '); }
+    const mQ = resto.match(/^\s*(\d{1,4})\s+(?:PZAS?|PIEZAS?|CAJAS?|FCO|FRASCOS?|X)?\s*/i) || resto.match(/\b(?:CANT(?:IDAD)?|PZAS?|PIEZAS?)\s*[:.]?\s*(\d{1,4})\b/i) || resto.match(/\s(\d{1,4})\s*(?:PZAS?|PIEZAS?)?\s*$/i);
+    if (mQ) { cant = +mQ[1]; resto = resto.replace(mQ[0], ' '); }
+    if (!lote) { const t = resto.match(/\b(?=[A-Z0-9-]*\d)(?=[A-Z0-9-]*[A-Z])[A-Z0-9-]{4,14}\b/); if (t && (cad || cant)) { lote = t[0]; resto = resto.replace(t[0], ' '); } }
+    resto = resto.replace(/\$\s*[\d,]+(\.\d{2})?|\b\d{1,3}(,\d{3})+\.\d{2}\b|\b\d{3,}\.\d{2}\b/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!/[A-ZÁÉÍÓÚÑ]{3}/i.test(resto) || !(cad || cant || lote)) return;
+    let best = null, bs = 0; cat.forEach(c => { const s = simil(c.n, resto); if (s > bs) { bs = s; best = c; } });
+    out.push({ ...almFilaVacia(), nombre: best && bs >= 0.5 ? best.n : resto.slice(0, 80), leido: l, coincide: best && bs >= 0.5, caducidad: cad, cadTxt: cad ? '' : '', lote, cantidad: cant });
+  });
+  return out;
+}
+function almFilaEdit(x, i) {
+  const f = x.f, qx = ALM_UP.area === 'adm', set = (k, v) => `ALM_UP.filas[${i}].${k}=${v};almPintarUp()`;
+  return `<tr class="almedit"><td><input type="text" list="almUpCat" value="${esc(f.nombre)}" onchange="${set('nombre', 'this.value')}" placeholder="Material">${f.leido ? `<div class="mini" title="Texto leído">«${esc(f.leido.slice(0, 70))}»</div>` : ''}<div class="mini">${x.p ? '<span style="color:var(--sc)">✓ en catálogo</span>' : f.nombre ? '<b style="color:var(--in)">nuevo</b>' : ''}</div></td>
+    <td><select onchange="${set('tipo_insumo', 'this.value')}">${Object.entries(TIPO_INS).map(([k, t]) => `<option value="${k}" ${f.tipo_insumo === k ? 'selected' : ''}>${t}</option>`).join('')}</select></td>
+    <td><input type="text" value="${esc(f.lote || f.serie || '')}" onchange="${set('lote', 'this.value.toUpperCase()')}" placeholder="Lote"></td>
+    <td><input type="date" value="${f.caducidad || ''}" onchange="${set('caducidad', 'this.value')}"></td>
+    <td><input type="number" min="0" step="1" value="${f.cantidad || ''}" onchange="${set('cantidad', '+this.value')}" style="text-align:right;width:80px"></td>
+    <td>${qx ? `<label style="display:flex;gap:5px;align-items:center;text-transform:none;letter-spacing:0;font-weight:400;font-size:12px;margin:0"><input type="checkbox" style="width:auto" ${f.consignacion ? 'checked' : ''} onchange="${set('consignacion', 'this.checked')}"> consigna</label>${f.consignacion ? `<select onchange="${set('proveedor_id', 'this.value')}" style="margin-top:4px">${optProv(f.proveedor_id)}</select>` : ''}` : `<input type="number" step="0.01" value="${f.costo || ''}" onchange="${set('costo', '+this.value')}" placeholder="Costo" style="width:90px">`}</td>
+    <td class="mini">${x.err.map(e => `<b style="color:var(--dg)">${esc(e)}</b>`).concat(x.av.map(a => esc(a))).join(' · ') || '<span style="color:var(--sc)">✓</span>'} <span class="mcls" title="Quitar" onclick="ALM_UP.filas.splice(${i},1);almPintarUp()">✕</span></td></tr>`;
+}
+
 // ══ ELIMINAR FACTURAS O PAGOS MAL CAPTURADOS (Por pagar / Por cobrar) ══
 // Dirección General elimina con su PIN (queda anulado con motivo en la bitácora, no se borra la evidencia).
 // Los demás usuarios lo solicitan y Dirección lo autoriza.
@@ -4444,6 +4497,136 @@ async function elAplicar() {
   await cargarTodo();
   document.getElementById('mGenB').innerHTML = `${ok.length ? `<div class="okbox"><b>${esAdmin() ? 'Eliminado (anulado con motivo)' : 'Solicitud enviada a Dirección General'}</b><br>${ok.map(esc).join('<br>')}</div>` : ''}${fallas.length ? `<div class="errbox">${fallas.map(esc).join('<br>')}</div>` : ''}`;
   document.getElementById('mGenF').innerHTML = `<button class="btn btn-p" onclick="CM('mGen')">Listo</button>`;
+}
+
+// ══ PEDIDOS: cotizaciones, orden de compra con QR de rastreo y envío por WhatsApp o correo ══
+// Flujo: Por autorizar → «Solicitar cotización» (WhatsApp/correo al proveedor) → «Subir cotización» (PDF o foto) → elegir →
+// Autorizar → «Enviar orden de compra» en formato de la clínica con QR (liga pública pedido.html con folio + token).
+const QR_LIB = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
+async function qrDataURL(txt, cell) {
+  try { if (!window.qrcode) await cargarScript(QR_LIB); const q = qrcode(0, 'M'); q.addData(txt); q.make(); return q.createDataURL(cell || 4, 8); } catch (e) { console.warn('QR', e); return ''; }
+}
+const pedidoURL = p => location.href.split('#')[0].split('?')[0].replace(/[^/]*$/, '') + 'pedido.html?f=' + encodeURIComponent(p.folio) + '&t=' + encodeURIComponent(p.token || '');
+const telWA = t => { const d = String(t || '').replace(/\D/g, ''); return d.length === 10 ? '52' + d : d; };
+function cotPanel(p) {
+  const C = Array.isArray(p.cotizaciones) ? p.cotizaciones : [], abierto = !['cancelado', 'rechazado', 'facturado'].includes(p.estado), pu = puede('pedidos');
+  return `<div class="dsec" style="margin-top:16px">Cotizaciones${p.cotizacion_solicitada_at ? ` <span class="mini" style="text-transform:none;letter-spacing:0">· solicitada ${fmtDT(p.cotizacion_solicitada_at)}</span>` : ''}</div>
+    ${C.length ? `<div class="alist">${C.map((c, i) => `<div class="aitem ${c.elegida ? 'i' : ''}" style="${c.elegida ? 'border-left-color:var(--sc)' : ''}"><div style="flex:1"><div class="at">${c.elegida ? '✓ ' : ''}${esc(c.entidad_id ? nomEnt(c.entidad_id) : 'Proveedor sin registrar')}${c.monto ? ' · ' + $$(c.monto) : ''}${c.elegida ? ' <span class="bdg bdg-apr">Elegida</span>' : ''}</div>
+      <div class="am"><a href="${esc(c.url)}" target="_blank">📎 ${esc(c.nombre || 'Cotización')}</a> · ${esc(c.subido_por_nombre || '')} · ${fmtDT(c.subido_at)}${c.nota ? ' · ' + esc(c.nota) : ''}</div></div>
+      ${abierto && pu && !c.elegida && ['solicitado', 'autorizado'].includes(p.estado) ? `<button class="btn btn-s btn-sm" onclick="elegirCotizacion('${p.id}',${i})">Elegir</button>` : ''}</div>`).join('')}</div>`
+      : `<div class="mini">${p.estado === 'solicitado' ? 'Aún no hay cotizaciones. Solicítala al proveedor y súbela aquí (PDF o foto) antes de autorizar.' : 'Sin cotizaciones adjuntas.'}</div>`}
+    ${abierto && pu ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">${p.estado === 'solicitado' ? `<button class="btn btn-s btn-sm" onclick="solicitarCotizacion('${p.id}')">📨 Solicitar cotización</button>` : ''}<button class="btn btn-s btn-sm" onclick="subirCotizacion('${p.id}')">⬆ Subir cotización</button></div>` : ''}`;
+}
+function textoCotizacion(p, e) {
+  const pt = Array.isArray(p.partidas) && p.partidas.length ? p.partidas.map(l => `• ${l.cantidad} ${l.unidad || 'pza'} — ${l.descripcion}`).join('\n') : '• ' + p.descripcion;
+  return `Buen día${e?.nombre ? ', ' + e.nombre : ''}.\n\nDel Centro Ocular Especializado le solicitamos cotización de:\n${pt}\n\nFavor de indicar precio unitario con IVA, tiempo de entrega${p.urgente ? ' (es URGENTE)' : ''} y vigencia. Referencia: ${p.folio}.\n\nGracias.\n${cu.nombre}\nCentro Ocular Especializado · Tel. (443) 465 6645 · (459) 596 2268`;
+}
+function solicitarCotizacion(id) {
+  const p = PED.find(x => x.id === id); if (!p) return;
+  modal('Solicitar cotización · ' + p.folio, `<div class="fgrd">
+      <div class="fgrp sp2"><label>Proveedor</label><select id="scP" onchange="scRefrescar('${id}')">${optProv(p.entidad_id || '')}</select></div>
+      <div class="fgrp"><label>WhatsApp</label><input type="text" id="scW" placeholder="10 dígitos"></div>
+      <div class="fgrp"><label>Correo</label><input type="email" id="scE"></div>
+      <div class="fgrp sp2"><label>Mensaje</label><textarea id="scT" style="min-height:200px"></textarea></div></div>
+    <div class="mini">Al firmar queda registrado que se pidió cotización. El teléfono o correo que escribas se guarda en la ficha del proveedor.</div>`,
+    `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-s" onclick="scEnviar('${id}','correo')">✉ Correo</button><button class="btn btn-p" onclick="scEnviar('${id}','wa')">WhatsApp</button>`, 'lg');
+  scRefrescar(id);
+}
+function scRefrescar(id) {
+  const p = PED.find(x => x.id === id), e = ent(document.getElementById('scP').value) || {};
+  document.getElementById('scW').value = e.telefono || ''; document.getElementById('scE').value = e.email || ''; document.getElementById('scT').value = textoCotizacion(p, e);
+}
+async function scEnviar(id, via) {
+  const p = PED.find(x => x.id === id), eid = document.getElementById('scP').value, e = ent(eid) || {}, tel = document.getElementById('scW').value.trim(), mail = document.getElementById('scE').value.trim(), txt = document.getElementById('scT').value;
+  if (via === 'wa' && telWA(tel).length < 12) return toast('Escribe el WhatsApp del proveedor (10 dígitos)', 'warning');
+  if (via === 'correo' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mail)) return toast('Escribe un correo válido', 'warning');
+  const w = via === 'wa' ? window.open('', '_blank') : null;   // se abre antes del PIN para que el navegador no lo bloquee
+  const r = await rpcFirmado('fin_pedido_cotizacion', { p_pedido: id, p_accion: 'solicitar', p_datos: { entidad_id: eid } }, { titulo: 'Firmar solicitud de cotización', sub: p.folio });
+  if (!r) { if (w) w.close(); return; }
+  if (eid && ((tel && tel !== e.telefono) || (mail && mail !== e.email))) await rpcConPin('fin_guardar_proveedor', { p_datos: { ...e, telefono: tel || e.telefono, email: mail || e.email } }, r._pin);
+  await rpcConPin('fin_registrar_correo', { p_datos: { entidad_id: eid, pedido_id: id, para: via === 'wa' ? 'WhatsApp ' + tel : mail, asunto: 'Solicitud de cotización ' + p.folio, cuerpo: txt, motivo: 'cotizacion' } }, r._pin);
+  if (via === 'wa') w.location.href = `https://wa.me/${telWA(tel)}?text=${encodeURIComponent(txt)}`;
+  else location.href = `mailto:${encodeURIComponent(mail)}?subject=${encodeURIComponent('Solicitud de cotización ' + p.folio + ' — Centro Ocular Especializado')}&body=${encodeURIComponent(txt)}`;
+  CM('mGen'); toast('Cotización solicitada', 'success'); await cargarTodo(); verPedido(id);
+}
+function subirCotizacion(id) {
+  const p = PED.find(x => x.id === id); if (!p) return; window._cotF = [];
+  modal('Subir cotización · ' + p.folio, `<div class="drop"><input type="file" multiple accept="application/pdf,image/*" onchange="window._cotF=[...this.files];document.getElementById('cotL').innerHTML=window._cotF.map(f=>'<div class=&quot;fitem&quot;><span class=&quot;fk&quot;>'+(f.type.includes('pdf')?'PDF':'IMG')+'</span><span class=&quot;fn&quot;>'+esc(f.name)+'</span></div>').join('');cotLeer()"><div class="big">⬆</div><div><b>PDF, foto o captura de la cotización</b></div><div class="mini">Puedes subir varias del mismo proveedor</div></div><div id="cotL" class="flist"></div>
+    <div class="fgrd" style="margin-top:12px"><div class="fgrp"><label>Proveedor</label><select id="cotP">${optProv(p.entidad_id || '')}</select></div>
+      <div class="fgrp"><label>Total cotizado (con IVA)</label><div class="ipfx"><span>$</span><input type="number" step="0.01" id="cotM"></div></div>
+      ${(p.partidas || []).length ? `<div class="fgrp sp2"><label>Precio unitario cotizado (con IVA)</label><div class="tc"><table><tbody>${p.partidas.map((l, i) => `<tr><td>${esc(String(l.cantidad))} ${esc(l.unidad || 'pza')}</td><td>${esc(l.descripcion)}</td><td style="width:140px"><div class="ipfx"><span>$</span><input type="number" step="0.01" class="cotPU" data-i="${i}" value="${num(l.precio) || ''}" oninput="cotSumar('${p.id}')"></div></td></tr>`).join('')}</tbody></table></div></div>` : ''}
+      <div class="fgrp sp2"><label>Nota (entrega, vigencia, condiciones)</label><input type="text" id="cotN"></div>
+      <div class="fgrp sp2"><label style="display:flex;gap:8px;align-items:center;cursor:pointer;text-transform:none;letter-spacing:0;font-weight:400;font-size:13px"><input type="checkbox" id="cotE" style="width:auto" checked> Elegir esta cotización (actualiza proveedor y monto del pedido)</label></div></div>`,
+    `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="cotGuardar('${id}')">Firmar y subir</button>`, 'lg');
+}
+async function cotLeer() {
+  const f = (window._cotF || [])[0]; if (!f || document.getElementById('cotM').value) return;
+  try { const L = await leerComprobante(f, () => { }); if (L.monto && !document.getElementById('cotM').value) document.getElementById('cotM').value = L.monto; } catch { }
+}
+async function cotGuardar(id) {
+  const F = window._cotF || []; if (!F.length) return toast('Elige el archivo de la cotización', 'warning');
+  const eid = document.getElementById('cotP').value, monto = num(document.getElementById('cotM').value), nota = document.getElementById('cotN').value.trim(), elegir = document.getElementById('cotE').checked;
+  let pin; try { pin = await askPin('Firmar cotización', `${F.length} archivo(s)${monto ? ' · ' + $$(monto) : ''}`); } catch { return; }
+  const p0 = PED.find(x => x.id === id), n0 = (Array.isArray(p0.cotizaciones) ? p0.cotizaciones : []).length;
+  for (const [i, f] of F.entries()) {
+    let u; try { u = await subirArchivo(f, 'cotizaciones'); } catch (e) { return toast(e.message, 'error'); }
+    const r = await rpcConPin('fin_pedido_cotizacion', { p_pedido: id, p_accion: 'adjuntar', p_datos: { url: u.url, sha256: u.sha, nombre: f.name, entidad_id: eid, monto: i === 0 && monto ? monto : null, nota } }, pin);
+    if (!r.ok) return toast(ERR[r.error] || r.error, 'error');
+  }
+  const pts = (p0.partidas || []).map((l, i) => { const v = num(document.querySelector(`.cotPU[data-i="${i}"]`)?.value); return v ? { ...l, precio: v } : l; });
+  if (elegir) await rpcConPin('fin_pedido_cotizacion', { p_pedido: id, p_accion: 'elegir', p_datos: { indice: n0, partidas: pts } }, pin);
+  CM('mGen'); toast('Cotización adjunta', 'success'); await cargarTodo(); verPedido(id);
+}
+async function elegirCotizacion(id, i) {
+  const r = await rpcFirmado('fin_pedido_cotizacion', { p_pedido: id, p_accion: 'elegir', p_datos: { indice: i } }, { titulo: 'Elegir cotización' });
+  if (r) { toast('Cotización elegida: proveedor y monto actualizados', 'success'); await cargarTodo(); verPedido(id); }
+}
+// ── Orden de compra en formato de la clínica, con QR de rastreo ──
+async function imprimirOC(id) {
+  const p = PED.find(x => x.id === id), e = ent(p.entidad_id) || {}, pt = Array.isArray(p.partidas) ? p.partidas : [];
+  const url = pedidoURL(p), qr = await qrDataURL(url, 4);
+  const pr = l => num(l.precio ?? l.costo), filas = pt.length ? pt : [{ cantidad: 1, descripcion: p.descripcion, precio: p.monto_estimado }];
+  const tot = filas.reduce((s, l) => s + num(l.cantidad) * pr(l), 0) || num(p.monto_estimado), elegida = (p.cotizaciones || []).find(c => c.elegida);
+  imprimir('Orden de compra ' + p.folio, `
+    <div style="display:flex;gap:16px;align-items:flex-start"><div style="flex:1"><div class="kv"><b>Folio</b><div><b style="font-size:15px">${esc(p.folio)}</b>${p.urgente ? ' <b class="rojo">· URGENTE</b>' : ''}</div>
+      <b>Proveedor</b><div>${esc(e.nombre || '—')}${e.rfc ? ' · RFC ' + esc(e.rfc) : ''}${e.telefono ? '<br>Tel. ' + esc(e.telefono) : ''}${e.email ? ' · ' + esc(e.email) : ''}</div>
+      <b>Fecha</b><div>${fmtD(String(p.autorizado_at || p.created_at).slice(0, 10))}</div>
+      <b>Área solicitante</b><div>${esc(p.area)} · ${esc(p.sede || '')}</div><b>Entregar</b><div>${fmtD(p.fecha_requerida) !== '—' ? 'a más tardar el ' + fmtD(p.fecha_requerida) : 'a la brevedad'} · Av. Luis Donaldo Colosio 151, Col. La Purísima, Tacámbaro, Mich.</div>
+      ${elegida ? `<b>Cotización</b><div>${esc(elegida.nombre || '')}${elegida.monto ? ' · ' + $$(elegida.monto) : ''}</div>` : ''}</div></div>
+      ${qr ? `<div style="text-align:center;font-size:9px;color:#556;width:130px"><img src="${qr}" style="width:120px;height:120px"><br>Escanee para ver el estado del pedido</div>` : ''}</div>
+    <table><thead><tr><th>Cant.</th><th>Unidad</th><th>Descripción</th><th class="r">Precio unitario</th><th class="r">Importe</th></tr></thead><tbody>
+    ${filas.map(l => `<tr><td>${esc(String(l.cantidad))}</td><td>${esc(l.unidad || 'pza')}</td><td>${esc(l.descripcion)}${l.lio ? ' · LIO' : ''}</td><td class="r">${pr(l) ? $$(pr(l)) : ''}</td><td class="r">${pr(l) ? $$(num(l.cantidad) * pr(l)) : ''}</td></tr>`).join('')}
+    <tr class="tot"><td colspan="4">Total ${tot === num(p.monto_estimado) ? 'autorizado' : 'estimado'} (IVA incluido)</td><td class="r">${$$(tot)}</td></tr></tbody></table>
+    <div class="p"><b>Facturar a:</b> ${esc(RS[0].nombre)} · RFC ${esc(RS[0].rfc)}. Enviar XML y PDF a ${esc(CFG.correo_alertas || '')}. Favor de citar el folio <b>${esc(p.folio)}</b> en la factura, la remisión y la entrega. En medicamentos y material indicar lote y caducidad.</div>
+    <div class="p" style="font-size:10px;color:#556">Rastreo: ${esc(url)}</div>
+    <div class="firmas"><div>Solicitó<br><b>${esc(nomUsr(p.solicitado_por) || '')}</b></div><div>Autorizó<br><b>${esc(nomUsr(p.autorizado_por) || '')}</b>${p.firma2_por ? '<br>2ª firma: ' + esc(nomUsr(p.firma2_por)) : ''}</div><div>Recibió (proveedor)<br>&nbsp;</div></div>`);
+}
+function enviarPedido(id) {
+  const p = PED.find(x => x.id === id), e = ent(p.entidad_id) || {};
+  if (!p.entidad_id) return toast('Elige primero el proveedor (sube y elige su cotización)', 'warning');
+  const url = pedidoURL(p);
+  const txt = `Buen día, ${e.nombre || ''}.\n\nLe enviamos nuestra orden de compra ${p.folio}${p.urgente ? ' (URGENTE)' : ''} del Centro Ocular Especializado.\nPuede verla, imprimirla y dar seguimiento aquí:\n${url}\n\nFavor de citar el folio ${p.folio} en la factura y la entrega, e indicar lote y caducidad.\n\nGracias.\n${cu.nombre}\nTel. (443) 465 6645 · (459) 596 2268`;
+  modal('Enviar orden de compra · ' + p.folio, `<div class="mini" style="margin-bottom:10px">La orden va en el formato de la clínica con logo y QR de rastreo. Por WhatsApp se envía la liga a la orden; por correo se abre el mensaje y se descarga la orden para adjuntarla.</div>
+    <div class="fgrd"><div class="fgrp"><label>WhatsApp</label><input type="text" id="ocW" value="${esc(e.telefono || '')}" placeholder="10 dígitos"></div><div class="fgrp"><label>Correo</label><input type="email" id="ocE" value="${esc(e.email || '')}"></div>
+      <div class="fgrp sp2"><label>Mensaje</label><textarea id="ocT" style="min-height:190px">${esc(txt)}</textarea></div></div>`,
+    `<button class="btn btn-s" onclick="imprimirOC('${id}')">🖨 Ver orden</button><button class="btn btn-s" onclick="ocEnviar('${id}','correo')">✉ Correo</button><button class="btn btn-p" onclick="ocEnviar('${id}','wa')">WhatsApp</button>`, 'lg');
+}
+async function ocEnviar(id, via) {
+  const p = PED.find(x => x.id === id), e = ent(p.entidad_id) || {}, tel = document.getElementById('ocW').value.trim(), mail = document.getElementById('ocE').value.trim(), txt = document.getElementById('ocT').value;
+  if (via === 'wa' && telWA(tel).length < 12) return toast('Escribe el WhatsApp del proveedor (10 dígitos)', 'warning');
+  if (via === 'correo' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mail)) return toast('Escribe un correo válido', 'warning');
+  const w = via === 'wa' ? window.open('', '_blank') : null;
+  const r = await rpcFirmado('fin_registrar_correo', { p_datos: { entidad_id: p.entidad_id, pedido_id: id, para: via === 'wa' ? 'WhatsApp ' + tel : mail, asunto: 'Orden de compra ' + p.folio, cuerpo: txt, motivo: 'pedido' } }, { titulo: 'Firmar envío de la orden', sub: p.folio });
+  if (!r) { if (w) w.close(); return; }
+  if ((tel && tel !== e.telefono) || (mail && mail !== e.email)) await rpcConPin('fin_guardar_proveedor', { p_datos: { ...e, telefono: tel || e.telefono, email: mail || e.email } }, r._pin);
+  if (p.estado === 'autorizado') await rpcConPin('fin_pedido_estado', { p_pedido: id, p_estado: 'enviado', p_datos: {} }, r._pin);
+  if (via === 'wa') w.location.href = `https://wa.me/${telWA(tel)}?text=${encodeURIComponent(txt)}`;
+  else { await imprimirOC(id); location.href = `mailto:${encodeURIComponent(mail)}?subject=${encodeURIComponent('Orden de compra ' + p.folio + ' — Centro Ocular Especializado')}&body=${encodeURIComponent(txt)}`; }
+  CM('mGen'); toast('Orden enviada · pedido marcado como enviado', 'success'); await cargarTodo();
+}
+function cotSumar(id) {
+  const p = PED.find(x => x.id === id), t = (p.partidas || []).reduce((s, l, i) => s + num(l.cantidad) * num(document.querySelector(`.cotPU[data-i="${i}"]`)?.value), 0);
+  if (t) document.getElementById('cotM').value = t.toFixed(2);
 }
 </script>
 </body></html>

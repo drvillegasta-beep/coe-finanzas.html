@@ -128,3 +128,8 @@ alter table public.fin_tareas add column if not exists requiere_conformidad bool
 --   fin_qx_envio(p_usuario, p_pin, p_items, p_destino, p_recibe): envío a almacén/sala de quirófano (primero lo que caduca antes, sin caducados),
 --     folio ENV-…, movimientos 'traspaso_sal'/'traspaso_ent' con el folio (igual que el vale de COE Quirófano).
 -- 16) (21/10/2026) Eliminar facturas o pagos mal capturados: botón en Por pagar / Por cobrar; usa fin_anular (Dirección, con PIN) o fin_solicitar_baja (otros usuarios).
+-- 17) (21/10/2026) Consigna, cotizaciones y orden de compra con QR
+--   qx_lotes: consignacion (bool), proveedor_id. fin_qx_entrada / fin_qx_envio separan los lotes en consigna y conservan el proveedor al enviarlos.
+--   fin_pedidos: token (rastreo), cotizacion_solicitada_at, cotizaciones (jsonb: url, nombre, entidad_id, monto, nota, elegida…).
+--   fin_pedido_cotizacion(p_usuario, p_pin, p_pedido, p_accion 'solicitar'|'adjuntar'|'elegir'|'partidas', p_datos).
+--   fin_pedido_publico(p_folio, p_token): datos de la orden para la página pública pedido.html (QR de rastreo); sin token correcto no devuelve nada.
