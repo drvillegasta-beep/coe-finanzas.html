@@ -843,6 +843,8 @@ const ROLES = {
   administracion: 'Administración', solicitante: 'Área solicitante', usuario: 'Usuario'
 };
 const esAdmin = () => cu?.rol === 'admin';
+// Eliminar (anular) facturas o pagos mal capturados: lo autoriza la Contadora (y Dirección General)
+const puedeEliminar = () => ['admin', 'contadora'].includes(cu?.rol);
 const puedeVerTodo = () => ['admin', 'direccion', 'contadora'].includes(cu?.rol) || !cu?.sede;
 const enMiSede = r => puedeVerTodo() || !r.sede || r.sede === cu.sede;
 const limiteFirma = () => num(CFG.monto_doble_firma) || 3000;
@@ -880,7 +882,7 @@ const ERR = {
   director_requerido: 'Se requiere el PIN del Director General', director_pin: 'PIN del Director incorrecto',
   comprobante: 'Falta el comprobante', monto_saldo: 'El monto excede el saldo de la cuenta (no se permite descuadrar)', ya_solicitada: 'Ya hay una solicitud de baja pendiente', cuenta: 'Cuenta no encontrada',
   monto: 'Monto no válido', proveedor: 'Falta el proveedor', descripcion: 'Falta la descripción',
-  solo_director: 'Solo el Director General puede hacer esto', motivo: 'Escribe el motivo', tiene_pagos: 'Tiene pagos; anula primero los pagos',
+  solo_director: 'Solo el Director General puede hacer esto', solo_contadora: 'Solo la Contadora (o Dirección General) puede eliminar', motivo: 'Escribe el motivo', tiene_pagos: 'Tiene pagos; anula primero los pagos',
   uuid_duplicado: 'Esta factura (UUID) ya está registrada', sin_permiso: 'Tu perfil no tiene permiso para esta acción',
   estado: 'El estado actual no permite esta acción', no_autorizado: 'El pedido aún no está autorizado', sede: 'Pedido de otra sede',
   evidencia: 'Sube la evidencia de la tarea', nombre: 'Falta el nombre', tabla: 'Operación no permitida',
@@ -1234,7 +1236,7 @@ function calcAlertas() {
   if (veEquipo()) equipoResp().filter(k => !String(k).startsWith('rol:') && k !== cu.id).forEach(k => { const h = new Date(); if (h.getHours() >= 20 && !yaCerre(k)) A.push({ n: 'i', t: `${nomUsr(k)} no ha cerrado su día`, m: 'Cierre del día pendiente', go: () => reporteDia() }); });
   buildRecOcurrencias(aviso).filter(o => o.estado === 'vencido' || o.estado === 'proximo').forEach(o => A.push({ n: o.estado === 'vencido' ? 'r' : 'a', t: `Recurrente ${o.estado === 'vencido' ? 'vencido' : 'por vencer'}: ${o.rec.descripcion}`, m: `${nomEnt(o.rec.entidad_id)} · ${fmtD(isoD(o.fecha))}`, go: () => goTab('rec') }));
   if (cu.rol === 'contadora' || esAdmin()) vivas().filter(f => f.revision === 'observado').forEach(f => A.push({ n: 'a', t: `Observación pendiente: ${nomEnt(f.entidad_id)}`, m: f.revision_nota || f.descripcion, go: () => verCuenta(f.id) }));
-  if (esAdmin()) SOLB.filter(s => s.estado === 'pendiente').forEach(s => { const x = descSolicitud(s); A.push({ n: 'a', t: `Solicitud de baja: ${nomUsr(s.solicitado_por)}`, m: `${x.txt} · ${s.motivo}`, go: () => x.f.id && verCuenta(x.f.id) }); });
+  if (puedeEliminar()) SOLB.filter(s => s.estado === 'pendiente').forEach(s => { const x = descSolicitud(s); A.push({ n: 'a', t: `Solicitud de eliminación: ${nomUsr(s.solicitado_por)}`, m: `${x.txt} · ${s.motivo}`, go: () => x.f.id && verCuenta(x.f.id) }); });
   if (puede('pedidos')) try { almAlertas('alm').forEach(a => A.push(a)); } catch (e) { console.warn(e); }
   const orden = { r: 0, a: 1, i: 2, v: 3 };
   const modDe = a => /^Almac/.test(a.t) ? 'pedidos' : /^Pago|^Vence/.test(a.t) ? 'cxp' : /^Cobro/.test(a.t) ? 'cxc' : /edido/.test(a.t) ? 'pedidos' : /^Factura/.test(a.t) ? 'fps' : /^Pendiente|cerrado su día/.test(a.t) ? 'tareas' : /^Solicitud de baja/.test(a.t) ? 'cxp' : /^Recurrente/.test(a.t) ? 'recurrentes' : 'revision';
@@ -1372,7 +1374,7 @@ function verCuenta(id) {
   <h4 style="margin:18px 0 8px">Documentos probatorios</h4>
   ${docs.length || f.xml_url || f.pdf_url ? `<div class="flist">${docs.map(d => `<div class="fitem"><span class="fk">${esc(d.tipo.toUpperCase())}</span><a class="fn" href="${esc(d.url)}" target="_blank">${esc(d.url.split('/').pop())}</a><span class="mini">${esc(nomUsr(d.subido_por))} · ${fmtDT(d.subido_at)}</span><span class="mini" title="Huella SHA-256">#${esc((d.sha256 || '').slice(0, 8))}</span></div>`).join('')}</div>` : '<div class="mini">Sin documentos</div>'}
   <h4 style="margin:18px 0 8px">${egr ? 'Pagos' : 'Cobros'}</h4>
-  ${pagos.length ? `<table><tbody>${pagos.map(a => `<tr style="${a.anulado ? 'opacity:.45;text-decoration:line-through' : ''}"><td>${fmtD(a.fecha_pago)}</td><td>${esc(a.metodo || '')}</td><td class="amt">${$$(a.monto)}</td><td>${a.comprobante_url ? `<a class="docprev" href="${esc(a.comprobante_url)}" target="_blank">Comprobante</a>` : ''}</td><td class="mini">${esc(nomUsr(a.firma1_por || a.created_by))}${a.firma2_por ? ' + ' + esc(nomUsr(a.firma2_por)) : ''}</td><td>${a.anulado ? '<span class="mini">' + esc(a.anulado_motivo || '') + '</span>' : esAdmin() ? `<button class="btn btn-d btn-sm" onclick="anular('fin_abonos','${a.id}')">Anular</button>` : SOLB.find(s => s.registro_id === a.id && s.estado === 'pendiente') ? '<span class="dtag no">baja solicitada</span>' : puede(mod) ? `<button class="btn btn-s btn-sm" onclick="solicitarBaja('fin_abonos','${a.id}')">Solicitar baja</button>` : ''}</td></tr>`).join('')}</tbody></table>` : '<div class="mini">Sin movimientos</div>'}`;
+  ${pagos.length ? `<table><tbody>${pagos.map(a => `<tr style="${a.anulado ? 'opacity:.45;text-decoration:line-through' : ''}"><td>${fmtD(a.fecha_pago)}</td><td>${esc(a.metodo || '')}</td><td class="amt">${$$(a.monto)}</td><td>${a.comprobante_url ? `<a class="docprev" href="${esc(a.comprobante_url)}" target="_blank">Comprobante</a>` : ''}</td><td class="mini">${esc(nomUsr(a.firma1_por || a.created_by))}${a.firma2_por ? ' + ' + esc(nomUsr(a.firma2_por)) : ''}</td><td>${a.anulado ? '<span class="mini">' + esc(a.anulado_motivo || '') + '</span>' : puedeEliminar() ? `<button class="btn btn-d btn-sm" onclick="anular('fin_abonos','${a.id}')">Anular</button>` : SOLB.find(s => s.registro_id === a.id && s.estado === 'pendiente') ? '<span class="dtag no">baja solicitada</span>' : puede(mod) ? `<button class="btn btn-s btn-sm" onclick="solicitarBaja('fin_abonos','${a.id}')">Solicitar baja</button>` : ''}</td></tr>`).join('')}</tbody></table>` : '<div class="mini">Sin movimientos</div>'}`;
   const ft = [
     f.estado !== 'pagado' && !f.anulado && puedePagar(f) ? `<button class="btn btn-p" onclick="pagarCuenta('${id}')">${egr ? 'Pagar' : 'Registrar cobro'}</button>` : '',
     egr && f.estado !== 'pagado' && !f.anulado && puede('cxp') ? (f.propuesta_pago ? `<button class="btn btn-s" onclick="quitarPropuesta('${id}')">Quitar de propuesta</button>` : `<button class="btn btn-s" onclick="proponerUna('${id}')">Proponer pago</button>`) : '',
@@ -1380,7 +1382,7 @@ function verCuenta(id) {
     puede(mod) ? `<button class="btn btn-s" onclick="correoProveedor('${f.entidad_id}','${id}')">✉ Correo</button>` : '',
     puede('revision') ? `<button class="btn btn-s" onclick="revisar('${id}','revisado')">✓ Revisado</button><button class="btn btn-w" onclick="revisar('${id}','observado')">Observar</button>` : '',
     egr && f.estado !== 'pagado' && puede('cxc') ? `<button class="btn btn-s" onclick="registrarDevolucion('${id}')">Devolución</button>` : '',
-    esAdmin() && !f.anulado ? `<button class="btn btn-d" onclick="anular('fin_facturas','${id}')">Anular</button>` : !f.anulado && !solF && puede(mod) ? `<button class="btn btn-d" onclick="solicitarBaja('fin_facturas','${id}')">Solicitar baja</button>` : '',
+    puedeEliminar() && !f.anulado ? `<button class="btn btn-d" onclick="anular('fin_facturas','${id}')">Anular</button>` : !f.anulado && !solF && puede(mod) ? `<button class="btn btn-d" onclick="solicitarBaja('fin_facturas','${id}')">Solicitar baja</button>` : '',
   ].join('');
   modal(`${egr ? 'Cuenta por pagar' : 'Cuenta por cobrar'} · ${nomEnt(f.entidad_id)}`, b, ft, 'xl');
 }
@@ -1437,7 +1439,7 @@ async function confirmarPago(id, extra = {}) {
 async function anular(tabla, id) {
   const motivo = prompt('Motivo de la anulación (queda en la bitácora):');
   if (!motivo) return;
-  const r = await rpcFirmado('fin_anular', { p_tabla: tabla, p_id: id, p_motivo: motivo }, { titulo: 'Anular movimiento', sub: 'Solo Dirección General' });
+  const r = await rpcFirmado('fin_anular', { p_tabla: tabla, p_id: id, p_motivo: motivo }, { titulo: 'Eliminar (anular) movimiento', sub: 'Autoriza la Contadora' });
   if (r) { CM('mGen'); toast('Anulado', 'success'); await cargarTodo(); }
 }
 async function revisar(id, estado) {
@@ -1507,15 +1509,20 @@ async function proponerUna(id) {
 
 let SOLB = [];
 async function solicitarBaja(tabla, id) {
-  const motivo = prompt('¿Por qué debe darse de baja? (lo autoriza Dirección General)');
+  const motivo = prompt('¿Por qué debe eliminarse? (lo autoriza la Contadora)');
   if (!motivo) return;
   const r = await rpcFirmado('fin_solicitar_baja', { p_tabla: tabla, p_id: id, p_motivo: motivo }, { titulo: 'Firmar solicitud de baja' });
-  if (r) { CM('mGen'); toast('Solicitud enviada a Dirección General', 'success'); await cargarTodo(); }
+  if (r) { CM('mGen'); toast('Solicitud enviada a la Contadora', 'success'); await cargarTodo(); }
 }
 async function aprobarBaja(sid) {
   const s = SOLB.find(x => x.id === sid); if (!s) return;
-  const r = await rpcFirmado('fin_anular', { p_tabla: s.tabla, p_id: s.registro_id, p_motivo: 'Solicitud de ' + nomUsr(s.solicitado_por) + ': ' + s.motivo }, { titulo: 'Autorizar baja', sub: s.motivo });
-  if (r) { toast('Baja autorizada', 'success'); await cargarTodo(); }
+  const mot = 'Solicitud de ' + nomUsr(s.solicitado_por) + ': ' + s.motivo;
+  let pin; try { pin = await askPin('Autorizar eliminación', s.motivo); } catch { return; }
+  // Si es una factura con pagos, primero se eliminan sus pagos
+  if (s.tabla === 'fin_facturas') for (const a of ABO.filter(x => x.factura_id === s.registro_id && !x.anulado)) { const ra = await rpcConPin('fin_anular', { p_tabla: 'fin_abonos', p_id: a.id, p_motivo: mot }, pin); if (!ra.ok) return toast(ERR[ra.error] || ra.error, 'error'); }
+  const r = await rpcConPin('fin_anular', { p_tabla: s.tabla, p_id: s.registro_id, p_motivo: mot }, pin);
+  if (!r.ok) return toast(ERR[r.error] || r.error, 'error');
+  toast('Eliminación autorizada', 'success'); await cargarTodo();
 }
 async function rechazarBaja(sid) {
   const nota = prompt('Motivo del rechazo (opcional):') ?? null; if (nota === null) return;
@@ -2095,7 +2102,7 @@ function dashDirectorFin(sel) {
       ${cajaConformidad()}
       ${cajaSinPrioridad()}
       <div id="bxProp">${caja(`Pagos propuestos (${prop.length})`, lista(prop, f => `<div class="aitem ${semaforo(f) === 'r' ? 'r' : ''}" onclick="verCuenta('${f.id}')"><div style="flex:1"><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(saldo(f))}</div><div class="am">${esc(f.descripcion)} · pagar el ${fmtD(f.propuesta_pago)} · vence ${fmtD(f.fecha_vencimiento)}</div></div>${puede('pagos', 3) ? `<button class="btn btn-p btn-sm" onclick="event.stopPropagation();pagarCuenta('${f.id}')">Pagar</button>` : ''}</div>`, 'La contadora no ha propuesto pagos'), prop.length ? `<button class="btn btn-s btn-sm" onclick="imprimirPropuesta()">🖨</button>` : '')}</div>
-      ${SOLB.some(s => s.estado === 'pendiente') ? caja(`Solicitudes de baja (${SOLB.filter(s => s.estado === 'pendiente').length})`, lista(SOLB.filter(s => s.estado === 'pendiente'), s => { const x = descSolicitud(s); return `<div class="aitem a" onclick="${x.f.id ? `verCuenta('${x.f.id}')` : ''}"><div style="flex:1"><div class="at">${esc(x.txt)}</div><div class="am">${esc(nomUsr(s.solicitado_por))} · ${fmtDT(s.solicitado_at)} · ${esc(s.motivo)}</div></div>${esAdmin() ? `<div class="rowact"><button class="btn btn-d btn-sm" onclick="event.stopPropagation();aprobarBaja('${s.id}')">Autorizar</button><button class="btn btn-s btn-sm" onclick="event.stopPropagation();rechazarBaja('${s.id}')">Rechazar</button></div>` : ''}</div>`; })) : ''}
+      ${cajaSolicitudesBaja()}
       ${caja(`Pedidos por autorizar (${pedAut.length})`, lista(pedAut, p => `<div class="aitem ${p.urgente ? 'r' : 'i'}" onclick="verPedido('${p.id}')"><div style="flex:1"><div class="at">${p.urgente ? 'URGENTE · ' : ''}${esc(p.folio)} · ${$$(p.monto_estimado)}</div><div class="am">${esc(p.area)} · ${esc(p.descripcion)} · ${esc(nomUsr(p.solicitado_por))}</div></div>${puede('pedidos', 3) && (!lim || p.monto_estimado <= lim) ? `<button class="btn btn-p btn-sm" onclick="event.stopPropagation();autorizarPedido('${p.id}','autorizar')">Autorizar</button>` : ''}</div>`))}
       ${caja('Compromisos de pago · próximas 4 semanas', sem.map(s => `<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:12px"><span>${s.lbl}</span><b class="amt">${$$(s.cx)}</b></div>
         <div class="prog" style="height:9px"><div style="width:${Math.round(s.cx / maxB * 100)}%;background:${s.cx > s.ing && s.ing ? 'var(--dg)' : 'var(--wn)'}"></div></div>
@@ -2325,6 +2332,7 @@ function dashContadora(sel) {
     <div style="margin-top:20px">${calSemaforo(misT)}${tablaDia(misT)}</div>
     <div class="cfgg" style="margin-top:20px"><div id="inv-far">${cajaInventario('far')}</div><div id="inv-alm">${cajaInventario('alm')}</div><div id="inv-qui">${cajaInventario('qui')}</div></div>
     <div class="cfgg" style="margin-top:20px">
+      ${cajaSolicitudesBaja()}
       ${caja(`Facturas por solicitar (${fps.length})`, lista(fps.slice().sort((a, b) => limFps(a).localeCompare(limFps(b))).slice(0, 8), f => `<div class="aitem ${diasA(limFps(f)) < 0 ? 'r' : 'a'}" onclick="verCuenta('${f.id}')"><div style="flex:1"><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(f.monto_pagado)}</div><div class="am">${esc(f.descripcion)} · pagado ${fmtD(f.fecha_pago)} · límite ${fmtD(limFps(f))}</div></div><div class="rowact" onclick="event.stopPropagation()"><button class="btn btn-s btn-sm" onclick="correoProveedor('${f.entidad_id}','${f.id}',null,'factura')">✉</button><button class="btn btn-p btn-sm" onclick="openUpload('${f.id}')">⬆ XML</button></div></div>`, 'Lista en cero'), `<button class="btn btn-s btn-sm" onclick="goTab('fps')">Ver todas</button>`)}
       ${(() => { const cobV = abiertas('ingreso').filter(f => semaforo(f) === 'r'); return caja(`Cobros vencidos (${cobV.length})`, lista(cobV, f => `<div class="aitem r" onclick="verCuenta('${f.id}')"><div><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(saldo(f))}</div><div class="am">${esc(f.descripcion)} · venció ${fmtD(f.fecha_vencimiento)}</div></div></div>`, 'Sin cobros vencidos')); })()}
     </div>
@@ -2457,6 +2465,11 @@ function cajaInventario(area) {
     : `<div class="invchips">${SEC.map(([k, l, c]) => `<button class="invchip ${D[k].length ? c : 'z'} ${k === sel ? 'act' : ''}" onclick="VIEW.invSec['${area}']='${k}';renderTab()"><b>${D[k].length}</b><span>${l}</span></button>`).join('')}</div>
       ${L.length ? `<div class="alist" style="margin-top:10px">${L.slice(0, 8).map(x => `<div class="aitem ${x.s === 'r' ? 'r' : x.s === 'a' ? 'a' : 'i'}" ${x.go ? `onclick="${x.go}"` : ''}><div><div class="at">${esc(x.t)}</div><div class="am">${x.m}</div></div></div>`).join('')}${L.length > 8 ? `<div class="mini">y ${L.length - 8} más…</div>` : ''}</div>` : `<div class="mini" style="margin-top:10px">✓ ${total ? 'Nada en esta lista' : 'Inventario sin alertas'}</div>`}`;
   return caja(`Inventario de ${tit.toLowerCase()}${D.ejemplo ? ' <span class="bdg bdg-pnd" style="font-size:10px">datos de ejemplo</span>' : ''}`, cuerpo, `<button class="btn btn-s btn-sm" onclick="VIEW.almA='${area}';goTab('alm')">Ver detalle ›</button>`);
+}
+
+// Solicitudes para eliminar facturas o pagos mal capturados (las autoriza la Contadora o Dirección)
+function cajaSolicitudesBaja() {
+  return `${SOLB.some(s => s.estado === 'pendiente') ? caja(`Solicitudes de eliminación (${SOLB.filter(s => s.estado === 'pendiente').length})`, lista(SOLB.filter(s => s.estado === 'pendiente'), s => { const x = descSolicitud(s); return `<div class="aitem a" onclick="${x.f.id ? `verCuenta('${x.f.id}')` : ''}"><div style="flex:1"><div class="at">${esc(x.txt)}</div><div class="am">${esc(nomUsr(s.solicitado_por))} · ${fmtDT(s.solicitado_at)} · ${esc(s.motivo)}</div></div>${puedeEliminar() ? `<div class="rowact"><button class="btn btn-d btn-sm" onclick="event.stopPropagation();aprobarBaja('${s.id}')">Autorizar</button><button class="btn btn-s btn-sm" onclick="event.stopPropagation();rechazarBaja('${s.id}')">Rechazar</button></div>` : ''}</div>`; })) : ''}`;
 }
 
 // ══ PENDIENTES: prioridad, seguimiento, retrasos y cierre del día ══
@@ -3575,7 +3588,7 @@ function dashPanorama(sel) {
   if (prop.length) U.push({ r: true, t: `${prop.length} pago(s) propuestos por la contadora · ${moneyK(sumS(prop))}`, d: 'Esperan su autorización para pagar', go: "VIEW.dirTab='fin';renderTab();setTimeout(()=>document.getElementById('bxProp')?.scrollIntoView({behavior:'smooth'}),80)" });
   if (pedAut.length) U.push({ r: pedAut.some(p => p.urgente), t: `${pedAut.length} pedido(s) por autorizar${pedAut.some(p => p.urgente) ? ' · hay urgentes' : ''}`, d: pedAut.slice(0, 3).map(p => p.folio + ' ' + moneyK(p.monto_estimado)).join(' · '), go: "goTab('ped')" });
   if (conf.length) U.push({ r: false, t: `${conf.length} informe(s) por firmar de conformidad`, d: conf.slice(0, 2).map(t => t.titulo).join(' · '), go: "VIEW.dirTab='fin';renderTab()" });
-  if (bajas.length) U.push({ r: false, t: `${bajas.length} solicitud(es) de baja`, d: 'Requieren su autorización', go: "VIEW.dirTab='fin';renderTab()" });
+  if (bajas.length) U.push({ r: false, t: `${bajas.length} solicitud(es) para eliminar facturas o pagos`, d: 'Las autoriza la Contadora (o usted)', go: "VIEW.dirTab='fin';renderTab()" });
   if (sinPri.length) U.push({ r: false, t: `${sinPri.length} pendiente(s) sin prioridad`, d: 'Usted les asigna la prioridad', go: "VIEW.dirTab='fin';renderTab()" });
   if (venc.length) U.push({ r: true, t: `${venc.length} cuenta(s) por pagar vencidas · ${moneyK(sumS(venc))}`, d: 'Proveedores con pago atrasado', go: "VIEW.cxpF='r';goTab('cxp')" });
   if (critEq.length) U.push({ r: true, t: `${critEq.length} pendiente(s) crítico(s) vencido(s) del equipo`, d: critEq.slice(0, 2).map(t => respNom(respKey(t)) + ': ' + t.titulo).join(' · '), go: "VIEW.pAmb='equipo';goTab('tar')" });
@@ -4435,8 +4448,8 @@ function almFilaEdit(x, i) {
 }
 
 // ══ ELIMINAR FACTURAS O PAGOS MAL CAPTURADOS (Por pagar / Por cobrar) ══
-// Dirección General elimina con su PIN (queda anulado con motivo en la bitácora, no se borra la evidencia).
-// Los demás usuarios lo solicitan y Dirección lo autoriza.
+// La Contadora (o Dirección General) elimina con su PIN (queda anulado con motivo en la bitácora, no se borra la evidencia).
+// Los demás usuarios lo solicitan y la Contadora lo autoriza.
 VIEW.elQ = ''; VIEW.elSel = null;
 const EL_MOT = ['Capturado dos veces', 'Monto equivocado', 'Proveedor equivocado', 'El pago no se hizo', 'Factura cancelada por el proveedor', 'Otro'];
 function posiblesDuplicados(tipo) {
@@ -4449,11 +4462,11 @@ function posiblesDuplicados(tipo) {
 }
 function openEliminar(tipo, id) {
   VIEW.elTipo = tipo || 'egreso'; VIEW.elSel = id || null; VIEW.elQ = ''; VIEW.elMarca = {};
-  modal('Eliminar facturas o pagos mal capturados', `<div class="mini" style="margin-bottom:10px">${esAdmin() ? 'Marca lo que está mal capturado, elige el motivo y firma con tu PIN. Queda anulado con el motivo en la bitácora; los archivos se conservan.' : 'Marca lo que está mal capturado y envía la solicitud: Dirección General la autoriza con su PIN.'}</div>
+  modal('Eliminar facturas o pagos mal capturados', `<div class="mini" style="margin-bottom:10px">${puedeEliminar() ? 'Marca lo que está mal capturado, elige el motivo y firma con tu PIN. Queda anulado con el motivo en la bitácora; los archivos se conservan.' : 'Marca lo que está mal capturado y envía la solicitud: la Contadora la autoriza con su PIN.'}</div>
     <input type="text" id="elQ" placeholder="Buscar proveedor, concepto, folio o monto" oninput="VIEW.elQ=this.value;elPintar()" style="margin-bottom:10px">
     <div id="elL" style="max-height:52vh;overflow:auto"></div>
     <div class="fgrd" style="margin-top:12px"><div class="fgrp"><label>Motivo</label><select id="elM">${EL_MOT.map(m => `<option>${m}</option>`).join('')}</select></div><div class="fgrp"><label>Detalle (opcional)</label><input type="text" id="elD" placeholder="Ej. se registró también el 15/10"></div></div>`,
-    `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-d" id="elGo" onclick="elAplicar()" disabled>${esAdmin() ? 'Firmar y eliminar' : 'Solicitar eliminación'}</button>`, 'xl');
+    `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-d" id="elGo" onclick="elAplicar()" disabled>${puedeEliminar() ? 'Firmar y eliminar' : 'Solicitar eliminación'}</button>`, 'xl');
   elPintar();
 }
 function elPintar() {
@@ -4475,7 +4488,7 @@ function elPintar() {
           <div style="flex:1">Pago ${fmtD(a.fecha_pago)} · <b>${$$(a.monto)}</b> · ${esc(a.metodo || '')}${a.referencia ? ' · ref ' + esc(a.referencia) : ''}${a.comprobante_url ? ` · <a href="${esc(a.comprobante_url)}" target="_blank" onclick="event.stopPropagation()">comprobante</a>` : ''}${solP('fin_abonos', a.id) ? ' <span class="bdg bdg-pnd">eliminación solicitada</span>' : ''}</div></label>`).join('')}
       </div>`; }).join('') : '<div class="emp">Sin cuentas que coincidan</div>');
   const n = Object.values(M).filter(Boolean).length, go = document.getElementById('elGo');
-  if (go) { go.disabled = !n; go.textContent = (esAdmin() ? 'Firmar y eliminar' : 'Solicitar eliminación') + (n ? ` (${n})` : ''); }
+  if (go) { go.disabled = !n; go.textContent = (puedeEliminar() ? 'Firmar y eliminar' : 'Solicitar eliminación') + (n ? ` (${n})` : ''); }
 }
 async function elAplicar() {
   const M = VIEW.elMarca, facs = Object.keys(M).filter(k => M[k] && k.startsWith('f:')).map(k => k.slice(2));
@@ -4485,17 +4498,17 @@ async function elAplicar() {
   if (!facs.length && !pagos.length) return;
   const motivo = document.getElementById('elM').value + (document.getElementById('elD').value.trim() ? ' — ' + document.getElementById('elD').value.trim() : '');
   const resumen = `${facs.length ? facs.length + ' factura(s)' : ''}${facs.length && pagos.length ? ' y ' : ''}${pagos.length ? pagos.length + ' pago(s)' : ''}`;
-  if (!confirm(`${esAdmin() ? 'Eliminar' : 'Solicitar eliminar'} ${resumen}.\nMotivo: ${motivo}\n\n¿Continuar?`)) return;
-  let pin; try { pin = await askPin(esAdmin() ? 'Firmar eliminación' : 'Firmar solicitud de eliminación', resumen + ' · ' + motivo); } catch { return; }
-  const ok = [], fallas = [], fn = esAdmin() ? 'fin_anular' : 'fin_solicitar_baja';
+  if (!confirm(`${puedeEliminar() ? 'Eliminar' : 'Solicitar eliminar'} ${resumen}.\nMotivo: ${motivo}\n\n¿Continuar?`)) return;
+  let pin; try { pin = await askPin(puedeEliminar() ? 'Firmar eliminación' : 'Firmar solicitud de eliminación', resumen + ' · ' + motivo); } catch { return; }
+  const ok = [], fallas = [], fn = puedeEliminar() ? 'fin_anular' : 'fin_solicitar_baja';
   const run = async (tabla, id, txt) => { const r = await rpcConPin(fn, { p_tabla: tabla, p_id: id, p_motivo: motivo }, pin); if (r.ok) ok.push(txt); else { fallas.push(txt + ': ' + (ERR[r.error] || r.error)); if (/pin|bloq/i.test(r.error || '')) throw new Error('pin'); } };
   try {
     for (const id of pagos) { const a = ABO.find(x => x.id === id), f = FAC.find(x => x.id === a?.factura_id); await run('fin_abonos', id, `Pago ${$$(a?.monto)} del ${fmtD(a?.fecha_pago)} · ${nomEnt(f?.entidad_id)}`); }
-    // Sin Dirección, la factura con pagos solo se puede solicitar después de que se autoricen los pagos: se solicita igual y Dirección lo resuelve junto
+    // Si quien solicita no puede eliminar, la Contadora autoriza primero los pagos y luego la factura
     for (const id of facs) { const f = FAC.find(x => x.id === id); await run('fin_facturas', id, `Factura/cuenta ${nomEnt(f?.entidad_id)} · ${$$(f?.monto_total)}`); }
   } catch (e) { }
   await cargarTodo();
-  document.getElementById('mGenB').innerHTML = `${ok.length ? `<div class="okbox"><b>${esAdmin() ? 'Eliminado (anulado con motivo)' : 'Solicitud enviada a Dirección General'}</b><br>${ok.map(esc).join('<br>')}</div>` : ''}${fallas.length ? `<div class="errbox">${fallas.map(esc).join('<br>')}</div>` : ''}`;
+  document.getElementById('mGenB').innerHTML = `${ok.length ? `<div class="okbox"><b>${puedeEliminar() ? 'Eliminado (anulado con motivo)' : 'Solicitud enviada a la Contadora'}</b><br>${ok.map(esc).join('<br>')}</div>` : ''}${fallas.length ? `<div class="errbox">${fallas.map(esc).join('<br>')}</div>` : ''}`;
   document.getElementById('mGenF').innerHTML = `<button class="btn btn-p" onclick="CM('mGen')">Listo</button>`;
 }
 
