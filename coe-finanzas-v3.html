@@ -644,7 +644,7 @@ i.dot{flex:0 0 10px;height:10px;border-radius:50%;margin-top:6px;align-self:flex
 .temas{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}.tema-op{display:flex;gap:8px;align-items:center;border:1px solid var(--br);background:var(--sf2);border-radius:12px;padding:10px;cursor:pointer;color:var(--tx);font-family:var(--fn);font-size:13px}.tema-op.on{border-color:var(--pr);box-shadow:0 0 0 1px var(--pr)}
 .tema-op .sw4{width:28px;height:18px;border-radius:5px;flex:0 0 auto}
 .tema-op[data-tm="grafito"] .sw4{background:linear-gradient(90deg,#1B1D20 50%,#8DB8A5 50%)}.tema-op[data-tm="noche"] .sw4{background:linear-gradient(90deg,#141C2B 50%,#86ABE0 50%)}.tema-op[data-tm="pizarra"] .sw4{background:linear-gradient(90deg,#18191C 50%,#C9AE7C 50%)}.tema-op[data-tm="claro"] .sw4{background:linear-gradient(90deg,#FFFFFF 50%,#2F6F66 50%);border:1px solid #ccc}
-.tbtn-tema{background:none;border:1px solid var(--br);color:var(--tm);border-radius:10px;width:34px;height:34px;cursor:pointer;font-size:15px;display:grid;place-items:center}.tbtn-tema:hover{color:var(--pr);border-color:var(--pr)}
+.tbtn-tema{background:none;border:1px solid var(--br);color:var(--tx);border-radius:10px;height:34px;padding:0 12px;cursor:pointer;font-size:13px;font-family:var(--fn);font-weight:600;display:flex;gap:6px;align-items:center}@media(max-width:700px){.tbtn-tema span{display:none}.tbtn-tema{padding:0 9px}}.tbtn-tema:hover{color:var(--pr);border-color:var(--pr)}
 @media (max-width:600px){.dgrid{grid-template-columns:1fr}.kp b{font-size:26px}.cch{height:150px}.ccv{font-size:9px}}
 /* Subir pagos */
 .spit{display:flex;gap:14px;border:1px solid var(--br);background:var(--sf2);border-radius:14px;padding:12px;margin-top:12px}
@@ -675,6 +675,9 @@ i.dot{flex:0 0 10px;height:10px;border-radius:50%;margin-top:6px;align-self:flex
 .elr input{width:auto;margin-top:3px}.elr.sub{border-top:1px solid var(--br);padding-left:34px;background:var(--sf)}
 .almedit td{vertical-align:top}.almedit input,.almedit select{min-height:34px;padding:6px 8px;font-size:13px}
 .almedit td:first-child input{min-width:210px}.almedit select{min-width:120px}
+.ctlr{display:flex;gap:10px;align-items:center;padding:7px 4px;border-bottom:1px solid var(--br);cursor:default}.ctlr:last-child{border-bottom:0}.ctlr[onclick]{cursor:pointer}.ctlr[onclick]:hover b{color:var(--pr)}
+.ctlr i{width:10px;height:10px;border-radius:50%;flex:0 0 10px;background:var(--wn)}.ctlr.ok i{background:var(--sc)}.ctlr.r i{background:var(--dg)}.ctlr b{font-size:13px;font-weight:600}
+.cdash-full>.cdash-side>*{flex-shrink:0}
 </style>
 </head>
 <body>
@@ -709,7 +712,7 @@ i.dot{flex:0 0 10px;height:10px;border-radius:50%;margin-top:6px;align-self:flex
     <span class="ttit">Finanzas</span>
     <span class="live wait" id="liveBadge" title="Estado de conexión"><span class="ldot"></span><span class="ltx" id="liveTx">Conectando…</span></span>
     <span class="tsp"></span>
-    <button class="tbtn-tema" onclick="elegirTema()" title="Colores">◐</button>
+    <button class="tbtn-tema" onclick="elegirTema()" title="Apariencia: elegir colores">🎨 <span>Apariencia</span></button>
     <button class="bell" onclick="goTab('alr')" title="Alertas">🔔<b id="bellN" style="display:none"></b></button>
     <div class="tusr">
       <div class="tav" id="tav" style="cursor:pointer" onclick="miAcceso()" title="Mi acceso">A</div>
@@ -990,7 +993,8 @@ function cambioObligatorio(usuario, passActual, d) {
 }
 // Cambio voluntario de contraseña y PIN
 function miAcceso() {
-  modal('Mi acceso', `<div class="kv" style="margin-bottom:14px"><b>Usuario</b><div><b>${esc(cu.usuario || '')}</b></div></div>
+  modal('Mi acceso', `<div class="dsec">Apariencia</div><div class="temas" style="margin-bottom:6px">${TEMAS.map(([k, t]) => `<button class="tema-op ${temaActual() === k ? 'on' : ''}" data-tm="${k}" onclick="ponerTema('${k}')"><span class="sw4"></span>${t}</button>`).join('')}</div><div class="mini" style="margin-bottom:16px">Se guarda en este equipo.</div>
+    <div class="kv" style="margin-bottom:14px"><b>Usuario</b><div><b>${esc(cu.usuario || '')}</b></div></div>
     <div class="fld"><label>Contraseña actual</label><input type="password" id="maA" autocomplete="current-password"></div>
     <div class="fld"><label>Nueva contraseña (vacío = no cambiar)</label><input type="password" id="maP" autocomplete="new-password"></div>
     <div class="fld"><label>Nuevo PIN de firma (vacío = no cambiar)</label><input type="password" id="maN" maxlength="4" inputmode="numeric"></div>`,
@@ -1103,11 +1107,14 @@ async function cargarTodo(silencioso) {
     q('qx_ubicaciones', x => x.select('id,nombre,tipo,area,activa,orden').eq('activa', true).order('orden')),
     q('far_movimientos', x => x.select('producto_id,tipo,cantidad,ubicacion,created_at').eq('tipo', 'salida').gte('created_at', new Date(Date.now() - 28 * 864e5).toISOString()).limit(5000)),
     q('qui_pedidos_lio', x => x.select('id,folio,paciente_nombre,lio_modelo,lio_power,estado,solicitado_at,fecha_entrega_estimada,created_at').order('created_at', { ascending: false }).limit(200)),
+    q('fin_inventario_controles', x => x.gte('fecha', isoD(new Date(Date.now() - 120 * 864e5))).order('fecha', { ascending: false })),
+    q('far_conteos', x => x.select('fecha,ubicacion').gte('fecha', isoD(new Date(Date.now() - 120 * 864e5))).limit(3000)),
+    q('qx_conteos', x => x.select('created_at,ubicacion_id,estado').gte('created_at', new Date(Date.now() - 120 * 864e5).toISOString()).limit(500)),
   ]);
   [ENT, FAC, ABO, REC, PED, TAR, DOCS, RS, CIE, SUC] = r;
   if (silencioso !== 'sinusr') { await cargarUsuarios(); const yo = USR.find(u => u.id === cu.id); if (!yo || yo.activo === false || yo.debe_cambiar) { try { localStorage.removeItem(SESSION_KEY); } catch { } alert('Tu acceso fue cambiado por Dirección General. Entra de nuevo.'); location.reload(); return; } if (yo) { cu.permisos = yo.permisos || {}; cu.rol = yo.rol; cu.sede = yo.sede || null; aplicarPermisosMenu(); } }
   CORR = r[11]; AVA = r[12]; CJ = r[13]; SOLB = r[14]; NOM_EMP = r[15] || []; NOM = r[16] || [];
-  INV = { farProd: r[17] || [], farLotes: r[18] || [], farPed: r[19] || [], quiInv: r[20] || [], quiLotes: r[21] || [], quiLentes: r[22] || [], quiPed: r[23] || [], farSol: r[24] || [], qxMat: r[25] || [], qxLot: r[26] || [], qxLio: r[27] || [], qxUb: r[28] || [], farMov: r[29] || [], quiLio: r[30] || [] };
+  INV = { farProd: r[17] || [], farLotes: r[18] || [], farPed: r[19] || [], quiInv: r[20] || [], quiLotes: r[21] || [], quiLentes: r[22] || [], quiPed: r[23] || [], farSol: r[24] || [], qxMat: r[25] || [], qxLot: r[26] || [], qxLio: r[27] || [], qxUb: r[28] || [], farMov: r[29] || [], quiLio: r[30] || [], ctl: r[31] || [], farCnt: r[32] || [], qxCnt: r[33] || [] };
   r[10].forEach(c => { CFG[c.clave] = c.valor; });
   if (!RS.length) RS = [{ id: null, nombre: 'José Antonio Villegas Ávila', rfc: 'VIAA870425115' }];
   lastSync = new Date();
@@ -1185,6 +1192,7 @@ async function tick() {
   }
   // Ventana emergente «Tu día»: al abrir y a las 9:00, 13:00 y 17:30
   revisarTuDia();
+  revisarFpsDia();
 }
 
 // ══ ALERTAS ════════════════════════════════════
@@ -1196,7 +1204,9 @@ const tieneXML = f => !!(f.xml_url || f.uuid_cfdi || DOCS.some(d => d.registro_i
 const finMesISO = () => isoD(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0));
 // Los pagos de COE Nómina solo piden factura cuando Nómina la marca (honorarios activos con pago comprobado)
 const porSolicitar = f => f.tipo === 'egreso' && !f.anulado && f.estado !== 'cancelado' && (f.factura_pendiente || (f.origen !== 'nomina' && num(f.monto_pagado) > 0.009 && !tieneXML(f) && !ent(f.entidad_id)?.no_factura));
-const limFps = f => f.factura_limite || finMesISO();
+// Último día hábil (lunes a viernes) del mes de la fecha dada
+const ultHabil = iso => { const b = new Date(String(iso || isoD(new Date())).slice(0, 10) + 'T12:00:00'), d = new Date(b.getFullYear(), b.getMonth() + 1, 0, 12); while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() - 1); return isoD(d); };
+const limFps = f => ultHabil(f.factura_limite || finMesISO());
 const abiertas = tipo => vivas().filter(f => f.tipo === tipo && f.estado !== 'pagado' && saldo(f) > 0.01);
 function semaforo(f) {
   if (f.revision === 'observado') return 'g';
@@ -1735,12 +1745,43 @@ async function guardarProv(id) {
 }
 
 // ══ FACTURAS POR SOLICITAR ═════════════════════
+VIEW.fpsOrd = VIEW.fpsOrd || 'fecha'; VIEW.fpsVista = VIEW.fpsVista || 'lista'; VIEW.fpsAbre = VIEW.fpsAbre || {};
+const fpsPagada = f => num(f.monto_pagado) > 0.009;
+function fpsOrdenar(L) {
+  const O = VIEW.fpsOrd, k = { fecha: (a, b) => String(b.fecha_pago || b.created_at || '').localeCompare(String(a.fecha_pago || a.created_at || '')), fecha_asc: (a, b) => String(a.fecha_pago || '').localeCompare(String(b.fecha_pago || '')),
+    monto: (a, b) => num(b.monto_pagado || b.monto_total) - num(a.monto_pagado || a.monto_total), monto_asc: (a, b) => num(a.monto_pagado || a.monto_total) - num(b.monto_pagado || b.monto_total),
+    proveedor: (a, b) => nomEnt(a.entidad_id).localeCompare(nomEnt(b.entidad_id)), limite: (a, b) => limFps(a).localeCompare(limFps(b)) }[O] || (() => 0);
+  // Primero los pagos ya realizados sin factura; dentro de cada grupo, el orden elegido
+  return L.slice().sort((a, b) => (fpsPagada(b) - fpsPagada(a)) || k(a, b));
+}
+function fpsDiasTxt(f) { const d = diasA(limFps(f)); return d < 0 ? `<b style="color:var(--dg)">venció hace ${-d} d</b>` : d === 0 ? '<b style="color:var(--dg)">vence HOY</b>' : `<span style="${d <= 5 ? 'color:var(--wn);font-weight:700' : ''}">quedan ${d} d</span>`; }
 function rFps() {
-  const L = vivas().filter(porSolicitar).sort((a, b) => limFps(a).localeCompare(limFps(b)));
-  return `<div class="ph"><div><div class="ptit">Facturas por solicitar</div><div class="psub">Pagos hechos sin factura · la contadora las consigue antes de fin de mes · al subir el XML se cierran solas</div></div><button class="btn btn-p btn-sm" onclick="openUpload()">⬆ Subir factura</button></div>
-  <div class="pad"><div class="tc">${L.length ? `<table><thead><tr><th></th><th>Proveedor</th><th>Concepto</th><th>Pagado</th><th style="text-align:right">Monto</th><th>Límite</th><th>Último correo</th><th></th></tr></thead><tbody>
-  ${L.map(f => { const d = diasA(limFps(f)), c = CORR.find(x => x.factura_id === f.id); return `<tr><td><span class="sem ${d === null ? 'a' : d < 0 ? 'r' : d <= 5 ? 'a' : 'v'}"></span></td><td>${esc(nomEnt(f.entidad_id))}</td><td>${esc(f.descripcion)}</td><td>${fmtD(f.fecha_pago)}</td><td class="amt" style="text-align:right">${$$(f.monto_total)}</td><td>${fmtD(limFps(f))}</td><td class="mini">${c ? fmtDT(c.enviado_at) : '—'}</td><td>${puede('fps') ? `<div class="rowact"><button class="btn btn-s btn-sm" onclick="correoProveedor('${f.entidad_id}','${f.id}',null,'factura')">✉ Pedir</button><button class="btn btn-p btn-sm" onclick="openUpload('${f.id}')">⬆ XML/PDF</button></div>` : ''}</td></tr>`; }).join('')}</tbody></table>`
-      : '<div class="emp"><div class="ic">✓</div><p>Lista en cero. No hay facturas por solicitar.</p></div>'}</div>
+  const L = fpsOrdenar(vivas().filter(porSolicitar)), pag = L.filter(fpsPagada), tot = pag.reduce((s, f) => s + num(f.monto_pagado), 0), venc = L.filter(f => diasA(limFps(f)) < 0);
+  const fila = f => { const d = diasA(limFps(f)), c = CORR.filter(x => x.factura_id === f.id).sort((a, b) => String(b.enviado_at).localeCompare(String(a.enviado_at)))[0]; return `<tr><td><span class="sem ${d < 0 ? 'r' : d <= 5 ? 'a' : 'v'}"></span></td>
+    <td><b>${esc(nomEnt(f.entidad_id))}</b><div class="mini">${esc(f.descripcion)}</div></td>
+    <td>${fpsPagada(f) ? `<span class="bdg bdg-apr">✓ Pagado</span><div class="mini">${fmtD(f.fecha_pago)}${f.comprobante_pago_url ? ` · <a href="${esc(f.comprobante_pago_url)}" target="_blank">comprobante</a>` : ''}</div>` : '<span class="bdg bdg-pnd">Sin pago aún</span>'}</td>
+    <td class="amt" style="text-align:right">${$$(fpsPagada(f) ? f.monto_pagado : f.monto_total)}</td>
+    <td>${fmtD(limFps(f))}<div class="mini">${fpsDiasTxt(f)}</div></td><td class="mini">${c ? fmtDT(c.enviado_at) : '<span style="color:var(--wn)">no se ha pedido</span>'}</td>
+    <td>${puede('fps') ? `<div class="rowact"><button class="btn btn-s btn-sm" onclick="correoProveedor('${f.entidad_id}','${f.id}',null,'factura')">✉ Pedir</button><button class="btn btn-p btn-sm" onclick="openUpload('${f.id}')">⬆ XML/PDF</button></div>` : ''}</td></tr>`; };
+  const cab = '<thead><tr><th></th><th>Proveedor · concepto</th><th>Pago</th><th style="text-align:right">Monto</th><th>Límite para solicitar</th><th>Último aviso</th><th></th></tr></thead>';
+  let cuerpo;
+  if (VIEW.fpsVista === 'prov') {
+    const G = {}; L.forEach(f => (G[f.entidad_id] = G[f.entidad_id] || []).push(f));
+    const grupos = Object.entries(G).sort((a, b) => (b[1].some(fpsPagada) - a[1].some(fpsPagada)) || (VIEW.fpsOrd.startsWith('monto') ? b[1].reduce((s, f) => s + num(f.monto_pagado), 0) - a[1].reduce((s, f) => s + num(f.monto_pagado), 0) : VIEW.fpsOrd === 'limite' ? Math.min(...a[1].map(f => diasA(limFps(f)))) - Math.min(...b[1].map(f => diasA(limFps(f)))) : VIEW.fpsOrd === 'proveedor' ? nomEnt(a[0]).localeCompare(nomEnt(b[0])) : String(b[1][0].fecha_pago || '').localeCompare(String(a[1][0].fecha_pago || ''))));
+    cuerpo = `<table>${cab}<tbody>${grupos.map(([eid, F]) => { const ab = VIEW.fpsAbre[eid], dmin = Math.min(...F.map(f => diasA(limFps(f)))), m = F.reduce((s, f) => s + num(fpsPagada(f) ? f.monto_pagado : f.monto_total), 0);
+      return `<tr class="grp-hdr" style="cursor:pointer" onclick="VIEW.fpsAbre['${eid}']=!VIEW.fpsAbre['${eid}'];renderTab()"><td>${ab ? '▾' : '▸'}</td><td colspan="2"><div class="grp-name">${esc(nomEnt(eid))} <span class="mini">${F.length} factura(s) · ${F.filter(fpsPagada).length} pagada(s)</span></div></td><td class="amt" style="text-align:right">${$$(m)}</td><td class="mini">${dmin < 0 ? `<b style="color:var(--dg)">${F.filter(f => diasA(limFps(f)) < 0).length} vencida(s)</b>` : 'quedan ' + dmin + ' d'}</td><td></td>
+        <td onclick="event.stopPropagation()">${puede('fps') ? `<button class="btn btn-s btn-sm" onclick="correoProveedor('${eid}','${F[0].id}',null,'factura')">✉ Pedir todas</button>` : ''}</td></tr>${ab ? F.map(fila).join('') : ''}`; }).join('')}</tbody></table>`;
+  } else {
+    const sinP = L.filter(f => !fpsPagada(f));
+    cuerpo = `<table>${cab}<tbody>${pag.length ? `<tr class="trsep"><td colspan="7">Pagos realizados sin factura (${pag.length}) · ${$$(tot)}</td></tr>${pag.map(fila).join('')}` : ''}${sinP.length ? `<tr class="trsep"><td colspan="7">Factura pendiente sin pago registrado (${sinP.length})</td></tr>${sinP.map(fila).join('')}` : ''}</tbody></table>`;
+  }
+  const sel = (k, t) => `<option value="${k}" ${VIEW.fpsOrd === k ? 'selected' : ''}>${t}</option>`;
+  return `<div class="ph"><div><div class="ptit">Facturas por solicitar</div><div class="psub">Pagos hechos sin factura · se solicitan a más tardar el último día hábil del mes · al subir el XML se cierran solas</div></div><button class="btn btn-p btn-sm" onclick="openUpload()">⬆ Subir factura</button></div>
+  <div class="pad">
+    <div class="almbar" style="margin-bottom:12px"><div class="seg">${[['lista', 'Lista'], ['prov', 'Compacta por proveedor']].map(([k, t]) => `<button class="${VIEW.fpsVista === k ? 'on' : ''}" onclick="VIEW.fpsVista='${k}';renderTab()">${t}</button>`).join('')}</div>
+      <label class="mini" style="display:flex;gap:8px;align-items:center;margin:0">Ordenar por <select onchange="VIEW.fpsOrd=this.value;renderTab()" style="width:auto;min-height:34px;padding:4px 10px">${sel('fecha', 'Fecha de pago (reciente primero)')}${sel('fecha_asc', 'Fecha de pago (antigua primero)')}${sel('monto', 'Monto (mayor primero)')}${sel('monto_asc', 'Monto (menor primero)')}${sel('proveedor', 'Proveedor (A–Z)')}${sel('limite', 'Fecha límite')}</select></label>
+      <span class="mini" style="margin-left:auto">${pag.length} pagadas · ${$$(tot)}${venc.length ? ` · <b style="color:var(--dg)">${venc.length} fuera de plazo</b>` : ''} · límite ${fmtD(ultHabil(finMesISO()))}</span></div>
+    <div class="tc">${L.length ? cuerpo : '<div class="emp"><div class="ic">✓</div><p>Lista en cero. No hay facturas por solicitar.</p></div>'}</div>
   ${(() => { const C = complementosPendientes(); return `<h3 style="margin:24px 0 10px;font-size:15px">Complementos de pago por solicitar (${C.length})</h3><div class="tc">${C.length ? `<table><thead><tr><th>Proveedor</th><th>Factura</th><th style="text-align:right">Total</th><th style="text-align:right">Pagado</th><th>Faltan</th><th></th></tr></thead><tbody>${C.map(x => `<tr><td>${esc(nomEnt(x.f.entidad_id))}</td><td>${esc(x.f.numero_factura || x.f.descripcion)}</td><td class="amt" style="text-align:right">${$$(x.f.monto_total)}</td><td class="amt" style="text-align:right">${$$(x.f.monto_pagado)}</td><td><span class="dtag no">${x.falta} de ${x.pg}</span></td><td>${puede('fps') ? `<div class="rowact"><button class="btn btn-s btn-sm" onclick="correoProveedor('${x.f.entidad_id}','${x.f.id}',null,'aclaracion')">✉ Pedir</button><button class="btn btn-p btn-sm" onclick="openUpload('${x.f.id}')">⬆ Complemento</button></div>` : ''}</td></tr>`).join('')}</tbody></table>` : '<div class="emp">Sin complementos pendientes</div>'}</div>`; })()}
   </div>`;
 }
@@ -1749,6 +1790,23 @@ function complementosPendientes() {
     const pg = ABO.filter(a => a.factura_id === f.id && !a.anulado).length, cp = DOCS.filter(x => x.tabla === 'fin_facturas' && x.registro_id === f.id && x.tipo === 'complemento').length;
     return { f, falta: pg - cp, pg };
   }).filter(x => x.falta > 0);
+}
+
+// Recordatorio diario al abrir: facturas pendientes y días que quedan para solicitarlas
+function revisarFpsDia() {
+  if (!cu || !puede('fps') || !['contadora', 'admin', 'administracion'].includes(cu.rol)) return;
+  if (document.getElementById('mGen').style.display === 'flex' || document.getElementById('pinOv').style.display === 'flex') return;
+  const k = 'coe_fin_fps_' + cu.id + '_' + hoyISO(); let v = null; try { v = localStorage.getItem(k); } catch { }
+  if (v) return;
+  try { if (!JSON.parse(localStorage.getItem('coe_fin_tudia_' + cu.id + '_' + hoyISO()) || '[]').includes('apertura')) return; } catch { }
+  const L = vivas().filter(porSolicitar).sort((a, b) => limFps(a).localeCompare(limFps(b)) || num(b.monto_pagado) - num(a.monto_pagado));
+  try { localStorage.setItem(k, '1'); } catch { }
+  if (!L.length) return;
+  const venc = L.filter(f => diasA(limFps(f)) < 0), hoyL = L.filter(f => diasA(limFps(f)) >= 0), dmin = hoyL.length ? Math.min(...hoyL.map(f => diasA(limFps(f)))) : null;
+  notificar(`Facturas por solicitar: ${L.length}${dmin !== null ? ` · te quedan ${dmin} día(s)` : ''}`);
+  modal('Facturas por solicitar · recordatorio del día', `<div class="${venc.length || dmin <= 3 ? 'errbox' : 'warnbox'}" style="margin-bottom:12px"><b>${L.length} factura(s) pendiente(s)</b> · ${$$(L.reduce((s, f) => s + num(f.monto_pagado || f.monto_total), 0))}${venc.length ? ` · <b>${venc.length} ya fuera de plazo</b>` : ''}${dmin !== null ? `<br>Para las de este mes ${dmin === 0 ? '<b>hoy es el último día hábil</b>' : `te quedan <b>${dmin} día(s)</b> (límite ${fmtD(limFps(hoyL[0]))}, último día hábil)`}` : ''}</div>
+    <div class="alist" style="max-height:50vh;overflow:auto">${L.slice(0, 25).map(f => `<div class="aitem ${diasA(limFps(f)) < 0 ? 'r' : diasA(limFps(f)) <= 5 ? 'a' : 'i'}"><div style="flex:1"><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(f.monto_pagado || f.monto_total)}</div><div class="am">${esc(f.descripcion)} · ${fpsPagada(f) ? 'pagado ' + fmtD(f.fecha_pago) : 'sin pago aún'} · ${fpsDiasTxt(f)}</div></div><button class="btn btn-s btn-sm" onclick="correoProveedor('${f.entidad_id}','${f.id}',null,'factura')">✉ Pedir</button></div>`).join('')}${L.length > 25 ? `<div class="mini">y ${L.length - 25} más…</div>` : ''}</div>`,
+    `<button class="btn btn-s" onclick="CM('mGen')">Después</button><button class="btn btn-p" onclick="CM('mGen');goTab('fps')">Ver todas</button>`, 'lg');
 }
 
 // ══ RECURRENTES (lógica de la v2) ══════════════
@@ -2276,6 +2334,7 @@ function faltantesContadora(U) {
     D.porCaducar.filter(x => x.d <= 30).forEach(x => I.push({ cat: 'cad', d: Math.min(7, x.d), crit: false, t: `${nom}: ${x.t}`, m: x.m + ' · rotar o devolver', go: go.replace('X', 'porCaducar') }));
     D.pedidos.forEach(x => I.push({ cat: 'ped', d: 0, crit: true, t: `${nom}: ${x.t}`, m: 'Pedido abierto · ' + x.m, go: x.go || go.replace('X', 'pedidos') }));
   });
+  try { ctlFaltantes().forEach(x => I.push(x)); } catch (e) { }
   return I;
 }
 function cumplimientoContadora(U) {
@@ -2337,7 +2396,7 @@ function dashContadora(sel) {
       ${(() => { const cobV = abiertas('ingreso').filter(f => semaforo(f) === 'r'); return caja(`Cobros vencidos (${cobV.length})`, lista(cobV, f => `<div class="aitem r" onclick="verCuenta('${f.id}')"><div><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(saldo(f))}</div><div class="am">${esc(f.descripcion)} · venció ${fmtD(f.fecha_vencimiento)}</div></div></div>`, 'Sin cobros vencidos')); })()}
     </div>
     </div>
-    <aside class="cdash-side">${ladoAlmacen()}${ladoMisTareas(misP)}</aside></div>
+    <aside class="cdash-side">${cajaControlInv(true)}${ladoAlmacen()}${ladoMisTareas(misP)}</aside></div>
     <div class="mini" style="margin-top:16px">Propuesta de pagos y Por revisar están en sus pestañas del menú.</div></div>`;
 }
 // ── Pestañas separadas: Propuesta de pagos y Por revisar ──
@@ -3971,6 +4030,7 @@ function rAlm() {
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><div class="seg">${ALM_AREAS.map(([k, t]) => `<button class="${A === k ? 'on' : ''}" onclick="VIEW.almA='${k}';renderTab()">${t}</button>`).join('')}</div>
     <button class="btn btn-s btn-sm" onclick="imprimirAlm()">🖨 Imprimir</button></div></div>
   ${almBarra(A)}
+  <div class="pad" style="padding-bottom:0">${cajaControlInv(true)}</div>
   ${esAlmCont(A) && VIEW.almV === 'agregar' ? almVistaAgregar(A) : `<div class="pad">
     ${sinDatos ? `<div class="warnbox" style="margin-bottom:14px">${A === 'adm' ? 'El Almacén de Contabilidad (Administración) de Quirófano aún no tiene existencias. Usa «⬆ Subir inventario» o «Agregar manualmente»; después envía a quirófano con «⇄ Enviar a quirófano».' : A === 'alm' ? 'COE Farmacia todavía no tiene existencias registradas en el almacén. En cuanto se capturen lotes en «Almacén», aquí aparece el pronóstico.' : `Sin existencias registradas en COE ${A === 'qui' ? 'Quirófano' : 'Farmacia'}.`}</div>` : ''}
     <div class="kps">
@@ -4193,6 +4253,7 @@ async function almAplicarUp() {
     if (!r.ok) { toast(ERR[r.error] || r.error, 'error'); go.disabled = false; go.textContent = 'Firmar y cargar'; return; }
     lotes += r.lotes; nuevos += r.nuevos; errores = errores.concat((r.errores || []).map(e => ({ ...e, fila: e.fila + i })));
   }
+  if (ALM_UP.modo === 'fijar' && lotes) await rpcConPin('fin_inventario_registrar', { p_area: ALM_UP.area, p_nota: `Inventario físico: ${lotes} lote(s)`, p_origen: 'archivo' }, pin);
   await cargarTodo();
   document.getElementById('mGenB').innerHTML = `<div class="okbox"><b>${lotes} lote(s) cargados al almacén</b>${nuevos ? `<br>${nuevos} producto(s) nuevo(s) dados de alta` : ''}</div>${errores.length ? `<div class="errbox">${errores.slice(0, 30).map(e => `Fila ${e.fila}${e.nombre ? ' · ' + esc(e.nombre) : ''}: ${esc(e.error)}`).join('<br>')}</div>` : ''}<div class="mini">${qx ? 'Ya se ven en COE Quirófano (Almacén de Administración) y en este tablero. Para pasarlos al almacén de quirófano usa «⇄ Enviar a quirófano».' : 'Ya se ven en COE Farmacia (almacén) y en este tablero.'}</div>`;
   document.getElementById('mGenF').innerHTML = `<button class="btn btn-p" onclick="CM('mGen')">Listo</button>`;
@@ -4640,6 +4701,62 @@ async function ocEnviar(id, via) {
 function cotSumar(id) {
   const p = PED.find(x => x.id === id), t = (p.partidas || []).reduce((s, l, i) => s + num(l.cantidad) * num(document.querySelector(`.cotPU[data-i="${i}"]`)?.value), 0);
   if (t) document.getElementById('cotM').value = t.toFixed(2);
+}
+
+// ══ CONTROL DE INVENTARIOS FÍSICOS (Contadora) ══
+// Periodicidad de la clínica: almacén de farmacia y Almacén de Contabilidad cada semana · farmacia mostrador cada lunes ·
+// quirófano cada 15 días · óptica a principios de mes. Se da por hecho con el conteo de cada app o con el registro en Finanzas.
+const CTL_INV = [
+  { k: 'alm', t: 'Almacén de farmacia', f: 'semanal', d: 'Cada semana · lo cuenta la Contadora', carga: true },
+  { k: 'adm', t: 'Almacén Contabilidad · Quirófano', f: 'semanal', d: 'Cada semana · lo cuenta la Contadora', carga: true },
+  { k: 'far', t: 'Farmacia mostrador', f: 'lunes', d: 'Cada lunes · COE Farmacia' },
+  { k: 'qui', t: 'Quirófano', f: 'quincenal', d: 'Cada 15 días · COE Quirófano' },
+  { k: 'opt', t: 'Óptica', f: 'mensual', d: 'Primeros 5 días del mes' },
+];
+const lunesDe = d => { const x = new Date(d); x.setHours(12, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
+function ctlUltimo(k) {
+  const adm = qxAdmId(), f = [];
+  (INV.ctl || []).filter(c => c.area === k).forEach(c => f.push(c.fecha));
+  if (k === 'alm' || k === 'far') (INV.farCnt || []).filter(c => (k === 'alm') === (c.ubicacion === 'almacen')).forEach(c => f.push(String(c.fecha).slice(0, 10)));
+  if (k === 'adm' || k === 'qui') (INV.qxCnt || []).filter(c => (k === 'adm') === (!!adm && c.ubicacion_id === adm)).forEach(c => f.push(isoD(new Date(c.created_at))));
+  return f.sort().pop() || null;
+}
+function ctlEstado(c) {
+  const hoy = hoyISO(), ult = ctlUltimo(c.k); let toca, sig;
+  if (c.f === 'semanal' || c.f === 'lunes') { const L = isoD(lunesDe(new Date())); toca = c.f === 'lunes' ? L : isoD(new Date(lunesDe(new Date()).getTime() + 5 * 864e5)); sig = isoD(new Date(new Date(L + 'T12:00:00').getTime() + 7 * 864e5)); if (ult && ult >= L) return { ult, hecho: true, sig: c.f === 'lunes' ? sig : isoD(new Date(new Date(sig + 'T12:00:00').getTime() + 5 * 864e5)) }; }
+  else if (c.f === 'quincenal') { toca = ult ? isoD(new Date(new Date(ult + 'T12:00:00').getTime() + 15 * 864e5)) : hoy; if (ult && toca > hoy) return { ult, hecho: true, sig: toca }; }
+  else { const m1 = hoy.slice(0, 8) + '01'; toca = hoy.slice(0, 8) + '05'; if (ult && ult >= m1) { const n = new Date(); return { ult, hecho: true, sig: isoD(new Date(n.getFullYear(), n.getMonth() + 1, 5)) }; } }
+  const d = diasA(toca);
+  return { ult, hecho: false, toca, d, venc: d < 0 };
+}
+function cajaControlInv(compacta) {
+  const filas = CTL_INV.map(c => ({ c, e: ctlEstado(c) }));
+  const venc = filas.filter(x => !x.e.hecho && x.e.venc).length;
+  const accion = (c, e) => !e.hecho && puede('pedidos') ? (c.carga ? `VIEW.almA='${c.k}';goTab('alm');setTimeout(()=>almSubir('${c.k}'),80)` : `ctlRegistrar('${c.k}')`) : '';
+  if (compacta) return `<div class="cfg-section"><h3 style="display:flex;justify-content:space-between;align-items:center;gap:8px">Inventarios físicos ${venc ? `<span class="bdg bdg-ven">${venc} vencido(s)</span>` : '<span class="bdg bdg-apr">al día</span>'}</h3>
+    <div class="body" style="padding-top:10px">${filas.map(({ c, e }) => `<div class="ctlr ${e.hecho ? 'ok' : e.venc ? 'r' : 'a'}" ${accion(c, e) ? `onclick="${accion(c, e)}" title="${c.carga ? 'Hacer conteo' : 'Registrar realizado'}"` : ''}><i></i><div style="flex:1;min-width:0"><b>${esc(c.t)}</b><div class="mini">${e.hecho ? '✓ ' + fmtD(e.ult) + ' · sigue ' + fmtD(e.sig).slice(0, 5) : e.venc ? 'vencido desde ' + fmtD(e.toca).slice(0, 5) : e.d === 0 ? 'toca HOY' : 'toca ' + fmtD(e.toca).slice(0, 5)}</div></div>${accion(c, e) ? '<span class="mini">›</span>' : ''}</div>`).join('')}</div></div>`;
+  return caja(`Control de inventarios físicos${venc ? ` <span class="bdg bdg-ven">${venc} vencido(s)</span>` : ''}`, `<div class="alist">${filas.map(({ c, e }) => `<div class="aitem ${e.hecho ? 'i' : e.venc ? 'r' : 'a'}" style="${e.hecho ? 'border-left-color:var(--sc)' : ''}"><div style="flex:1"><div class="at">${e.hecho ? '✓ ' : ''}${esc(c.t)}</div>
+      <div class="am">${esc(c.d)} · último ${e.ult ? fmtD(e.ult) : '<b>sin registro</b>'} · ${e.hecho ? 'siguiente ' + fmtD(e.sig) : e.venc ? `<b style="color:var(--dg)">vencido desde ${fmtD(e.toca)}</b>` : e.d === 0 ? '<b>toca HOY</b>' : 'toca el ' + fmtD(e.toca)}</div></div>
+      ${!e.hecho && puede('pedidos') ? (c.carga ? `<button class="btn btn-p btn-sm" onclick="VIEW.almA='${c.k}';goTab('alm');setTimeout(()=>almSubir('${c.k}'),80)">Hacer conteo</button>` : `<button class="btn btn-s btn-sm" onclick="ctlRegistrar('${c.k}')">Registrar realizado</button>`) : ''}</div>`).join('')}</div>
+    ${compacta ? '' : '<div class="mini" style="margin-top:8px">Se marca hecho con el conteo de COE Farmacia o COE Quirófano, al subir el inventario físico del almacén aquí, o registrándolo con evidencia.</div>'}`,
+    `<button class="btn btn-s btn-sm" onclick="goTab('alm')">Almacén ›</button>`);
+}
+function ctlRegistrar(k) {
+  const c = CTL_INV.find(x => x.k === k); window._ctlF = null;
+  modal('Inventario físico realizado · ' + c.t, `<div class="drop"><input type="file" accept="image/*,application/pdf,.xlsx,.xls,.csv" onchange="window._ctlF=this.files[0];document.getElementById('ctlN').textContent=this.files[0]?.name||''"><div class="big">⬆</div><div><b>Evidencia del conteo</b></div><div class="mini" id="ctlN">Foto de la hoja firmada, reporte o archivo del conteo</div></div>
+    <div class="fgrp" style="margin-top:12px"><label>Observaciones (diferencias encontradas)</label><input type="text" id="ctlO"></div>`,
+    `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="ctlGuardar('${k}')">Firmar</button>`);
+}
+async function ctlGuardar(k) {
+  if (!window._ctlF) return toast('Sube la evidencia del conteo', 'warning');
+  let pin; try { pin = await askPin('Firmar inventario realizado', CTL_INV.find(x => x.k === k).t); } catch { return; }
+  let u; try { u = await subirArchivo(window._ctlF, 'inventarios'); } catch (e) { return toast(e.message, 'error'); }
+  const r = await rpcConPin('fin_inventario_registrar', { p_area: k, p_evidencia: u.url, p_nota: document.getElementById('ctlO').value, p_origen: 'manual' }, pin);
+  if (!r.ok) return toast(ERR[r.error] || r.error, 'error');
+  CM('mGen'); toast('Inventario registrado', 'success'); await cargarTodo();
+}
+function ctlFaltantes() {
+  return CTL_INV.map(c => ({ c, e: ctlEstado(c) })).filter(x => !x.e.hecho && x.e.d <= 2).map(({ c, e }) => ({ cat: 'pend', d: e.d, crit: e.venc, t: 'Inventario físico: ' + c.t, m: `${c.d} · ${e.venc ? 'vencido desde ' + fmtD(e.toca) : e.d === 0 ? 'toca HOY' : 'toca el ' + fmtD(e.toca)}`, go: c.carga ? `VIEW.almA='${c.k}';goTab('alm');setTimeout(()=>almSubir('${c.k}'),80)` : `ctlRegistrar('${c.k}')` }));
 }
 </script>
 </body></html>

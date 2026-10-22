@@ -134,3 +134,6 @@ alter table public.fin_tareas add column if not exists requiere_conformidad bool
 --   fin_pedido_cotizacion(p_usuario, p_pin, p_pedido, p_accion 'solicitar'|'adjuntar'|'elegir'|'partidas', p_datos).
 --   fin_pedido_publico(p_folio, p_token): datos de la orden para la página pública pedido.html (QR de rastreo); sin token correcto no devuelve nada.
 -- 18) (21/10/2026) Eliminar (anular) facturas o pagos: fin_anular y fin_rechazar_baja aceptan rol contadora además de admin; los demás usuarios solicitan y la Contadora autoriza.
+-- 19) (22/10/2026) Facturas por solicitar: límite = último día hábil (lunes a viernes) del mes del límite (se calcula en la app con ultHabil).
+--     Control de inventarios físicos: tabla fin_inventario_controles (area alm|far|adm|qui|opt, fecha, usuario, evidencia, nota, origen) y RPC fin_inventario_registrar.
+--     La app también toma como hechos los conteos de COE Farmacia (far_conteos) y COE Quirófano (qx_conteos), y el inventario físico subido en Almacén.
