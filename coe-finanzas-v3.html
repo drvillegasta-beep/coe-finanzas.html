@@ -1341,14 +1341,15 @@ function rCuentas(tipo) {
     .map(([k, l]) => `<span class="chip ${F === k ? 'act' : ''}" onclick="VIEW.cxpF='${k}';renderTab()">${l}</span>`).join('');
   return `<div class="ph"><div><div class="ptit">${egr ? 'Por pagar' : 'Por cobrar'}</div><div class="psub">${L.length} cuentas · saldo ${$$(tot)} · agrupado por ${egr ? 'proveedor' : 'deudor'}</div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">${puede(egr ? 'cxp' : 'cxc') ? `<button class="btn btn-s btn-sm" onclick="nuevaCuenta('${tipo}')">${egr ? '+ Captura manual' : '+ Cuenta por cobrar'}</button>` : ''}
-    <button class="btn btn-s btn-sm" onclick="expCuentas('${tipo}')">Excel</button>${puede(egr ? 'cxp' : 'cxc') ? `<button class="btn btn-d btn-sm" onclick="openEliminar('${tipo}')">🗑 Eliminar mal capturados</button>` : ''}${puede(egr ? 'cxp' : 'cxc') ? `<button class="btn btn-p btn-sm" onclick="openUpload()">⬆ ${egr ? 'Subir factura de proveedor' : 'Subir factura emitida'}</button>` : ''}</div></div>
+    <button class="btn btn-s btn-sm" onclick="cxTodos('${tipo}',true)">▸ Colapsar todos</button><button class="btn btn-s btn-sm" onclick="cxTodos('${tipo}',false)">▾ Expandir todos</button><button class="btn btn-s btn-sm" onclick="expCuentas('${tipo}')">Excel</button>${puede(egr ? 'cxp' : 'cxc') ? `<button class="btn btn-d btn-sm" onclick="openEliminar('${tipo}')">🗑 Eliminar mal capturados</button>` : ''}${puede(egr ? 'cxp' : 'cxc') ? `<button class="btn btn-p btn-sm" onclick="openUpload()">⬆ ${egr ? 'Subir factura de proveedor' : 'Subir factura emitida'}</button>` : ''}</div></div>
   <div class="pad"><div class="tc">
     <div class="ttb"><input class="sbox" placeholder="Buscar proveedor, concepto, folio, UUID o monto" value="${esc(egr ? VIEW.cxpQ : VIEW.cxcQ)}" oninput="VIEW.${egr ? 'cxpQ' : 'cxcQ'}=this.value;clearTimeout(window._bq);window._bq=setTimeout(()=>{renderTab();const s=document.querySelector('.sbox');s.focus();s.setSelectionRange(s.value.length,s.value.length)},350)"><div class="chips">${chips}</div></div>
     ${L.length ? `<table><thead><tr><th>Estatus</th><th>Concepto</th><th>Factura</th><th>Vence</th><th style="text-align:right">Total</th><th style="text-align:right">Saldo</th><th>Documentos</th><th></th></tr></thead><tbody>
     ${ordenG.map(eid => {
       const g = grupos[eid], st = g.reduce((s, f) => s + saldo(f), 0);
-      return `<tr class="grp-hdr"><td colspan="5"><div class="grp-name">${esc(nomEnt(eid))} <span class="mini">${g.length} · ${ent(eid)?.dias_credito ? ent(eid).dias_credito + ' días de crédito' : 'contado'}</span></div></td><td class="amt" style="text-align:right;font-weight:700">${$$(st)}</td><td colspan="2"><button class="btn btn-s btn-sm" onclick="correoProveedor('${eid}')">✉ Correo</button></td></tr>` +
-        g.map(f => `<tr class="grp-child" style="cursor:pointer" onclick="verCuenta('${f.id}')">
+      const col = !qq && cxCol(tipo)[eid], nv = g.filter(f => semaforo(f) === 'r').length, prox = g.filter(f => f.fecha_vencimiento && f.estado !== 'pagado').map(f => f.fecha_vencimiento).sort()[0];
+      return `<tr class="grp-hdr" style="cursor:pointer" onclick="cxToggle('${tipo}','${eid}')" title="${col ? 'Mostrar' : 'Ocultar'} sus cuentas"><td colspan="5"><div class="grp-name"><span style="display:inline-block;width:16px;color:var(--tm)">${col ? '▸' : '▾'}</span>${esc(nomEnt(eid))} <span class="mini">${g.length} · ${ent(eid)?.dias_credito ? ent(eid).dias_credito + ' días de crédito' : 'contado'}${col && nv ? ` · <b style="color:var(--dg)">${nv} vencida(s)</b>` : ''}${col && prox ? ' · próximo ' + fmtD(prox) : ''}</span></div></td><td class="amt" style="text-align:right;font-weight:700">${$$(st)}</td><td colspan="2" onclick="event.stopPropagation()"><button class="btn btn-s btn-sm" onclick="correoProveedor('${eid}')">✉ Correo</button></td></tr>` +
+        (col ? '' : g.map(f => `<tr class="grp-child" style="cursor:pointer" onclick="verCuenta('${f.id}')">
           <td><span class="sem ${semaforo(f)}"></span><span class="mini">${semTxt[semaforo(f)]}</span></td>
           <td>${esc(f.descripcion)}${f.tipo_movimiento && f.tipo_movimiento !== 'normal' ? ` <span class="bdg bdg-cat">${esc(f.tipo_movimiento)}</span>` : ''}${f.sede && f.sede !== 'Tacámbaro' ? ` <span class="bdg bdg-pro">${esc(f.sede)}</span>` : ''}<div class="mini">${esc(f.categoria || '')}</div></td>
           <td class="mini">${esc(f.numero_factura || (f.documento_tipo === 'sin_factura' ? 'Sin factura' : '—'))}</td>
@@ -1356,7 +1357,7 @@ function rCuentas(tipo) {
           <td class="amt" style="text-align:right">${$$(f.monto_total)}</td>
           <td class="amt" style="text-align:right;font-weight:700">${$$(saldo(f))}</td>
           <td>${docsDe(f)}</td>
-          <td onclick="event.stopPropagation()">${f.estado === 'pagado' ? '' : puedePagar(f) ? `<button class="btn btn-p btn-sm" onclick="pagarCuenta('${f.id}')">${egr ? 'Pagar' : 'Cobrar'}</button>` : egr && puede('cxp') && !f.propuesta_pago ? `<button class="btn btn-s btn-sm" onclick="proponerUna('${f.id}')">Proponer</button>` : ''}${puede(egr ? 'cxp' : 'cxc') ? ` <button class="btn btn-s btn-sm" title="Eliminar factura o pago mal capturado" onclick="openEliminar('${tipo}','${f.id}')">🗑</button>` : ''}</td></tr>`).join('');
+          <td onclick="event.stopPropagation()">${f.estado === 'pagado' ? '' : puedePagar(f) ? `<button class="btn btn-p btn-sm" onclick="pagarCuenta('${f.id}')">${egr ? 'Pagar' : 'Cobrar'}</button>` : egr && puede('cxp') && !f.propuesta_pago ? `<button class="btn btn-s btn-sm" onclick="proponerUna('${f.id}')">Proponer</button>` : ''}${puede(egr ? 'cxp' : 'cxc') ? ` <button class="btn btn-s btn-sm" title="Eliminar factura o pago mal capturado" onclick="openEliminar('${tipo}','${f.id}')">🗑</button>` : ''}</td></tr>`).join(''));
     }).join('')}</tbody></table>` : `<div class="emp"><div class="ic">✓</div><p>Sin cuentas en este filtro</p></div>`}
   </div></div>`;
 }
@@ -1543,6 +1544,12 @@ function descSolicitud(s) {
   if (s.tabla === 'fin_abonos') { const a = ABO.find(x => x.id === s.registro_id) || {}, f = FAC.find(x => x.id === a.factura_id) || {}; return { f, txt: `Pago de ${$$(a.monto)} del ${fmtD(a.fecha_pago)} · ${nomEnt(f.entidad_id)} · ${f.descripcion || ''}` }; }
   const f = FAC.find(x => x.id === s.registro_id) || {}; return { f, txt: `Cuenta ${nomEnt(f.entidad_id)} · ${f.descripcion || ''} · ${$$(f.monto_total)}` };
 }
+
+// Colapsar / expandir las cuentas de cada proveedor (se recuerda en este equipo)
+const cxCol = tipo => { VIEW.cxCol = VIEW.cxCol || {}; if (!VIEW.cxCol[tipo]) { try { VIEW.cxCol[tipo] = JSON.parse(localStorage.getItem('coe_fin_col_' + tipo) || '{}'); } catch { VIEW.cxCol[tipo] = {}; } } return VIEW.cxCol[tipo]; };
+const cxGuardar = tipo => { try { localStorage.setItem('coe_fin_col_' + tipo, JSON.stringify(cxCol(tipo))); } catch { } };
+function cxToggle(tipo, eid) { const c = cxCol(tipo); if (c[eid]) delete c[eid]; else c[eid] = 1; cxGuardar(tipo); renderTab(); }
+function cxTodos(tipo, colapsar) { const c = cxCol(tipo); Object.keys(c).forEach(k => delete c[k]); if (colapsar) vivas().filter(f => f.tipo === tipo).forEach(f => { c[f.entidad_id] = 1; }); cxGuardar(tipo); renderTab(); }
 
 // ══ INGRESO DIARIO (desde COE Conciliación) ════
 function rIngDiario() {
