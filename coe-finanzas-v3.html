@@ -678,6 +678,44 @@ i.dot{flex:0 0 10px;height:10px;border-radius:50%;margin-top:6px;align-self:flex
 .ctlr{display:flex;gap:10px;align-items:center;padding:7px 4px;border-bottom:1px solid var(--br);cursor:default}.ctlr:last-child{border-bottom:0}.ctlr[onclick]{cursor:pointer}.ctlr[onclick]:hover b{color:var(--pr)}
 .ctlr i{width:10px;height:10px;border-radius:50%;flex:0 0 10px;background:var(--wn)}.ctlr.ok i{background:var(--sc)}.ctlr.r i{background:var(--dg)}.ctlr b{font-size:13px;font-weight:600}
 .cdash-full>.cdash-side>*{flex-shrink:0}
+/* ── Propuesta de pagos ── */
+.segn{display:inline-block;min-width:18px;padding:0 5px;border-radius:9px;background:var(--wn);color:#111;font-size:11px;font-weight:800;margin-left:4px}
+.ppctl{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:14px 0 10px}
+.ppctl label{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--tm)}
+.ppctl select{width:auto;padding:6px 8px;font-size:12.5px}
+.pp-top{margin:4px 0 8px}
+.ppg{border:1px solid var(--br);border-radius:12px;background:var(--sf);margin-bottom:10px;overflow:hidden}
+.ppg.v{border-left:3px solid var(--dg)}
+.ppgh{display:flex;gap:10px;align-items:center;padding:10px 12px;cursor:pointer;background:var(--sf2);flex-wrap:wrap}
+.ppgh .ppc{color:var(--tm);width:12px}
+.pprow{display:flex;gap:10px;align-items:center;padding:9px 12px;border-top:1px solid var(--br);cursor:pointer;flex-wrap:wrap}
+.pprow:hover{background:var(--sf2)}
+.pprow.v .ppdt{color:var(--dg)}
+.pprow.p{background:color-mix(in srgb,var(--in) 8%,transparent)}
+.ppd{width:62px;flex-shrink:0}.ppd .ppdt{font-weight:800;font-size:13px}
+.ppt{flex:1;min-width:180px;font-size:13px}
+.ppm{text-align:right;min-width:110px}
+.pp-mon{max-width:130px;margin-left:auto}.pp-mon input{padding:5px 6px}
+.pp-rec{background:color-mix(in srgb,var(--pu) 22%,transparent);color:var(--pu)}
+.ppbar{position:sticky;bottom:10px;z-index:5;display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:14px;padding:12px 14px;border-radius:14px;background:var(--sf3);border:1px solid var(--br2);box-shadow:0 8px 30px rgba(0,0,0,.35)}
+.ppbar label{display:flex;gap:6px;align-items:center;font-size:12.5px}.ppbar select,.ppbar input{width:auto;padding:6px 8px}
+.ppcal-h{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+.ppcal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.ppdw{font-size:11px;color:var(--tm);text-align:center;font-weight:700;padding:4px 0}
+.ppcd{min-height:84px;border:1px solid var(--br);border-radius:9px;padding:5px;background:var(--sf);overflow:hidden}
+.ppcd.vac{background:transparent;border-color:transparent}
+.ppcd.con{cursor:pointer}.ppcd.con:hover{border-color:var(--pr)}
+.ppcd.hoy{outline:2px solid var(--pr)}
+.ppn{display:flex;justify-content:space-between;font-size:11.5px;color:var(--tm);margin-bottom:3px}.ppn b{color:var(--tx)}
+.ppchip{display:inline-block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10.5px;padding:1px 5px;border-radius:5px;margin:1px 0;background:color-mix(in srgb,var(--wn) 22%,transparent);color:var(--tx)}
+.ppcd .ppchip{display:block}
+.ppchip.v{background:color-mix(in srgb,var(--dg) 25%,transparent)}
+.ppchip.r{background:color-mix(in srgb,var(--pu) 25%,transparent)}
+.ppchip.p{background:color-mix(in srgb,var(--in) 28%,transparent)}
+@media(max-width:700px){.ppcd{min-height:58px;padding:3px}.ppcd .ppchip{font-size:9px;padding:0 2px}.ppn b{display:none}.ppm{min-width:0;margin-left:auto}.ppd{width:48px}}
+.pprow>input[type=checkbox],.ppgh>input[type=checkbox]{width:18px;height:18px;min-width:18px;flex:0 0 18px;margin:0;padding:0}
+.pp-mon{display:flex;align-items:center}.pp-mon span{position:static;padding:0 4px 0 0}.pp-mon input{padding-left:6px!important;width:100%}
+@media(max-width:700px){.ppk{grid-template-columns:1fr 1fr!important;gap:8px}.ppk .kpi,.ppk>*{padding:10px 12px}.ppk .kv,.ppk [class*=val]{font-size:17px}}
 </style>
 </head>
 <body>
@@ -1166,12 +1204,14 @@ function notificar(msg) {
 function pintarLive() {
   const b = document.getElementById('liveBadge'), t = document.getElementById('liveTx');
   if (!b) return;
-  const off = !navigator.onLine || rtState === 'off';
+  // Rojo solo si no hay internet o la base no responde; si solo cae el tiempo real, sigue en línea refrescando cada minuto
+  const restOk = lastSync && Date.now() - lastSync < 240000;
+  const off = !navigator.onLine || !restOk && rtState !== 'on';
   b.className = 'live ' + (off ? 'off' : rtState === 'on' ? '' : 'wait');
   const hace = lastSync ? Math.max(0, Math.round((Date.now() - lastSync) / 1000)) : null;
   const rel = hace === null ? '' : hace < 60 ? 'hace ' + hace + ' s' : 'hace ' + Math.round(hace / 60) + ' min';
-  t.textContent = off ? 'SIN CONEXIÓN · ' + (rel || '—') : rtState === 'on' ? 'EN LÍNEA · actualizado ' + rel : 'Conectando…';
-  b.title = off ? 'Sin conexión: la información puede no estar al día' : 'Recibiendo cambios en tiempo real';
+  t.textContent = off ? 'SIN CONEXIÓN · ' + (rel || '—') : rtState === 'on' ? 'EN LÍNEA · actualizado ' + rel : 'EN LÍNEA · actualizado ' + rel;
+  b.title = off ? 'Sin conexión: la información puede no estar al día' : rtState === 'on' ? 'Recibiendo cambios en tiempo real' : 'Conectado · se actualiza cada minuto mientras se restablece el tiempo real';
 }
 function flashLive() { const b = document.getElementById('liveBadge'); b.classList.add('flash'); setTimeout(() => b.classList.remove('flash'), 1200); }
 window.addEventListener('online', () => { suscribir(); cargarTodo(true).then(renderTab); });
@@ -1182,7 +1222,7 @@ let _ultResumen = null;
 async function tick() {
   pintarLive();
   // Respaldo: si el tiempo real se cae, refresca cada 2 minutos
-  if (rtState !== 'on' && lastSync && Date.now() - lastSync > 120000) await cargarTodo(true), renderTab();
+  if (rtState !== 'on' && lastSync && Date.now() - lastSync > 60000) await cargarTodo(true), renderTab();
   // Recordatorio de cierre del día
   const [ch, cm] = String(CFG.hora_cierre || '18:30').split(':').map(Number), ah = new Date();
   let rc = null; try { rc = localStorage.getItem('coe_fin_recordar_cierre'); } catch { }
@@ -2162,7 +2202,7 @@ function dashDirectorFin(sel) {
   return cabDash('Tablero del Director · Finanzas', esc(RS[0]?.nombre || ''), segDir() + sel + (puede('cxp') ? `<button class="btn btn-p btn-sm" onclick="openSubirPagos()">⬆ Subir pagos</button><button class="btn btn-s btn-sm" onclick="openTransferencias()">Honorarios y nómina</button>` : '')) + `<div class="pad">
     <div class="dg">
       ${kpi('Requiere tu firma', String(pedAut.length + prop.length), `${pedAut.length} pedidos · ${prop.length} pagos propuestos`, (pedAut.length + prop.length) ? 'var(--wn)' : 'var(--sc)')}
-      ${kpi('Propuesta de pagos', $$(sumS(prop)), prop.length ? 'preparada por la contadora' : 'sin propuesta', '', "document.getElementById('bxProp').scrollIntoView({behavior:'smooth'})")}
+      ${kpi('Propuesta de pagos', $$(sumS(prop)), prop.length ? 'preparada por la contadora' : 'sin propuesta', '', "VIEW.dirTab='prop';renderTab()")}
       ${kpi('Vencido por pagar', $$(sumS(venc)), `${venc.length} cuentas`, venc.length ? 'var(--dg)' : '', "VIEW.cxpF='r';goTab('cxp')")}
       ${kpi('Por cobrar', $$(sumS(cxc)), `${cxc.filter(f => semaforo(f) === 'r').length} vencidas`, 'var(--sc)', "goTab('cxc')")}
     </div>
@@ -2413,17 +2453,6 @@ function dashContadora(sel) {
     <div class="mini" style="margin-top:16px">Propuesta de pagos y Por revisar están en sus pestañas del menú.</div></div>`;
 }
 // ── Pestañas separadas: Propuesta de pagos y Por revisar ──
-function rPropuesta() {
-  const hoy = hoyISO(), prop = propuestas();
-  const porProp = abiertas('egreso').filter(f => !f.propuesta_pago && diasA(f.fecha_vencimiento) !== null && diasA(f.fecha_vencimiento) <= 10).sort((a, b) => a.fecha_vencimiento.localeCompare(b.fecha_vencimiento));
-  window._pp = new Set();
-  return `<div class="ph"><div><div class="ptit">Propuesta de pagos</div><div class="psub">Arma la propuesta para el Director · vencen en 10 días o ya vencieron</div></div></div><div class="pad"><div class="cfgg">
-    ${caja(`Armar propuesta de pagos (${porProp.length})`, porProp.length ? `<div class="mini" style="margin-bottom:8px">Marca las que propones pagar y la fecha; el Director las ve en su tablero.</div>
-      ${porProp.map(f => `<label class="opt"><input type="checkbox" onchange="this.checked?_pp.add('${f.id}'):_pp.delete('${f.id}')"><span style="flex:1"><b>${esc(nomEnt(f.entidad_id))}</b> · ${$$(saldo(f))}<br><span class="mini">${esc(f.descripcion)} · vence ${fmtD(f.fecha_vencimiento)} ${docsDe(f)}</span></span></label>`).join('')}
-      <div style="display:flex;gap:8px;margin-top:10px;align-items:center"><input type="date" id="ppF" value="${hoy}" style="max-width:170px"><button class="btn btn-p btn-sm" onclick="proponer()">Firmar propuesta</button></div>` : '<div class="mini">✓ Nada por vencer sin proponer</div>')}
-    ${caja(`Propuesta enviada al Director (${prop.length} · ${$$(sumS(prop))})`, lista(prop, f => `<div class="aitem i"><div style="flex:1"><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(saldo(f))}</div><div class="am">Pagar el ${fmtD(f.propuesta_pago)} · ${esc(f.descripcion)}</div></div>${puede('cxp') ? `<button class="btn btn-s btn-sm" onclick="quitarPropuesta('${f.id}')">Quitar</button>` : ''}</div>`, 'Sin propuesta activa'), prop.length ? `<button class="btn btn-s btn-sm" onclick="imprimirPropuesta()">🖨</button>` : '')}
-  </div></div>`;
-}
 function rRevisar() {
   const hace60 = isoD(new Date(Date.now() - 60 * 86400000));
   const L = vivas().filter(f => !f.revision && String(f.created_at || '').slice(0, 10) >= hace60).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
@@ -2440,14 +2469,6 @@ async function quitarPropuesta(id) {
   const r = await rpcFirmado('fin_proponer_pago', { p_facturas: [id], p_fecha: null }, { titulo: 'Quitar de la propuesta' });
   if (r) { toast('Quitada de la propuesta', 'success'); await cargarTodo(); }
 }
-function imprimirPropuesta() {
-  const P = propuestas().sort((a, b) => String(a.propuesta_pago).localeCompare(String(b.propuesta_pago)));
-  imprimir('Propuesta de pagos', `<table><thead><tr><th></th><th>Pagar el</th><th>Proveedor</th><th>Concepto</th><th>Banco / CLABE / CIE</th><th>Vence</th><th class="r">Monto</th></tr></thead><tbody>
-    ${P.map(f => { const e = ent(f.entidad_id) || {}; return `<tr><td><span class="chk"></span></td><td>${fmtD(f.propuesta_pago)}</td><td>${esc(e.nombre || '')}</td><td>${esc(f.descripcion)}<br><span style="color:#778">${esc(f.numero_factura || '')}</span></td><td>${esc([e.banco, e.clabe, e.convenio_cie ? 'CIE ' + e.convenio_cie : '', f.referencia_cie ? 'Ref ' + f.referencia_cie : ''].filter(Boolean).join(' · '))}</td><td>${fmtD(f.fecha_vencimiento)}</td><td class="r">${$$(saldo(f))}</td></tr>`; }).join('')}
-    <tr class="tot"><td colspan="6">Total propuesto</td><td class="r">${$$(sumS(P))}</td></tr></tbody></table>
-    <div class="firmas"><div>Preparó<br><b>Contadora</b></div><div>Autorizó y pagó<br><b>Dr. José Antonio Villegas Ávila</b></div></div>`);
-}
-
 // ── Administración de sede ──
 function dashSede(sel) {
   const sede = (DASH_VER && esAdmin()) ? 'Morelia' : (cu.sede || 'todas las sedes');
@@ -3626,9 +3647,10 @@ const kvA = rows => `<div class="area-kv">${rows.filter(Boolean).map(([k, v, al]
 VIEW.dirTab = VIEW.dirTab || 'pan';
 function dashDirector(sel) {
   if (VIEW.dirTab === 'fin') return dashDirectorFin(sel);
+  if (VIEW.dirTab === 'prop') return dashDirProp(sel);
   return dashPanorama(sel);
 }
-const segDir = () => `<div class="seg">${[['pan', 'Panorama COE'], ['fin', 'Finanzas a detalle']].map(([k, t]) => `<button class="${VIEW.dirTab === k ? 'on' : ''}" onclick="VIEW.dirTab='${k}';renderTab()">${t}</button>`).join('')}</div>`;
+const segDir = () => `<div class="seg">${[['pan', 'Panorama COE'], ['fin', 'Finanzas a detalle'], ['prop', 'Propuesta de pagos']].map(([k, t]) => `<button class="${VIEW.dirTab === k ? 'on' : ''}" onclick="VIEW.dirTab='${k}';renderTab()">${t}${k === 'prop' && propuestas().length ? ` <span class="segn">${propuestas().length}</span>` : ''}</button>`).join('')}</div>`;
 function helloDir(sel) {
   const h = new Date().getHours(), saludo = h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
   const nom = String(cu.nombre || '').replace(/^(dr|dra)\.?\s+/i, '').split(' ').slice(0, 2).join(' ');
@@ -4770,6 +4792,201 @@ async function ctlGuardar(k) {
 }
 function ctlFaltantes() {
   return CTL_INV.map(c => ({ c, e: ctlEstado(c) })).filter(x => !x.e.hecho && x.e.d <= 2).map(({ c, e }) => ({ cat: 'pend', d: e.d, crit: e.venc, t: 'Inventario físico: ' + c.t, m: `${c.d} · ${e.venc ? 'vencido desde ' + fmtD(e.toca) : e.d === 0 ? 'toca HOY' : 'toca el ' + fmtD(e.toca)}`, go: c.carga ? `VIEW.almA='${c.k}';goTab('alm');setTimeout(()=>almSubir('${c.k}'),80)` : `ctlRegistrar('${c.k}')` }));
+}
+
+// ══ PROPUESTA DE PAGOS · calendario con recurrentes, agrupación y opciones ══
+// La Contadora arma la propuesta (cuentas por pagar + recurrentes calendarizados); el Director la ve en su pestaña del tablero y paga.
+VIEW.pp = VIEW.pp || { hz: 30, grp: 'prov', ord: 'fecha', vista: 'lista', fil: 'todo', mes: 0, dia: null, sel: {}, mon: {}, modo: 'venc', fecha: null };
+const PP_GRP = { prov: 'Proveedor', semana: 'Semana', estado: 'Estado', pri: 'Prioridad', cat: 'Categoría' };
+const PP_FIL = { todo: 'Todo', por: 'Por proponer', prop: 'Propuestos', rec: 'Recurrentes', venc: 'Vencidos' };
+function ppCol() { try { return JSON.parse(localStorage.getItem('coe_pp_col') || '{}'); } catch { return {}; } }
+function ppColToggle(k) { const c = ppCol(); if (c[k]) delete c[k]; else c[k] = 1; try { localStorage.setItem('coe_pp_col', JSON.stringify(c)); } catch { } renderTab(); }
+function ppColTodos(cerrar) { const c = {}; if (cerrar) ppGrupos(ppFiltrar(ppItems())).forEach(g => c[g.k] = 1); try { localStorage.setItem('coe_pp_col', JSON.stringify(c)); } catch { } renderTab(); }
+const ppLunes = iso => { const d = new Date(iso + 'T00:00:00'), w = (d.getDay() + 6) % 7; d.setDate(d.getDate() - w); return isoD(d); };
+
+// Todo lo que hay que pagar en el horizonte: cuentas abiertas + ocurrencias de recurrentes que aún no tienen cuenta
+function ppItems() {
+  const hz = VIEW.pp.hz, lim = isoD(new Date(hoyD().getTime() + hz * 86400000)), I = [];
+  abiertas('egreso').forEach(f => {
+    if (!(f.propuesta_pago || (f.fecha_vencimiento && f.fecha_vencimiento <= lim))) return;
+    const r = f.recurrente_id ? REC.find(x => x.id === f.recurrente_id) : null;
+    I.push({ k: 'f:' + f.id, f, r, ent: f.entidad_id, desc: f.descripcion, monto: saldo(f), fecha: f.fecha_vencimiento || f.propuesta_pago, prop: f.propuesta_pago, rec: !!f.recurrente_id, cat: f.categoria || (r?.categoria) || 'Sin categoría', pri: r?.prioridad || f.prioridad || '' });
+  });
+  window._recOc = buildRecOcurrencias(hz);
+  window._recOc.forEach((o, i) => {
+    if (o.factura || o.diasDiff < -45) return;
+    const r = o.rec, per = isoD(o.fecha), mn = montoNomina(r, per), m = r.monto ? num(r.monto) : mn;
+    I.push({ k: 'r:' + r.id + '|' + per, o, oi: i, r, ent: r.entidad_id, desc: r.descripcion, monto: m ?? null, variable: m == null, fecha: per, prop: null, rec: true, sinCuenta: true, cat: r.categoria || 'Sin categoría', pri: r.prioridad || '', nom: !!nomRef(r) });
+  });
+  return I;
+}
+const ppVencido = x => x.fecha && x.fecha < hoyISO();
+const ppMonto = x => x.monto ?? num(VIEW.pp.mon[x.k] || 0);
+function ppFiltrar(I) {
+  const F = VIEW.pp.fil;
+  let L = I.filter(x => F === 'todo' ? true : F === 'por' ? !x.prop : F === 'prop' ? !!x.prop : F === 'rec' ? x.rec : F === 'venc' ? ppVencido(x) : true);
+  if (VIEW.pp.dia) L = L.filter(x => (x.prop || x.fecha) === VIEW.pp.dia || x.fecha === VIEW.pp.dia);
+  return L;
+}
+function ppGrupos(L) {
+  const G = VIEW.pp.grp, hoy = hoyISO(), finSem = isoD(new Date(new Date(ppLunes(hoy) + 'T00:00:00').getTime() + 6 * 86400000));
+  const clave = x => {
+    if (G === 'prov') return [x.ent || '—', nomEnt(x.ent) || 'Sin proveedor'];
+    if (G === 'semana') { if (ppVencido(x)) return ['0', 'Vencido']; const l = ppLunes(x.prop || x.fecha); const d = new Date(l + 'T00:00:00'); return [l, (l === ppLunes(hoy) ? 'Esta semana · ' : 'Semana · ') + fmtD(l).slice(0, 5) + ' al ' + fmtD(isoD(new Date(d.getTime() + 6 * 86400000))).slice(0, 5)]; }
+    if (G === 'estado') return x.prop ? ['3', 'Propuestos al Director'] : ppVencido(x) ? ['0', 'Vencidos sin proponer'] : x.fecha <= finSem ? ['1', 'Vencen esta semana'] : ['2', 'Próximos'];
+    if (G === 'pri') { const p = PRI[x.pri]; return p ? [String(p.w), p.t] : ['9', 'Sin prioridad']; }
+    return [x.cat, x.cat];
+  };
+  const M = {};
+  L.forEach(x => { const [k, t] = clave(x); (M[k] = M[k] || { k: G + ':' + k, sk: k, t, L: [] }).L.push(x); });
+  const ord = VIEW.pp.ord, cmp = (a, b) => ord === 'monto' ? ppMonto(b) - ppMonto(a) : String(a.prop || a.fecha || '9').localeCompare(String(b.prop || b.fecha || '9'));
+  const R = Object.values(M); R.forEach(g => { g.L.sort(cmp); g.tot = g.L.reduce((s, x) => s + ppMonto(x), 0); g.venc = g.L.some(ppVencido); g.var = g.L.filter(x => x.variable && !VIEW.pp.mon[x.k]).length; });
+  return R.sort((a, b) => G === 'prov' ? (ord === 'monto' ? b.tot - a.tot : (b.venc - a.venc) || a.t.localeCompare(b.t)) : a.sk.localeCompare(b.sk));
+}
+
+function ppCuerpo(esDirTab) {
+  const P = VIEW.pp, I = ppItems(), L = ppFiltrar(I), hoy = hoyISO();
+  const prop = I.filter(x => x.prop), por = I.filter(x => !x.prop), recs = I.filter(x => x.sinCuenta), venc = I.filter(x => ppVencido(x) && !x.prop);
+  const tot = a => a.reduce((s, x) => s + ppMonto(x), 0);
+  const nSel = Object.keys(P.sel).filter(k => P.sel[k] && I.some(x => x.k === k)), selI = I.filter(x => P.sel[x.k]);
+  const kpis = `<div class="dg ppk">
+    ${kpi('Propuesto al Director', $$(tot(prop)), `${prop.length} pago(s)`, prop.length ? 'var(--in)' : '', "VIEW.pp.fil='prop';renderTab()")}
+    ${kpi('Por proponer', $$(tot(por)), `${por.length} en ${P.hz} días`, por.length ? 'var(--wn)' : 'var(--sc)', "VIEW.pp.fil='por';renderTab()")}
+    ${kpi('Recurrentes calendarizados', String(recs.length), `${$$(tot(recs))}${recs.some(x => x.variable) ? ' + ' + recs.filter(x => x.variable).length + ' variables' : ''}`, '', "VIEW.pp.fil='rec';renderTab()")}
+    ${kpi('Vencido sin proponer', $$(tot(venc)), `${venc.length} cuenta(s)`, venc.length ? 'var(--dg)' : 'var(--sc)', "VIEW.pp.fil='venc';renderTab()")}
+  </div>`;
+  const ctl = `<div class="ppctl">
+    <div class="seg">${[['lista', '☰ Lista'], ['cal', '▦ Calendario']].map(([k, t]) => `<button class="${P.vista === k ? 'on' : ''}" onclick="VIEW.pp.vista='${k}';renderTab()">${t}</button>`).join('')}</div>
+    <label>Agrupar <select onchange="VIEW.pp.grp=this.value;renderTab()">${Object.entries(PP_GRP).map(([k, t]) => `<option value="${k}" ${P.grp === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+    <label>Ordenar <select onchange="VIEW.pp.ord=this.value;renderTab()"><option value="fecha" ${P.ord === 'fecha' ? 'selected' : ''}>Fecha</option><option value="monto" ${P.ord === 'monto' ? 'selected' : ''}>Monto</option></select></label>
+    <label>Horizonte <select onchange="VIEW.pp.hz=+this.value;renderTab()">${[7, 15, 30, 60, 90].map(d => `<option value="${d}" ${P.hz === d ? 'selected' : ''}>${d} días</option>`).join('')}</select></label>
+    <div class="chips">${Object.entries(PP_FIL).map(([k, t]) => `<span class="chip ${P.fil === k ? 'act' : ''}" onclick="VIEW.pp.fil='${k}';renderTab()">${t}</span>`).join('')}</div>
+    ${P.dia ? `<span class="chip act" onclick="VIEW.pp.dia=null;renderTab()">Día ${fmtD(P.dia)} ✕</span>` : ''}
+  </div>`;
+  const cuerpo = P.vista === 'cal' ? ppCalendario(I) : ppLista(L, esDirTab);
+  const barra = nSel.length ? `<div class="ppbar"><b>${nSel.length} seleccionada(s) · ${$$(tot(selI))}</b>
+    ${selI.some(x => !x.prop) && puede('cxp') ? `<label>Pagar <select id="ppModo" onchange="VIEW.pp.modo=this.value;renderTab()"><option value="venc" ${P.modo === 'venc' ? 'selected' : ''}>en su fecha de vencimiento</option><option value="unica" ${P.modo === 'unica' ? 'selected' : ''}>todas el mismo día</option><option value="viernes" ${P.modo === 'viernes' ? 'selected' : ''}>el viernes anterior al vencimiento</option></select></label>
+      ${P.modo === 'unica' ? `<input type="date" id="ppFecha" value="${P.fecha || hoy}" onchange="VIEW.pp.fecha=this.value">` : ''}
+      <button class="btn btn-p btn-sm" onclick="ppFirmar()">✎ Firmar propuesta</button>` : ''}
+    ${selI.some(x => x.prop) && puede('cxp') ? `<button class="btn btn-s btn-sm" onclick="ppQuitar()">Quitar de propuesta</button>` : ''}
+    <button class="btn btn-s btn-sm" onclick="VIEW.pp.sel={};renderTab()">Limpiar</button></div>` : '';
+  return `${kpis}${ctl}${cuerpo}${barra}`;
+}
+
+function ppFila(x, esDirTab) {
+  const P = VIEW.pp, v = ppVencido(x), pagar = puede('pagos', 3);
+  const est = x.prop ? `<span class="bdg bdg-aut">propuesto ${fmtD(x.prop).slice(0, 5)}</span>` : v ? '<span class="bdg bdg-rt-r">vencido</span>' : '';
+  const tag = x.sinCuenta ? `<span class="bdg pp-rec">↻ ${x.nom ? 'nómina' : 'recurrente'}</span>` : x.rec ? '<span class="bdg pp-rec">↻</span>' : '';
+  const monto = x.variable ? (puede('cxp') ? `<div class="ipfx pp-mon" onclick="event.stopPropagation()"><span>$</span><input type="number" step="0.01" placeholder="${x.nom ? 'según Nómina' : 'monto'}" value="${esc(P.mon[x.k] || '')}" onchange="VIEW.pp.mon['${x.k}']=this.value;renderTab()"></div>` : '<span class="mini">variable</span>') : `<b class="amt">${$$(x.monto)}</b>`;
+  const ir = x.f ? `verCuenta('${x.f.id}')` : '';
+  const acc = esDirTab || pagar ? (x.f && pagar ? `<button class="btn ${x.prop ? 'btn-p' : 'btn-s'} btn-sm" onclick="event.stopPropagation();pagarCuenta('${x.f.id}')">Pagar</button>` : x.sinCuenta && pagar ? `<button class="btn btn-s btn-sm" onclick="event.stopPropagation();pagarRecurrenteDesde(${x.oi})">Pagar</button>` : '') : '';
+  return `<div class="pprow ${v ? 'v' : ''} ${x.prop ? 'p' : ''}" ${ir ? `onclick="${ir}"` : ''}>
+    <input type="checkbox" ${P.sel[x.k] ? 'checked' : ''} onclick="event.stopPropagation()" onchange="VIEW.pp.sel['${x.k}']=this.checked;renderTab()">
+    <div class="ppd"><div class="ppdt">${fmtD(x.prop || x.fecha).slice(0, 5)}</div><div class="mini">${x.prop && x.fecha && x.prop !== x.fecha ? 'vence ' + fmtD(x.fecha).slice(0, 5) : diasTxtPP(x.fecha)}</div></div>
+    <div class="ppt"><div>${VIEW.pp.grp === 'prov' ? '' : `<b>${esc(nomEnt(x.ent))}</b> · `}${esc(x.desc)} ${tag} ${est} ${x.pri && PRI[x.pri] ? priBdg(x.pri) : ''}</div><div class="mini">${esc(x.cat)}${x.f ? ' · ' + docsDe(x.f) : ' · aún sin cuenta: se crea al proponer o pagar'}</div></div>
+    <div class="ppm">${monto}</div><div class="rowact" onclick="event.stopPropagation()">${acc}${x.prop && puede('cxp') && x.f ? `<button class="btn btn-s btn-sm" onclick="quitarPropuesta('${x.f.id}')" title="Quitar de la propuesta">✕</button>` : ''}</div></div>`;
+}
+function diasTxtPP(f) { const d = diasA(f); return d === null ? '' : d < 0 ? `hace ${-d} d` : d === 0 ? 'hoy' : `en ${d} d`; }
+
+function ppLista(L, esDirTab) {
+  if (!L.length) return '<div class="emp"><div class="ic">✓</div><p>Nada en este filtro</p></div>';
+  const C = ppCol(), G = ppGrupos(L), P = VIEW.pp;
+  return `<div class="pp-top mini"><a href="#" onclick="ppColTodos(true);return false">▸ Colapsar todos</a> · <a href="#" onclick="ppColTodos(false);return false">▾ Expandir todos</a> · ${G.length} grupo(s) · ${L.length} pago(s) · <b>${$$(G.reduce((s, g) => s + g.tot, 0))}</b></div>` +
+    G.map(g => { const todos = g.L.every(x => P.sel[x.k]), cerr = C[g.k];
+      return `<div class="ppg ${g.venc ? 'v' : ''}"><div class="ppgh" onclick="ppColToggle('${esc(g.k)}')">
+        <input type="checkbox" ${todos ? 'checked' : ''} onclick="event.stopPropagation()" onchange="ppSelGrupo('${esc(g.k)}',this.checked)">
+        <span class="ppc">${cerr ? '▸' : '▾'}</span><b style="flex:1">${esc(g.t)}</b>
+        <span class="mini">${g.L.length} · ${g.L.filter(x => x.prop).length ? g.L.filter(x => x.prop).length + ' propuesto(s) · ' : ''}${g.L.filter(x => x.rec).length ? '↻ ' + g.L.filter(x => x.rec).length + ' · ' : ''}</span><b class="amt">${$$(g.tot)}${g.var ? ' <span class="mini">+' + g.var + ' var.</span>' : ''}</b></div>
+        ${cerr ? '' : g.L.map(x => ppFila(x, esDirTab)).join('')}</div>`; }).join('');
+}
+function ppSelGrupo(k, on) { const g = ppGrupos(ppFiltrar(ppItems())).find(g => g.k === k); if (g) g.L.forEach(x => VIEW.pp.sel[x.k] = on); renderTab(); }
+
+function ppCalendario(I) {
+  const P = VIEW.pp, b = new Date(); b.setDate(1); b.setMonth(b.getMonth() + P.mes);
+  const y = b.getFullYear(), m = b.getMonth(), dim = new Date(y, m + 1, 0).getDate(), off = (new Date(y, m, 1).getDay() + 6) % 7, hoy = hoyISO();
+  const porDia = {}; ppFiltrar(I).forEach(x => { const d = x.prop || x.fecha; if (d) (porDia[d] = porDia[d] || []).push(x); });
+  let celdas = '';
+  for (let i = 0; i < off; i++) celdas += '<div class="ppcd vac"></div>';
+  for (let d = 1; d <= dim; d++) {
+    const iso = isoD(new Date(y, m, d)), L = (porDia[iso] || []).sort((a, b) => ppMonto(b) - ppMonto(a)), t = L.reduce((s, x) => s + ppMonto(x), 0);
+    celdas += `<div class="ppcd ${iso === hoy ? 'hoy' : ''} ${L.length ? 'con' : ''}" ${L.length ? `onclick="VIEW.pp.dia='${iso}';VIEW.pp.vista='lista';renderTab()"` : ''}>
+      <div class="ppn"><span>${d}</span>${t ? `<b>${moneyK(t)}</b>` : ''}</div>
+      ${L.slice(0, 3).map(x => `<div class="ppchip ${x.prop ? 'p' : ppVencido(x) ? 'v' : x.rec ? 'r' : ''}">${x.rec ? '↻ ' : ''}${esc(nomEnt(x.ent)).slice(0, 18)}</div>`).join('')}${L.length > 3 ? `<div class="mini">+${L.length - 3} más</div>` : ''}</div>`;
+  }
+  return `<div class="ppcal-h"><button class="btn btn-s btn-sm" onclick="VIEW.pp.mes--;renderTab()">‹</button><b>${MESES[m]} ${y}</b><button class="btn btn-s btn-sm" onclick="VIEW.pp.mes++;renderTab()">›</button>${P.mes ? `<button class="btn btn-s btn-sm" onclick="VIEW.pp.mes=0;renderTab()">Hoy</button>` : ''}
+    <span class="mini" style="margin-left:auto"><span class="ppchip v">vencido</span> <span class="ppchip">por pagar</span> <span class="ppchip r">↻ recurrente</span> <span class="ppchip p">propuesto</span></span></div>
+    <div class="ppcal">${['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map(d => `<div class="ppdw">${d}</div>`).join('')}${celdas}</div>
+    <div class="mini" style="margin-top:6px">Toca un día para ver y seleccionar sus pagos. Los recurrentes se calendarizan solos según su frecuencia${P.hz < 60 ? ' (amplía el horizonte para ver más meses)' : ''}.</div>`;
+}
+
+function ppFechaDe(x) {
+  const P = VIEW.pp, hoy = hoyISO();
+  if (P.modo === 'unica') return P.fecha || hoy;
+  const f = x.fecha && x.fecha >= hoy ? x.fecha : hoy;
+  if (P.modo === 'viernes') { const d = new Date(f + 'T00:00:00'); while (d.getDay() !== 5) d.setDate(d.getDate() - 1); const r = isoD(d); return r < hoy ? hoy : r; }
+  return f;
+}
+async function ppRpc(fn, args, pin, st) {
+  let r = await rpcConPin(fn, args, pin, st.dir);
+  if (!r.ok && /director_requerido|director_pin/.test(r.error || '')) {
+    try { st.dir = await askPin('Firma del Director General', 'Hay pagos mayores a ' + $$(limiteFirma()) + ': segunda firma'); } catch { return r; }
+    r = await rpcConPin(fn, args, pin, st.dir);
+  }
+  return r;
+}
+async function ppFirmar() {
+  const P = VIEW.pp, I = ppItems().filter(x => P.sel[x.k] && !x.prop);
+  if (!I.length) { toast('Marca pagos por proponer', 'warning'); return; }
+  const sinM = I.filter(x => x.sinCuenta && !(ppMonto(x) > 0));
+  if (sinM.length) { toast('Escribe el monto de: ' + sinM.map(x => nomEnt(x.ent)).join(', '), 'warning'); return; }
+  let pin; try { pin = await askPin('Firmar propuesta de pagos', `${I.length} pago(s) · ${$$(I.reduce((s, x) => s + ppMonto(x), 0))}`); } catch { return; }
+  const st = { dir: null }, porF = {}, fallas = [];
+  for (const x of I) {
+    let id = x.f?.id;
+    if (!id) {
+      const r = x.r, per = x.fecha;
+      const c = await ppRpc('fin_crear_cxp', { p_datos: { tipo: 'egreso', entidad_id: r.entidad_id, descripcion: `${r.descripcion} — ${fmtD(per)}`, monto_total: ppMonto(x), fecha_vencimiento: per, categoria: r.categoria, documento_tipo: 'sin_factura', recurrente_id: r.id, recurrente_periodo: per, origen: 'recurrente' } }, pin, st);
+      if (!c.ok) { fallas.push(nomEnt(x.ent) + ': ' + (/duplicate|recurrente_periodo_uq/.test(c.error || '') ? 'ese periodo ya estaba registrado' : (ERR[c.error] || c.error))); if (/pin|bloq/i.test(c.error || '')) break; continue; }
+      id = c.id;
+    }
+    (porF[ppFechaDe(x)] = porF[ppFechaDe(x)] || []).push(id);
+  }
+  let n = 0;
+  for (const [fecha, ids] of Object.entries(porF)) {
+    const r = await rpcConPin('fin_proponer_pago', { p_facturas: ids, p_fecha: fecha }, pin);
+    if (r.ok) n += ids.length; else fallas.push('Propuesta del ' + fmtD(fecha) + ': ' + (ERR[r.error] || r.error));
+  }
+  VIEW.pp.sel = {}; VIEW.pp.mon = {};
+  if (n) toast(`${n} pago(s) propuestos al Director`, 'success');
+  if (fallas.length) toast(fallas.join(' · '), 'error');
+  await cargarTodo(); renderTab();
+}
+async function ppQuitar() {
+  const ids = ppItems().filter(x => VIEW.pp.sel[x.k] && x.prop && x.f).map(x => x.f.id);
+  if (!ids.length) return;
+  const r = await rpcFirmado('fin_proponer_pago', { p_facturas: ids, p_fecha: null }, { titulo: 'Quitar de la propuesta', sub: `${ids.length} pago(s)` });
+  if (r) { VIEW.pp.sel = {}; toast('Quitados de la propuesta', 'success'); await cargarTodo(); renderTab(); }
+}
+
+// Pestaña del menú (Contadora / Administración)
+function rPropuesta() {
+  return `<div class="ph"><div><div class="ptit">Propuesta de pagos</div><div class="psub">Cuentas por pagar y recurrentes calendarizados · marca, elige la fecha y firma: el Director la ve en su tablero</div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${propuestas().length ? `<button class="btn btn-s btn-sm" onclick="imprimirPropuesta()">🖨 Imprimir propuesta</button>` : ''}${puede('cxp') ? '<button class="btn btn-s btn-sm" onclick="openSubirPagos()">⬆ Subir pagos</button>' : ''}</div></div>
+  <div class="pad">${ppCuerpo(false)}</div>`;
+}
+// Pestaña en el tablero del Director
+function dashDirProp(sel) {
+  return helloDir(sel) + `<div class="pad">${ppCuerpo(true)}<div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">${propuestas().length ? `<button class="btn btn-s btn-sm" onclick="imprimirPropuesta()">🖨 Imprimir propuesta</button>` : ''}<button class="btn btn-s btn-sm" onclick="goTab('rec')">↻ Administrar recurrentes</button></div></div>`;
+}
+// Impresión agrupada por proveedor
+function imprimirPropuesta() {
+  const P = propuestas(), M = {};
+  P.forEach(f => (M[f.entidad_id] = M[f.entidad_id] || []).push(f));
+  const G = Object.entries(M).map(([e, L]) => ({ e, L: L.sort((a, b) => String(a.propuesta_pago).localeCompare(String(b.propuesta_pago))), t: sumS(L) })).sort((a, b) => nomEnt(a.e).localeCompare(nomEnt(b.e)));
+  imprimir('Propuesta de pagos', `<table><thead><tr><th></th><th>Pagar el</th><th>Concepto</th><th>Banco / CLABE / CIE</th><th>Vence</th><th class="r">Monto</th></tr></thead><tbody>
+    ${G.map(g => { const e = ent(g.e) || {}; return `<tr style="background:#eef2f7"><td colspan="5"><b>${esc(e.nombre || '')}</b></td><td class="r"><b>${$$(g.t)}</b></td></tr>` + g.L.map(f => `<tr><td><span class="chk"></span></td><td>${fmtD(f.propuesta_pago)}</td><td>${esc(f.descripcion)}${f.recurrente_id ? ' ↻' : ''}<br><span style="color:#778">${esc(f.numero_factura || '')}</span></td><td>${esc([e.banco, e.clabe, e.convenio_cie ? 'CIE ' + e.convenio_cie : '', f.referencia_cie ? 'Ref ' + f.referencia_cie : ''].filter(Boolean).join(' · '))}</td><td>${fmtD(f.fecha_vencimiento)}</td><td class="r">${$$(saldo(f))}</td></tr>`).join(''); }).join('')}
+    <tr class="tot"><td colspan="5">Total propuesto · ${P.length} pago(s) · ${G.length} proveedor(es)</td><td class="r">${$$(sumS(P))}</td></tr></tbody></table>
+    <div class="firmas"><div>Preparó<br><b>Contadora</b></div><div>Autorizó y pagó<br><b>Dr. José Antonio Villegas Ávila</b></div></div>`);
 }
 </script>
 </body></html>
