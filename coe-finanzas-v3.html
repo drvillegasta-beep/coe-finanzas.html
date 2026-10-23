@@ -1429,6 +1429,7 @@ function verCuenta(id) {
   const ft = [
     f.estado !== 'pagado' && !f.anulado && puedePagar(f) ? `<button class="btn btn-p" onclick="pagarCuenta('${id}')">${egr ? 'Pagar' : 'Registrar cobro'}</button>` : '',
     egr && f.estado !== 'pagado' && !f.anulado && puede('cxp') ? (f.propuesta_pago ? `<button class="btn btn-s" onclick="quitarPropuesta('${id}')">Quitar de propuesta</button>` : `<button class="btn btn-s" onclick="proponerUna('${id}')">Proponer pago</button>`) : '',
+    f.estado !== 'pagado' && !f.anulado && puede('cxp') ? `<button class="btn btn-s" onclick="cambiarFechaPago(['${id}'])">📅 Fecha de pago</button>` : '',
     puede(mod) ? `<button class="btn btn-s" onclick="openUpload('${id}')">⬆ Factura, complemento o nota de crédito</button>` : '',
     puede(mod) ? `<button class="btn btn-s" onclick="correoProveedor('${f.entidad_id}','${id}')">✉ Correo</button>` : '',
     puede('revision') ? `<button class="btn btn-s" onclick="revisar('${id}','revisado')">✓ Revisado</button><button class="btn btn-w" onclick="revisar('${id}','observado')">Observar</button>` : '',
@@ -3423,7 +3424,7 @@ function upProponer() {
         if (pg) { usados.add(pg.id); P.pago = pg; P.parcial = pg.pago.monto < c.total - 1; }
         const ped = e ? PED.find(p => p.entidad_id === e.id && ['autorizado', 'enviado', 'recibido'].includes(p.estado) && (!p.monto_estimado || Math.abs(p.monto_estimado - c.total) <= Math.max(50, c.total * 0.1))) : null;
         P.pedido = ped;
-        const venc = c.metodo === 'PUE' ? c.fecha : isoD(new Date(new Date(c.fecha + 'T00:00:00').getTime() + (num(e?.dias_credito)) * 86400000));
+        const venc = c.metodo === 'PUE' && pg ? c.fecha : isoD(new Date(new Date(c.fecha + 'T00:00:00').getTime() + (num(e?.dias_credito) || (c.metodo === 'PUE' ? 0 : 28)) * 86400000));
         P.venc = venc;
         P.opciones.push({ k: 'nueva', txt: `${tipo === 'egreso' ? 'Nueva cuenta por pagar' : 'Nueva cuenta por cobrar'} de ${$$(c.total)}${pg ? (P.parcial ? ` con abono parcial de ${$$(pg.pago.monto)} · queda saldo ${$$(c.total - pg.pago.monto)}` : ' pagada con el comprobante') : ''} · vence ${fmtD(venc)}${!e ? ' · se da de alta el proveedor ' + otroNom : ''}` });
         if (c.metodo === 'PPD') P.avisos.push('Factura PPD (pago en parcialidades): por cada pago el proveedor debe enviar su complemento de pago; quedará en "Complementos por solicitar".');
@@ -3461,6 +3462,7 @@ function upProponer() {
   UP.props = props;
   upPintarProps();
 }
+function upVenc(i, x) { const P = UP.props[i]; if (!x) return; P.opciones.forEach(o => { if (o.k === 'nueva') o.txt = o.txt.replace(/vence \d{2}\/\d{2}\/\d{4}/, 'vence ' + fmtD(x)); }); P.venc = x; upPintarProps(); }
 function upPintarProps() {
   const el = document.getElementById('upProps'); if (!el) return;
   el.innerHTML = UP.props.map((P, i) => `<div class="prop"><h4>${esc(P.titulo)}</h4>
@@ -3468,6 +3470,8 @@ function upPintarProps() {
     ${P.avisos.map(a => `<div class="warnbox" style="margin:8px 0 0">${esc(a)}</div>`).join('')}
     ${P.multi ? P.opciones.map(o => `<div class="opt sel"><span>${o.k === 'nada' ? '⚠' : '✓'}</span><span>${esc(o.txt)}</span></div>`).join('') :
       P.opciones.map((o, j) => `<label class="opt ${P.sel === j ? 'sel' : ''}"><input type="radio" name="up${i}" ${P.sel === j ? 'checked' : ''} onchange="UP.props[${i}].sel=${j};upPintarProps()"><span>${esc(o.txt)}</span></label>`).join('')}
+    ${P.c && P.venc && !(P.pago && !P.parcial) && P.opciones[P.sel]?.k === 'nueva' ? `<div class="fgrd" style="margin-top:10px;align-items:end"><div class="fgrp"><label>Fecha de pago</label><input type="date" value="${P.venc}" onchange="upVenc(${i},this.value)"></div>
+      <div class="fgrp sp2"><div class="chips">${[0, 15, 28, 30, 45, 60].map(d => { const x = isoD(new Date(new Date(P.c.fecha + 'T00:00:00').getTime() + d * 864e5)); return `<span class="chip ${x === P.venc ? 'act' : ''}" onclick="upVenc(${i},'${x}')">${d ? d + ' días' : 'Contado'}</span>`; }).join('')}</div></div></div>` : ''}
     ${P.pagoSolo || P.pago ? `<div class="fgrd" style="margin-top:10px">
       <div class="fgrp"><label>Monto del pago</label><div class="ipfx"><span>$</span><input type="number" step="0.01" value="${(P.pagoSolo ? P.monto : P.pago.pago.monto) || ''}" onchange="UP.props[${i}].${P.pagoSolo ? 'monto' : 'pago.pago.monto'}=+this.value"></div></div>
       <div class="fgrp"><label>Forma de pago</label><select onchange="UP.props[${i}].metodo=this.value">${['Transferencia', 'Tarjeta', 'Efectivo', 'Cheque', 'Domiciliado'].map(x => `<option ${(P.metodo || (P.pagoSolo || P.pago).pago?.metodo) === x ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
@@ -4059,7 +4063,7 @@ function rAlm() {
     <td class="amt" style="text-align:right">${r.min ? almNum(r.min) : '<span class="mini">—</span>'}</td>
     ${conPron ? `<td class="amt" style="text-align:right">${r.c4 ? almNum(r.c4 / 4) : '<span class="mini">0</span>'}</td><td style="text-align:right">${r.dias !== null ? `<b style="${r.dias <= DIAS_ALERTA_FIN ? 'color:var(--dg)' : r.dias <= 45 ? 'color:var(--wn)' : ''}">${r.dias} d</b><div class="mini">${fmtD(r.fin)}</div>` : '<span class="mini">sin consumo</span>'}</td>` : ''}
     <td>${fCad(r)}</td><td><span class="bdg ${EST_ALM[r.est][1]}">${EST_ALM[r.est][0]}</span>${r.caducado.length ? ' <span class="bdg bdg-ven">Caducado</span>' : ''}</td>
-    ${A !== 'qui' && puede('pedidos') ? `<td style="text-align:right;white-space:nowrap" onclick="event.stopPropagation()"><button class="btn btn-s btn-sm" title="Solicitar a proveedor" onclick="almSolicitar('${A}',['${r.id}'])">Solicitar</button>${A === 'alm' && r.ex > 0 ? ` <button class="btn btn-s btn-sm" title="Traspasar a mostrador" onclick="almTraspaso({${r.id}:1})">⇄</button>` : A === 'adm' && r.ex > 0 ? ` <button class="btn btn-s btn-sm" title="Enviar a quirófano" onclick="almEnvio({'${r.id}':1})">⇄</button>` : ''}</td>` : ''}</tr>`;
+    ${A !== 'qui' && puede('pedidos') ? `<td style="text-align:right;white-space:nowrap" onclick="event.stopPropagation()"><button class="btn btn-s btn-sm" title="Solicitar a proveedor" onclick="almSolicitar('${A}',['${r.id}'])">Solicitar</button>${A === 'alm' && r.ex > 0 ? ` <button class="btn btn-s btn-sm" title="Traspasar a mostrador" onclick="almTraspaso({${r.id}:1})">⇄</button>` : A === 'adm' && r.ex > 0 ? ` <button class="btn btn-s btn-sm" title="Enviar a quirófano" onclick="almEnvio({'${r.id}':1},qxAdmId())">⇄</button>` : ''}</td>` : ''}</tr>`;
   const segs = [{ t: 'Suficiente', n: R.filter(r => r.est === 'ok').length, c: 'sb-ok' }, { t: 'Se acaba pronto', n: R.filter(r => r.est === 'pronto').length, c: 'sb-warn' }, { t: 'Bajo mínimo', n: bajo.length, c: 'sb-ser' }, { t: 'Crítico o acabado', n: acab.length + crit.length, c: 'sb-crit' }];
   return `<div class="ph"><div><div class="ptit">Almacén e inventarios</div><div class="psub">Qué se va a terminar y qué va a caducar · lee COE Farmacia y COE Quirófano en tiempo real</div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><div class="seg">${ALM_AREAS.map(([k, t]) => `<button class="${A === k ? 'on' : ''}" onclick="VIEW.almA='${k}';renderTab()">${t}</button>`).join('')}</div>
@@ -4073,7 +4077,7 @@ function rAlm() {
       ${kp('Acabados o críticos', String(acab.length + crit.length), `${bajo.length} más bajo mínimo`, "VIEW.almF='acaba';renderTab()", acab.length + crit.length ? 't-rojo' : '')}
       ${kp('Caducan en 90 días', String(lotesX.length), `${lotesX.reduce((s, l) => s + l.q, 0)} pza${valX ? ' · ' + moneyK(valX) : ''}${lotesX.some(l => l.sobra) ? ' · no se alcanzan a vender ' + lotesX.reduce((s, l) => s + (l.sobra || 0), 0) : ''}`, "VIEW.almF='caduca';renderTab()", lotesX.some(l => diasA(l.cad) <= 30) ? 't-amar' : '')}
       ${kp('Caducados en existencia', String(lotesC.length), `${lotesC.reduce((s, l) => s + l.q, 0)} pza${valC ? ' · ' + moneyK(valC) + ' de pérdida' : ''} · retirar`, "VIEW.almF='caduca';renderTab()", lotesC.length ? 't-rojo' : '')}
-      ${A === 'adm' ? kp('Por enviar a quirófano', String(xEnv.length), xEnv.length ? 'quirófano está en su mínimo y aquí hay existencia' : 'quirófano surtido', xEnv.length ? 'almEnvio()' : '', xEnv.length ? 't-amar' : '') : A === 'alm' ? kp('Por surtir a farmacia', String(sol.length), sol.length ? sol.reduce((s, x) => s + num(x.cantidad) - num(x.surtido), 0) + ' pza solicitadas' : 'sin solicitudes', '', sol.length ? 't-amar' : '') : kp('Pedidos abiertos', String(ped.length), ped.length ? 'en proceso con proveedor' : 'sin pedidos', "goTab('ped')")}
+      ${A === 'adm' ? kp('Por enviar a quirófano', String(xEnv.length), xEnv.length ? 'quirófano está en su mínimo y aquí hay existencia' : 'quirófano surtido', xEnv.length ? 'almEnvio(null,qxAdmId())' : '', xEnv.length ? 't-amar' : '') : A === 'alm' ? kp('Por surtir a farmacia', String(sol.length), sol.length ? sol.reduce((s, x) => s + num(x.cantidad) - num(x.surtido), 0) + ' pza solicitadas' : 'sin solicitudes', '', sol.length ? 't-amar' : '') : kp('Pedidos abiertos', String(ped.length), ped.length ? 'en proceso con proveedor' : 'sin pedidos', "goTab('ped')")}
     </div>
     <div class="dgrid">
       ${dcard('Se va a terminar', (R.length ? sbar('Estado de ' + R.length + ' productos', segs) : '') + (seAcaba.length ? seAcaba.map(r => `<div class="list-item" onclick="almDetalle('${A}','${esc(r.id)}')"><i class="dot ${r.est === 'acabado' || r.est === 'critico' ? 'cr' : r.est === 'ok' ? 'lo' : 'hi'}"></i><div class="grow"><b>${esc(r.n)}</b><div class="muted">Quedan ${almNum(r.ex)}${A === 'alm' ? ` en almacén · ${almNum(r.most)} en mostrador` : A === 'adm' ? ` en Contabilidad · ${almNum(r.most)} en quirófano` : ''}${r.min ? ' · mínimo ' + almNum(r.min) : ''}${r.c4 ? ` · salen ${almNum(r.c4 / 4)} por semana` : ''}</div></div><div style="text-align:right;flex:0 0 auto">${r.dias !== null ? `<b style="${r.dias <= DIAS_ALERTA_FIN ? 'color:var(--dg)' : ''}">${r.dias} d</b><div class="muted">${fmtD(r.fin)}</div>` : `<span class="bdg ${EST_ALM[r.est][1]}">${EST_ALM[r.est][0]}</span>`}</div></div>`).join('') : '<div class="muted">Nada por terminarse.</div>'), seAcaba.length)}
@@ -4095,7 +4099,7 @@ function almDetalle(area, id) {
       <b>Estado</b><div><span class="bdg ${EST_ALM[r.est][1]}">${EST_ALM[r.est][0]}</span></div>
       ${r.p ? [['Tipo', TIPO_INS[r.p.tipo_insumo] || r.cat], ['Clave', r.p.clave], ['Presentación', r.p.presentacion], ['Principio activo', r.p.principio], ['Marca', r.p.marca], ['Registro sanitario', r.p.registro_sanitario], ['Proveedor', r.p.proveedor_id ? nomEnt(r.p.proveedor_id) : ''], ['Ubicación', r.p.ubicacion_fisica], ['Cuidados', [r.p.red_fria ? 'Red fría' : '', r.p.controlado ? 'Controlado' : ''].filter(Boolean).join(' · ')]].filter(x => x[1]).map(([k, v]) => `<b>${k}</b><div>${esc(v)}</div>`).join('') : ''}</div>
     <div class="tc"><table><thead><tr><th>Lote</th><th style="text-align:right">Cantidad</th><th>Caducidad</th><th></th></tr></thead><tbody>${r.lotes.length ? r.lotes.sort((a, b) => String(a.cad || '9') < String(b.cad || '9') ? -1 : 1).map(l => `<tr><td>${esc(l.lote || '—')}${l.serie && l.serie !== l.lote ? `<div class="mini">serie ${esc(l.serie)}</div>` : ''}${l.factura ? `<div class="mini">factura ${esc(l.factura)}</div>` : ''}${l.gar ? `<div class="mini">garantía ${fmtD(l.gar)}</div>` : ''}${l.cons ? `<div class="mini"><b>en consigna</b>${l.prov ? ' · ' + esc(nomEnt(l.prov)) : ''}</div>` : ''}</td><td class="amt" style="text-align:right">${almNum(l.q)}</td><td>${l.cad ? fmtD(l.cad) : '—'}</td><td class="mini">${l.cad && diasA(l.cad) < 0 ? '<b style="color:var(--dg)">caducado · retirar</b>' : l.cad && diasA(l.cad) <= DIAS_CADUCAR ? `caduca en ${diasA(l.cad)} d${l.sobra ? ` · <b>${l.sobra} no se alcanzan a vender</b>` : ''}` : ''}</td></tr>`).join('') : '<tr><td colspan="4" class="mini">Sin lotes en existencia</td></tr>'}</tbody></table></div>`,
-    `${area !== 'qui' && puede('pedidos') ? `<button class="btn btn-s" onclick="CM('mGen');almSolicitar('${area}',['${r.id}'])">📦 Solicitar</button>${area === 'alm' && r.ex > 0 ? `<button class="btn btn-s" onclick="CM('mGen');almTraspaso({${r.id}:1})">⇄ Traspasar</button>` : area === 'adm' && r.ex > 0 ? `<button class="btn btn-s" onclick="CM('mGen');almEnvio({'${r.id}':1})">⇄ Enviar a quirófano</button>` : ''}` : ''}<button class="btn btn-p" onclick="CM('mGen')">Cerrar</button>`, 'sm');
+    `${area !== 'qui' && puede('pedidos') ? `<button class="btn btn-s" onclick="CM('mGen');almSolicitar('${area}',['${r.id}'])">📦 Solicitar</button>${area === 'alm' && r.ex > 0 ? `<button class="btn btn-s" onclick="CM('mGen');almTraspaso({${r.id}:1})">⇄ Traspasar</button>` : area === 'adm' && r.ex > 0 ? `<button class="btn btn-s" onclick="CM('mGen');almEnvio({'${r.id}':1},qxAdmId())">⇄ Enviar a quirófano</button>` : ''}` : ''}<button class="btn btn-p" onclick="CM('mGen')">Cerrar</button>`, 'sm');
 }
 // Prellena un pedido con lo que está acabado, crítico, bajo mínimo o por terminarse
 function almPedido(area) {
@@ -4141,12 +4145,13 @@ const almReqCad = t => t !== 'equipo';
 const provs = () => ENT.filter(e => e.activo !== false && e.tipo !== 'cliente').sort((a, b) => a.nombre.localeCompare(b.nombre));
 const optProv = sel => `<option value="">— Sin proveedor —</option>${provs().map(e => `<option value="${e.id}" ${sel === e.id ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}`;
 function almBarra(A) {
-  if (A === 'qui' || !puede('pedidos')) return '';
+  if (!puede('pedidos')) return '';
+  if (A === 'qui') return `<div class="pad" style="padding-bottom:0"><div class="almbar"><button class="btn btn-p btn-sm" onclick="VIEW.envOrg=null;almEnvio()">⇄ Traspaso (almacén de quirófano → quirófano o consultorio)</button></div></div>`;
   const sol = A === 'alm' ? (INV.farSol || []).length : 0;
   return `<div class="pad" style="padding-bottom:0"><div class="almbar">
     ${esAlmCont(A) ? `<div class="seg">${[['tablero', 'Tablero'], ['agregar', 'Agregar manualmente']].map(([k, t]) => `<button class="${VIEW.almV === k ? 'on' : ''}" onclick="VIEW.almV='${k}';renderTab()">${t}</button>`).join('')}</div>
       <button class="btn btn-p btn-sm" onclick="almSubir('${A}')">⬆ Subir inventario</button>
-      ${A === 'alm' ? `<button class="btn btn-s btn-sm" onclick="almTraspaso()">⇄ Traspaso a mostrador${sol ? ` <span class="nbdg" style="position:static;display:inline-block">${sol}</span>` : ''}</button>` : `<button class="btn btn-s btn-sm" onclick="almEnvio()">⇄ Enviar a quirófano</button>`}` : ''}
+      ${A === 'alm' ? `<button class="btn btn-s btn-sm" onclick="almTraspaso()">⇄ Traspaso (mostrador o consultorio)${sol ? ` <span class="nbdg" style="position:static;display:inline-block">${sol}</span>` : ''}</button>` : `<button class="btn btn-s btn-sm" onclick="VIEW.envOrg=qxAdmId();almEnvio()">⇄ Traspaso (quirófano o consultorio)</button>`}` : ''}
     <button class="btn btn-s btn-sm" onclick="almSolicitar('${A}')">📦 Solicitar a proveedor</button>
     <button class="btn btn-s btn-sm" onclick="almAvisos('${A}')">🔔 Avisos</button></div></div>`;
 }
@@ -4394,7 +4399,7 @@ function almTraspaso(pre) {
   const vig = r => r.lotes.filter(l => !l.cad || diasA(l.cad) >= 0).reduce((s, l) => s + l.q, 0);
   const pedido = id => sol.filter(s => String(s.producto_id) === String(id)).reduce((s, x) => s + num(x.cantidad) - num(x.surtido), 0);
   const L = R.sort((a, b) => pedido(b.id) - pedido(a.id) || a.n.localeCompare(b.n));
-  modal('Traspaso del almacén a farmacia mostrador', `<div class="mini" style="margin-bottom:10px">Escribe cuántas piezas pasan a mostrador. Sale primero lo que caduca antes (los lotes caducados no se traspasan). Las solicitudes de la farmacia aparecen arriba con la cantidad pedida.</div>
+  modal('Traspaso del almacén de farmacia', `<div class="fgrd" style="margin-bottom:10px"><div class="fgrp"><label>Va a</label><select id="trD" onchange="document.getElementById('trRw').style.display=this.value==='consultorio'?'':'none'"><option value="farmacia">Farmacia mostrador</option><option value="consultorio">Consultorio</option></select></div><div class="fgrp" id="trRw" style="display:none"><label>Recibe (nombre)</label><input type="text" id="trR" placeholder="Quién recibe en consultorio"></div></div><div class="mini" style="margin-bottom:10px">Escribe cuántas piezas pasan. Sale primero lo que caduca antes (los lotes caducados no se traspasan). Las solicitudes de la farmacia aparecen arriba con la cantidad pedida.</div>
     <input type="text" placeholder="Buscar producto…" oninput="const q=normTx(this.value);document.querySelectorAll('#trL tr[data-n]').forEach(t=>t.style.display=t.dataset.n.includes(q)?'':'none')" style="margin-bottom:10px">
     <div class="tc" style="max-height:52vh;overflow:auto"><table><thead><tr><th>Producto</th><th style="text-align:right">En almacén</th><th style="text-align:right">En mostrador</th><th>Pidió farmacia</th><th style="text-align:right;width:120px">Traspasar</th></tr></thead><tbody id="trL">
     ${L.length ? L.map(r => { const pq = pedido(r.id), v0 = pre && pre[r.id] !== undefined ? Math.min(vig(r), pre[r.id]) : pq ? Math.min(vig(r), pq) : ''; return `<tr data-n="${esc(normTx(r.n))}"><td><b>${esc(r.n)}</b><div class="mini">${r.lotes.filter(l => !l.cad || diasA(l.cad) >= 0).sort((a, b) => String(a.cad || '9') < String(b.cad || '9') ? -1 : 1).slice(0, 3).map(l => `${esc(l.lote)} (${almNum(l.q)}${l.cad ? ', ' + fmtD(l.cad) : ''})`).join(' · ')}</div></td>
@@ -4406,12 +4411,16 @@ async function almTraspasoFirmar() {
   const sol = INV.farSol || [];
   const items = [...document.querySelectorAll('.trQ')].filter(i => num(i.value) > 0).map(i => { const s = sol.find(x => String(x.producto_id) === i.dataset.id); return { producto_id: +i.dataset.id, cantidad: Math.round(num(i.value)), solicitud: s ? s.id : null }; });
   if (!items.length) return toast('Escribe al menos una cantidad', 'warning');
-  let pin; try { pin = await askPin('Firmar traspaso a mostrador', `${items.length} producto(s) · ${items.reduce((s, x) => s + x.cantidad, 0)} pza`); } catch { return; }
-  const r = await rpcConPin('fin_alm_traspaso', { p_items: items }, pin);
+  const dest = document.getElementById('trD')?.value || 'farmacia', rec = (document.getElementById('trR')?.value || '').trim();
+  if (dest === 'consultorio' && !rec) return toast('Escribe quién recibe en consultorio', 'warning');
+  const dn = dest === 'consultorio' ? 'consultorio' : 'farmacia mostrador';
+  let pin; try { pin = await askPin('Firmar traspaso a ' + dn, `${items.length} producto(s) · ${items.reduce((s, x) => s + x.cantidad, 0)} pza`); } catch { return; }
+  const r = dest === 'consultorio' ? await rpcConPin('fin_alm_consultorio', { p_items: items.map(({ producto_id, cantidad }) => ({ producto_id, cantidad })), p_recibe: rec }, pin) : await rpcConPin('fin_alm_traspaso', { p_items: items }, pin);
   if (!r.ok) return toast(ERR[r.error] || r.error, 'error');
+  r.origen = 'Almacén de farmacia'; r.destino = dest === 'consultorio' ? 'Consultorio' : 'Farmacia mostrador'; r.folio = 'TR-' + new Date().toISOString().slice(2, 16).replace(/[-T:]/g, ''); window._ultTr = r;
   await cargarTodo();
-  document.getElementById('mGenB').innerHTML = `${r.piezas ? `<div class="okbox"><b>${r.piezas} pieza(s) traspasadas a farmacia mostrador</b><br>${(r.hechos || []).map(h => { const p = (INV.farProd || []).find(z => z.id === h.producto_id); return esc(p ? p.nombre : '') + ': ' + h.cantidad + ' (' + (h.lotes || []).map(l => 'lote ' + l.lote).join(', ') + ')'; }).join('<br>')}</div>` : ''}${(r.errores || []).length ? `<div class="errbox">${r.errores.map(e => { const p = (INV.farProd || []).find(z => z.id === e.producto_id); return esc(p ? p.nombre : '') + ': ' + esc(e.error); }).join('<br>')}</div>` : ''}`;
-  document.getElementById('mGenF').innerHTML = `<button class="btn btn-p" onclick="CM('mGen')">Listo</button>`;
+  document.getElementById('mGenB').innerHTML = `${r.piezas ? `<div class="okbox"><b>${r.piezas} pieza(s) traspasadas a ${dn}</b><br>${(r.hechos || []).map(h => { const p = (INV.farProd || []).find(z => z.id === h.producto_id); return esc(p ? p.nombre : '') + ': ' + h.cantidad + ' (' + (h.lotes || []).map(l => 'lote ' + l.lote).join(', ') + ')'; }).join('<br>')}</div>` : ''}${(r.errores || []).length ? `<div class="errbox">${r.errores.map(e => { const p = (INV.farProd || []).find(z => z.id === e.producto_id); return esc(p ? p.nombre : '') + ': ' + esc(e.error); }).join('<br>')}</div>` : ''}`;
+  document.getElementById('mGenF').innerHTML = `<button class="btn btn-s" onclick="valeEnvioQx(window._ultTr,'${esc(rec || 'Farmacia')}',true)">🖨 Vale de traspaso</button><button class="btn btn-p" onclick="CM('mGen')">Listo</button>`;
 }
 
 // ── Solicitar a proveedor: crea los pedidos (uno por proveedor) para autorización ──
@@ -4451,41 +4460,54 @@ async function almSolicitarFirmar(A) {
 
 // ── Almacén de Contabilidad (Administración) de COE Quirófano → envío a quirófano ──
 const QX_CAT = { medicamento: 'Fármacos y colirios', insumo: 'Insumos generales', material_quirurgico: 'Insumos médicos', equipo: 'Insumos generales' };
-function almEnvio(pre) {
-  const adm = qxAdmId(), dests = (INV.qxUb || []).filter(u => u.id !== adm && u.area !== 'administracion' && u.tipo !== 'carro');
-  if (!adm) return toast('Falta crear el Almacén de Administración en COE Quirófano', 'error');
-  const R = almFilas('adm').filter(r => r.lotes.some(l => !l.cad || diasA(l.cad) >= 0));
-  const vig = r => r.lotes.filter(l => !l.cad || diasA(l.cad) >= 0).reduce((s, l) => s + l.q, 0);
-  const sug = r => r.min && r.most < r.min ? Math.min(vig(r), Math.ceil(r.min * 2 - r.most)) : '';
-  const L = R.sort((a, b) => (sug(b) ? 1 : 0) - (sug(a) ? 1 : 0) || a.n.localeCompare(b.n));
-  modal('Enviar del Almacén de Contabilidad a quirófano', `<div class="mini" style="margin-bottom:10px">Sale primero el lote que caduca antes; lo caducado no se envía. Ya viene sugerido lo que quirófano tiene en su mínimo o por debajo. Al firmar se genera el vale de envío para que firme quien recibe.</div>
-    <div class="fgrd" style="margin-bottom:10px"><div class="fgrp"><label>Destino</label><select id="enD">${dests.map(u => `<option value="${u.id}" ${u.tipo === 'almacen' ? 'selected' : ''}>${esc(u.nombre)}</option>`).join('')}</select></div>
-      <div class="fgrp"><label>Recibe (nombre)</label><input type="text" id="enR" placeholder="Quién recibe en quirófano"></div></div>
+function almEnvio(pre, origen) {
+  const U = (INV.qxUb || []).filter(u => u.activa !== false), adm = qxAdmId();
+  if (!U.length) return toast('No hay ubicaciones de COE Quirófano', 'error');
+  const conStock = id => (INV.qxLot || []).some(l => l.ubicacion_id === id && num(l.cantidad) > 0);
+  const org = origen || VIEW.envOrg || (VIEW.almA === 'qui' ? (U.find(u => u.area === 'quirofano' && u.tipo === 'almacen') || {}).id : adm) || adm;
+  VIEW.envOrg = org;
+  const O = U.find(u => u.id === org) || {};
+  const dests = U.filter(u => u.id !== org && u.area !== 'administracion');
+  const defD = VIEW.envDest && dests.some(u => u.id === VIEW.envDest) ? VIEW.envDest : (O.area === 'administracion' ? dests.find(u => u.tipo === 'almacen') : dests.find(u => u.tipo === 'sala'))?.id;
+  const hoy = hoyISO(), M = {};
+  (INV.qxLot || []).filter(l => l.ubicacion_id === org && num(l.cantidad) > 0 && (!l.caducidad || l.caducidad >= hoy)).forEach(l => (M[l.material_id] = M[l.material_id] || []).push(l));
+  const mat = id => (INV.qxMat || []).find(m => m.id === id) || {};
+  const enDest = id => (INV.qxLot || []).filter(l => l.material_id === id && l.ubicacion_id === (VIEW.envDest || defD)).reduce((s, l) => s + num(l.cantidad), 0);
+  const L = Object.entries(M).map(([id, ls]) => ({ id, n: mat(id).nombre || 'Material', u: mat(id).unidad || 'pza', min: num(mat(id).stock_minimo), q: ls.reduce((s, l) => s + num(l.cantidad), 0), ls: ls.sort((a, b) => String(a.caducidad || '9') < String(b.caducidad || '9') ? -1 : 1) })).sort((a, b) => a.n.localeCompare(b.n));
+  modal('Traspaso de material · COE Quirófano', `<div class="mini" style="margin-bottom:10px">Elige de dónde sale y a dónde va. Sale primero el lote que caduca antes; lo caducado no se traspasa. Al firmar se genera el vale para la firma de quien recibe.</div>
+    <div class="fgrd" style="margin-bottom:10px">
+      <div class="fgrp"><label>Sale de</label><select id="enO" onchange="VIEW.envOrg=this.value;almEnvio(null,this.value)">${U.filter(u => conStock(u.id) || u.id === org).map(u => `<option value="${u.id}" ${u.id === org ? 'selected' : ''}>${esc(u.area === 'administracion' ? 'Almacén de Contabilidad (Administración)' : u.nombre)}</option>`).join('')}</select></div>
+      <div class="fgrp"><label>Va a</label><select id="enD" onchange="VIEW.envDest=this.value;almEnvio(window._envPre,'${org}')">${dests.map(u => `<option value="${u.id}" ${u.id === (VIEW.envDest || defD) ? 'selected' : ''}>${esc(u.nombre)}</option>`).join('')}</select></div>
+      <div class="fgrp"><label>Recibe (nombre)</label><input type="text" id="enR" value="${esc(VIEW.envRec || '')}" oninput="VIEW.envRec=this.value" placeholder="Quién recibe"></div></div>
     <input type="text" placeholder="Buscar material…" oninput="const q=normTx(this.value);document.querySelectorAll('#enL tr[data-n]').forEach(t=>t.style.display=t.dataset.n.includes(q)?'':'none')" style="margin-bottom:10px">
-    <div class="tc" style="max-height:48vh;overflow:auto"><table><thead><tr><th>Material</th><th style="text-align:right">En Contabilidad</th><th style="text-align:right">En quirófano</th><th style="text-align:right">Mínimo</th><th style="text-align:right;width:110px">Enviar</th></tr></thead><tbody id="enL">
-    ${L.length ? L.map(r => { const v0 = pre && pre[r.id] !== undefined ? Math.min(vig(r), pre[r.id]) : sug(r); return `<tr data-n="${esc(normTx(r.n))}"><td><b>${esc(r.n)}</b><div class="mini">${r.lotes.filter(l => !l.cad || diasA(l.cad) >= 0).sort((a, b) => String(a.cad || '9') < String(b.cad || '9') ? -1 : 1).slice(0, 3).map(l => `${esc(l.lote || 's/l')} (${almNum(l.q)}${l.cad ? ', ' + fmtD(l.cad) : ''})`).join(' · ')}</div></td>
-      <td class="amt" style="text-align:right">${almNum(vig(r))}</td><td class="amt" style="text-align:right;${r.min && r.most <= r.min ? 'color:var(--dg);font-weight:700' : ''}">${almNum(r.most)}</td><td class="amt" style="text-align:right">${r.min ? almNum(r.min) : '—'}</td>
-      <td><input type="number" min="0" max="${vig(r)}" step="any" class="enQ" data-id="${r.id}" value="${v0}" style="text-align:right"></td></tr>`; }).join('') : '<tr><td colspan="5" class="mini">No hay existencias vigentes en el Almacén de Contabilidad.</td></tr>'}</tbody></table></div>`,
-    `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="almEnvioFirmar()">Firmar entrega</button>`, 'xl');
+    <div class="tc" style="max-height:46vh;overflow:auto"><table><thead><tr><th>Material</th><th style="text-align:right">Hay aquí</th><th style="text-align:right">En destino</th><th style="text-align:right">Mínimo</th><th style="text-align:right;width:110px">Traspasar</th></tr></thead><tbody id="enL">
+    ${L.length ? L.map(r => { const v0 = pre && pre[r.id] !== undefined ? Math.min(r.q, pre[r.id]) : ''; return `<tr data-n="${esc(normTx(r.n))}"><td><b>${esc(r.n)}</b><div class="mini">${r.ls.slice(0, 3).map(l => `${esc(l.lote || 's/l')} (${almNum(num(l.cantidad))}${l.caducidad ? ', ' + fmtD(l.caducidad) : ''}${l.consignacion ? ', consigna' : ''})`).join(' · ')}</div></td>
+      <td class="amt" style="text-align:right">${almNum(r.q)} ${esc(r.u)}</td><td class="amt" style="text-align:right">${almNum(enDest(r.id))}</td><td class="amt" style="text-align:right">${r.min ? almNum(r.min) : '—'}</td>
+      <td><input type="number" min="0" max="${r.q}" step="any" class="enQ" data-id="${r.id}" value="${v0}" style="text-align:right"></td></tr>`; }).join('') : `<tr><td colspan="5" class="mini">No hay existencias vigentes en ${esc(O.nombre || 'esta ubicación')}.</td></tr>`}</tbody></table></div>`,
+    `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="almEnvioFirmar()">Firmar traspaso</button>`, 'xl');
+  window._envPre = pre || null;
 }
 async function almEnvioFirmar() {
   const items = [...document.querySelectorAll('.enQ')].filter(i => num(i.value) > 0).map(i => ({ material_id: i.dataset.id, cantidad: num(i.value) }));
-  const dest = document.getElementById('enD').value, rec = document.getElementById('enR').value.trim();
+  const org = document.getElementById('enO').value, dest = document.getElementById('enD').value, rec = document.getElementById('enR').value.trim();
   if (!items.length) return toast('Escribe al menos una cantidad', 'warning');
-  if (!rec) return toast('Escribe quién recibe en quirófano', 'warning');
-  let pin; try { pin = await askPin('Firmar entrega a quirófano', `${items.length} material(es) · recibe ${rec}`); } catch { return; }
-  const r = await rpcConPin('fin_qx_envio', { p_items: items, p_destino: dest, p_recibe: rec }, pin);
+  if (!dest) return toast('Elige a dónde va', 'warning');
+  if (!rec) return toast('Escribe quién recibe', 'warning');
+  const dn = (INV.qxUb || []).find(u => u.id === dest)?.nombre || '';
+  let pin; try { pin = await askPin('Firmar traspaso a ' + dn, `${items.length} material(es) · recibe ${rec}`); } catch { return; }
+  const r = await rpcConPin('fin_qx_traspaso', { p_items: items, p_origen: org, p_destino: dest, p_recibe: rec }, pin);
   if (!r.ok) return toast(ERR[r.error] || r.error, 'error');
-  window._ultEnvio = r;
+  window._ultEnvio = r; VIEW.envRec = '';
   await cargarTodo();
-  document.getElementById('mGenB').innerHTML = `${(r.detalle || []).length ? `<div class="okbox"><b>Envío ${esc(r.folio)} a ${esc(r.destino)}</b><br>${r.detalle.map(d => `${esc(d.nombre)}: ${almNum(d.cantidad)} ${esc(d.unidad || '')} · lote ${esc(d.lote || 's/l')}${d.caducidad ? ' · ' + fmtD(d.caducidad) : ''}`).join('<br>')}</div>` : ''}${(r.errores || []).length ? `<div class="errbox">${r.errores.map(e => { const m = (INV.qxMat || []).find(z => z.id === e.material_id); return esc(m ? m.nombre : '') + ': ' + esc(e.error); }).join('<br>')}</div>` : ''}<div class="mini">Ya aparece en COE Quirófano en ${esc(r.destino || '')}. Imprime el vale para la firma de quien recibe.</div>`;
-  document.getElementById('mGenF').innerHTML = `<button class="btn btn-s" onclick="valeEnvioQx(window._ultEnvio,'${esc(rec)}')">🖨 Vale de envío</button><button class="btn btn-p" onclick="CM('mGen')">Listo</button>`;
+  document.getElementById('mGenB').innerHTML = `${(r.detalle || []).length ? `<div class="okbox"><b>Traspaso ${esc(r.folio)} · ${esc(r.origen)} → ${esc(r.destino)}</b><br>${r.detalle.map(d => `${esc(d.nombre)}: ${almNum(d.cantidad)} ${esc(d.unidad || '')} · lote ${esc(d.lote || 's/l')}${d.caducidad ? ' · ' + fmtD(d.caducidad) : ''}`).join('<br>')}</div>` : ''}${(r.errores || []).length ? `<div class="errbox">${r.errores.map(e => { const m = (INV.qxMat || []).find(z => z.id === e.material_id); return esc(m ? m.nombre : '') + ': ' + esc(e.error); }).join('<br>')}</div>` : ''}<div class="mini">Ya aparece en COE Quirófano en ${esc(r.destino || '')}. Imprime el vale para la firma de quien recibe.</div>`;
+  document.getElementById('mGenF').innerHTML = `<button class="btn btn-s" onclick="valeEnvioQx(window._ultEnvio,'${esc(rec)}')">🖨 Vale de traspaso</button><button class="btn btn-p" onclick="CM('mGen')">Listo</button>`;
 }
-function valeEnvioQx(r, rec) {
+function valeEnvioQx(r, rec, far) {
   if (!r) return;
-  imprimir('Vale de envío ' + r.folio, `<div style="display:flex;align-items:center;gap:14px;border-bottom:2px solid #222;padding-bottom:8px;margin-bottom:10px"><img src="${location.href.replace(/[^/]*$/, '')}assets/coe-logo.png" style="height:48px"><div style="flex:1"><div style="font-size:18px;font-weight:700">VALE DE ENVÍO A QUIRÓFANO</div><div>${esc(r.folio)} · ${new Date().toLocaleString('es-MX')}</div></div></div>
-    <p>De: <b>Almacén de Contabilidad (Administración)</b> · A: <b>${esc(r.destino || '')}</b></p>
-    <table><thead><tr><th>Material</th><th>Lote</th><th>Caducidad</th><th class="r">Cantidad</th></tr></thead><tbody>${(r.detalle || []).map(d => `<tr><td>${esc(d.nombre)}</td><td>${esc(d.lote || '—')}</td><td>${d.caducidad ? fmtD(d.caducidad) : '—'}</td><td class="r">${almNum(d.cantidad)} ${esc(d.unidad || '')}</td></tr>`).join('')}</tbody></table>
+  const filas = far ? (r.hechos || []).flatMap(h => { const p = (INV.farProd || []).find(z => z.id === h.producto_id); return (h.lotes || []).map(l => ({ nombre: p ? p.nombre : '', lote: l.lote, caducidad: l.caducidad, cantidad: l.cantidad, unidad: 'pza' })); }) : (r.detalle || []);
+  imprimir('Vale de traspaso ' + (r.folio || ''), `<div style="display:flex;align-items:center;gap:14px;border-bottom:2px solid #222;padding-bottom:8px;margin-bottom:10px"><img src="${location.href.replace(/[^/]*$/, '')}assets/coe-logo.png" style="height:48px"><div style="flex:1"><div style="font-size:18px;font-weight:700">VALE DE TRASPASO</div><div>${esc(r.folio || '')} · ${new Date().toLocaleString('es-MX')}</div></div></div>
+    <p>De: <b>${esc(r.origen || 'Almacén de Contabilidad (Administración)')}</b> · A: <b>${esc(r.destino || '')}</b></p>
+    <table><thead><tr><th>Material / producto</th><th>Lote</th><th>Caducidad</th><th class="r">Cantidad</th></tr></thead><tbody>${filas.map(d => `<tr><td>${esc(d.nombre)}</td><td>${esc(d.lote || '—')}</td><td>${d.caducidad ? fmtD(d.caducidad) : '—'}</td><td class="r">${almNum(d.cantidad)} ${esc(d.unidad || '')}</td></tr>`).join('')}</tbody></table>
     <div style="display:flex;gap:40px;margin-top:60px"><div style="flex:1;border-top:1px solid #222;text-align:center;padding-top:6px">Entrega · ${esc(cu.nombre)}</div><div style="flex:1;border-top:1px solid #222;text-align:center;padding-top:6px">Recibe · ${esc(rec)}</div></div>`);
 }
 
@@ -4868,6 +4890,7 @@ function ppCuerpo(esDirTab) {
     ${selI.some(x => !x.prop) && puede('cxp') ? `<label>Pagar <select id="ppModo" onchange="VIEW.pp.modo=this.value;renderTab()"><option value="venc" ${P.modo === 'venc' ? 'selected' : ''}>en su fecha de vencimiento</option><option value="unica" ${P.modo === 'unica' ? 'selected' : ''}>todas el mismo día</option><option value="viernes" ${P.modo === 'viernes' ? 'selected' : ''}>el viernes anterior al vencimiento</option></select></label>
       ${P.modo === 'unica' ? `<input type="date" id="ppFecha" value="${P.fecha || hoy}" onchange="VIEW.pp.fecha=this.value">` : ''}
       <button class="btn btn-p btn-sm" onclick="ppFirmar()">✎ Firmar propuesta</button>` : ''}
+    ${selI.some(x => x.f) && puede('cxp') ? `<button class="btn btn-s btn-sm" onclick="cambiarFechaPago(ppItems().filter(x=>VIEW.pp.sel[x.k]&&x.f).map(x=>x.f.id))">📅 Fecha de pago</button>` : ''}
     ${selI.some(x => x.prop) && puede('cxp') ? `<button class="btn btn-s btn-sm" onclick="ppQuitar()">Quitar de propuesta</button>` : ''}
     <button class="btn btn-s btn-sm" onclick="VIEW.pp.sel={};renderTab()">Limpiar</button></div>` : '';
   return `${kpis}${ctl}${cuerpo}${barra}`;
@@ -4987,6 +5010,43 @@ function imprimirPropuesta() {
     ${G.map(g => { const e = ent(g.e) || {}; return `<tr style="background:#eef2f7"><td colspan="5"><b>${esc(e.nombre || '')}</b></td><td class="r"><b>${$$(g.t)}</b></td></tr>` + g.L.map(f => `<tr><td><span class="chk"></span></td><td>${fmtD(f.propuesta_pago)}</td><td>${esc(f.descripcion)}${f.recurrente_id ? ' ↻' : ''}<br><span style="color:#778">${esc(f.numero_factura || '')}</span></td><td>${esc([e.banco, e.clabe, e.convenio_cie ? 'CIE ' + e.convenio_cie : '', f.referencia_cie ? 'Ref ' + f.referencia_cie : ''].filter(Boolean).join(' · '))}</td><td>${fmtD(f.fecha_vencimiento)}</td><td class="r">${$$(saldo(f))}</td></tr>`).join(''); }).join('')}
     <tr class="tot"><td colspan="5">Total propuesto · ${P.length} pago(s) · ${G.length} proveedor(es)</td><td class="r">${$$(sumS(P))}</td></tr></tbody></table>
     <div class="firmas"><div>Preparó<br><b>Contadora</b></div><div>Autorizó y pagó<br><b>Dr. José Antonio Villegas Ávila</b></div></div>`);
+}
+
+// ══ FECHA DE PAGO (vencimiento) de una o varias cuentas ══
+const PLAZOS = [0, 15, 28, 30, 45, 60, 90];
+function fpBase(f) { return String(f.fecha_captura || f.created_at || hoyISO()).slice(0, 10); }
+const sumaDias = (iso, d) => isoD(new Date(new Date(iso + 'T00:00:00').getTime() + d * 864e5));
+function cambiarFechaPago(ids) {
+  const F = ids.map(id => FAC.find(f => f.id === id)).filter(Boolean); if (!F.length) return;
+  const base = fpBase(F[0]), un = F.length === 1, prov = [...new Set(F.map(f => f.entidad_id))];
+  window._fpIds = ids;
+  modal('Fecha de pago', `<div class="mini" style="margin-bottom:10px">${un ? `${esc(nomEnt(F[0].entidad_id))} · ${esc(F[0].descripcion)} · ${$$(saldo(F[0]))}<br>Factura del ${fmtD(base)} · hoy vence ${fmtD(F[0].fecha_vencimiento)}` : `${F.length} cuentas · ${$$(sumS(F))}`}</div>
+    <div class="mini" style="margin-bottom:6px">Plazo desde la fecha de la factura${un ? '' : ' (cada una con su propia fecha)'}:</div>
+    <div class="chips" style="margin-bottom:12px">${PLAZOS.map(d => `<span class="chip" onclick="fpPlazo(${d})">${d ? d + ' días' : 'Contado'}</span>`).join('')}</div>
+    <div class="fgrd"><div class="fgrp"><label>${un ? 'Fecha de pago' : 'O una misma fecha para todas'}</label><input type="date" id="fpF" value="${un ? F[0].fecha_vencimiento || '' : ''}" onchange="window._fpDias=null;document.getElementById('fpTx').textContent=''"></div>
+      ${prov.length === 1 ? `<div class="fgrp"><label style="display:flex;gap:8px;align-items:center;margin-top:26px;cursor:pointer"><input type="checkbox" id="fpProv" style="width:auto"> Usar este plazo siempre con ${esc(nomEnt(prov[0]))}</label></div>` : ''}</div>
+    <div class="mini" id="fpTx" style="margin-top:6px"></div>`,
+    `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="fpGuardar()">Firmar</button>`, 'sm');
+  window._fpDias = null;
+}
+function fpPlazo(d) {
+  const F = window._fpIds.map(id => FAC.find(f => f.id === id)).filter(Boolean);
+  window._fpDias = d;
+  document.getElementById('fpF').value = F.length === 1 ? sumaDias(fpBase(F[0]), d) : '';
+  document.getElementById('fpTx').textContent = F.length === 1 ? `${d ? d + ' días' : 'Contado'} desde el ${fmtD(fpBase(F[0]))} → ${fmtD(sumaDias(fpBase(F[0]), d))}` : `${d} días desde la fecha de cada factura`;
+  document.querySelectorAll('#mGenB .chip').forEach(c => c.classList.toggle('act', c.textContent === (d ? d + ' días' : 'Contado')));
+}
+async function fpGuardar() {
+  const F = window._fpIds.map(id => FAC.find(f => f.id === id)).filter(Boolean), fecha = document.getElementById('fpF').value, d = window._fpDias;
+  const prov = document.getElementById('fpProv')?.checked && d !== null ? d : null;
+  if (!fecha && d === null) return toast('Elige un plazo o una fecha', 'warning');
+  let pin; try { pin = await askPin('Cambiar fecha de pago', `${F.length} cuenta(s)`); } catch { return; }
+  const grupos = {};
+  F.forEach(f => { const x = fecha || sumaDias(fpBase(f), d); (grupos[x] = grupos[x] || []).push(f.id); });
+  let n = 0, err = '';
+  for (const [x, ids] of Object.entries(grupos)) { const r = await rpcConPin('fin_cambiar_vencimiento', { p_facturas: ids, p_fecha: x, p_dias_proveedor: prov }, pin); if (r.ok) n += r.cuentas; else { err = ERR[r.error] || r.error; break; } }
+  if (err) toast(err, 'error'); else toast(`Fecha de pago actualizada en ${n} cuenta(s)${prov !== null ? ' · el proveedor queda con ' + prov + ' días de crédito' : ''}`, 'success');
+  CM('mGen'); VIEW.pp.sel = {}; await cargarTodo(); renderTab();
 }
 </script>
 </body></html>
