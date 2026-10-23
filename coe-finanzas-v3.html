@@ -716,6 +716,12 @@ i.dot{flex:0 0 10px;height:10px;border-radius:50%;margin-top:6px;align-self:flex
 .pprow>input[type=checkbox],.ppgh>input[type=checkbox]{width:18px;height:18px;min-width:18px;flex:0 0 18px;margin:0;padding:0}
 .pp-mon{display:flex;align-items:center}.pp-mon span{position:static;padding:0 4px 0 0}.pp-mon input{padding-left:6px!important;width:100%}
 @media(max-width:700px){.ppk{grid-template-columns:1fr 1fr!important;gap:8px}.ppk .kpi,.ppk>*{padding:10px 12px}.ppk .kv,.ppk [class*=val]{font-size:17px}}
+
+.almbusca{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin:0 0 12px;padding:10px 12px;border:1px solid var(--br);border-radius:12px;background:var(--sf)}
+.almbusca>input[type=text]{flex:1 1 260px;min-width:200px}
+.almbusca label{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--tm);white-space:nowrap}
+.almbusca select,.almbusca input[type=date]{width:auto;padding:6px 8px;font-size:12.5px}
+@media(max-width:700px){.almbusca label{flex:1 1 45%}.almbusca select,.almbusca input[type=date]{flex:1;min-width:0}}
 </style>
 </head>
 <body>
@@ -1140,7 +1146,7 @@ async function cargarTodo(silencioso) {
     q('pedidos', x => x.order('created_at', { ascending: false }).limit(200)),
     q('far_solicitudes_alm', x => x.in('estado', ['pendiente', 'parcial']).order('created_at', { ascending: false }).limit(200)),
     q('qx_materiales', x => x.select('id,nombre,categoria,unidad,stock_minimo,stock_critico,critico,costo,activo').eq('activo', true)),
-    q('qx_lotes', x => x.select('material_id,ubicacion_id,lote,caducidad,cantidad,consignacion,proveedor_id').gt('cantidad', 0)),
+    q('qx_lotes', x => x.select('material_id,ubicacion_id,lote,caducidad,cantidad,consignacion,proveedor_id,created_at').gt('cantidad', 0)),
     q('qx_lio_unidades', x => x.select('marca,modelo,dioptria,serie,caducidad,estado').in('estado', ['disponible', 'reservado'])),
     q('qx_ubicaciones', x => x.select('id,nombre,tipo,area,activa,orden').eq('activa', true).order('orden')),
     q('far_movimientos', x => x.select('producto_id,tipo,cantidad,ubicacion,created_at').eq('tipo', 'salida').gte('created_at', new Date(Date.now() - 28 * 864e5).toISOString()).limit(5000)),
@@ -4000,7 +4006,7 @@ function almFilas(area) {
       const ex = area === 'alm' ? alm : most;
       if (area === 'alm' && !min && !alm && !c4) return;          // producto que no se guarda en almacén
       const tot = alm + most, dias = rate > 0 ? Math.floor((area === 'alm' ? tot : most) / rate) : null;
-      const lotes = (area === 'alm' ? lA : lF).map(l => ({ lote: String(l.lote || '').replace(' ·ALM', ''), cad: l.caducidad, q: num(l.cantidad), costo: num(l.costo) || num(p.costo), serie: l.serie, gar: l.garantia_hasta, factura: l.factura, entrada: l.fecha_entrada }));
+      const lotes = (area === 'alm' ? lA : lF).map(l => ({ lote: String(l.lote || '').replace(' ·ALM', ''), cad: l.caducidad, q: num(l.cantidad), costo: num(l.costo) || num(p.costo), serie: l.serie, gar: l.garantia_hasta, factura: l.factura, entrada: l.fecha_entrada, prov: l.proveedor_id || p.proveedor_id || null }));
       R.push({ p, id: p.id, n: p.nombre, cat: TIPO_INS[p.tipo_insumo] || ({ col: 'Colirio', med: 'Medicamento', var: 'Varios' })[p.categoria] || p.categoria, unidad: p.unidad, ex, alm, most, tot, min, crit, c4, rate, dias, lotes, costo: num(p.costo) });
     });
   } else {
@@ -4012,7 +4018,7 @@ function almFilas(area) {
       const ls = area === 'adm' ? lA : lQ, ex = area === 'adm' ? qA : qQ;
       if (area === 'adm' && !qA && !(num(m.stock_minimo) > 0 && qQ <= num(m.stock_minimo))) return;
       if (area !== 'adm' && !(num(m.stock_minimo) > 0) && !ex) return;
-      R.push({ p: m, qx: true, id: m.id, n: m.nombre, cat: m.categoria, ex, most: area === 'adm' ? qQ : qA, tot: qA + qQ, base: area === 'adm' ? qA + qQ : undefined, min: num(m.stock_minimo), crit: num(m.stock_critico), c4: null, rate: 0, dias: null, unidad: m.unidad, costo: num(m.costo), lotes: ls.map(l => ({ lote: l.lote, cad: l.caducidad, q: num(l.cantidad), costo: num(m.costo), cons: !!l.consignacion, prov: l.proveedor_id })) });
+      R.push({ p: m, qx: true, id: m.id, n: m.nombre, cat: m.categoria, ex, most: area === 'adm' ? qQ : qA, tot: qA + qQ, base: area === 'adm' ? qA + qQ : undefined, min: num(m.stock_minimo), crit: num(m.stock_critico), c4: null, rate: 0, dias: null, unidad: m.unidad, costo: num(m.costo), lotes: ls.map(l => ({ lote: l.lote, cad: l.caducidad, q: num(l.cantidad), costo: num(m.costo), cons: !!l.consignacion, prov: l.proveedor_id, entrada: String(l.created_at || '').slice(0, 10) || null })) });
     });
     if (area === 'adm') return almCierre(R);
     const lio = INV.qxLio || [];
@@ -4056,9 +4062,10 @@ function rAlm() {
   const meses = Array.from({ length: 12 }, (_, i) => { const d = new Date(mes0.getFullYear(), mes0.getMonth() + i, 1), k = isoD(d).slice(0, 7); const L = R.flatMap(r => r.lotes).filter(l => l.cad && l.cad.slice(0, 7) === k && diasA(l.cad) >= 0); return { l: MESES[d.getMonth()].slice(0, 3), hoy: i === 0, a: L.reduce((s, l) => s + l.q, 0), b: L.reduce((s, l) => s + (l.sobra || 0), 0), tip: `${MESES[d.getMonth()]} ${d.getFullYear()}: ${L.length} lote(s), ${L.reduce((s, l) => s + l.q, 0)} pza` }; });
   // Tabla
   const F = VIEW.almF, filt = { riesgo: r => r.est !== 'ok' || r.caducado.length || r.xCad.length, acaba: r => r.est !== 'ok', caduca: r => r.caducado.length || r.xCad.length, todo: () => true }[F] || (() => true);
-  const T = R.filter(filt).sort((a, b) => a.riesgo - b.riesgo || (a.dCad ?? 9999) - (b.dCad ?? 9999) || a.n.localeCompare(b.n));
+  const B = VIEW.almB || {}, busca = almBuscaActiva();
+  const T = R.filter(busca ? almBuscaFiltro : filt).sort((a, b) => a.riesgo - b.riesgo || (a.dCad ?? 9999) - (b.dCad ?? 9999) || a.n.localeCompare(b.n));
   const fCad = r => r.cad ? `<span style="${r.dCad < 0 ? 'color:var(--dg);font-weight:700' : r.dCad <= 30 ? 'color:var(--dg)' : r.dCad <= 90 ? 'color:var(--wn)' : ''}">${fmtD(r.cad)}</span><div class="mini">${r.dCad < 0 ? 'caducado' : 'en ' + r.dCad + ' d'}</div>` : '<span class="mini">—</span>';
-  const fila = r => `<tr style="cursor:pointer" onclick="almDetalle('${A}','${esc(r.id)}')"><td><b>${esc(r.n)}</b>${r.cat ? `<div class="mini">${esc(r.cat)}</div>` : ''}</td>
+  const fila = r => `<tr style="cursor:pointer" onclick="almDetalle('${A}','${esc(r.id)}')"><td><b>${esc(r.n)}</b><div class="mini">${[r.cat, almProvTxt(r), almAltaTxt(r)].filter(Boolean).map(esc).join(' · ')}</div></td>
     <td class="amt" style="text-align:right">${almNum(r.ex)}</td>${esAlmCont(A) ? `<td class="amt" style="text-align:right">${almNum(r.most)}</td>` : ''}
     <td class="amt" style="text-align:right">${r.min ? almNum(r.min) : '<span class="mini">—</span>'}</td>
     ${conPron ? `<td class="amt" style="text-align:right">${r.c4 ? almNum(r.c4 / 4) : '<span class="mini">0</span>'}</td><td style="text-align:right">${r.dias !== null ? `<b style="${r.dias <= DIAS_ALERTA_FIN ? 'color:var(--dg)' : r.dias <= 45 ? 'color:var(--wn)' : ''}">${r.dias} d</b><div class="mini">${fmtD(r.fin)}</div>` : '<span class="mini">sin consumo</span>'}</td>` : ''}
@@ -4085,9 +4092,40 @@ function rAlm() {
     </div>
     ${sol.length ? dcard('La farmacia pidió al almacén', sol.map(x => { const p = (INV.farProd || []).find(z => z.id === x.producto_id); return `<div class="list-item"><i class="dot hi"></i><div class="grow"><b>${esc(p ? p.nombre : 'Producto')}</b><div class="muted">${num(x.cantidad) - num(x.surtido)} pza por surtir${x.estado === 'parcial' ? ' (surtido parcial)' : ''} · ${esc(x.solicitante || '')} · ${fmtD(String(x.created_at || '').slice(0, 10))}</div></div></div>`; }).join(''), sol.length) : ''}
     <div class="ph3" style="margin:16px 0 10px;flex-wrap:wrap"><h3 style="font-size:16px;flex:0 0 auto">${esc(nom)}</h3><div class="seg" style="flex-wrap:wrap">${[['riesgo', 'Con alerta'], ['acaba', 'Se acaba'], ['caduca', 'Caduca'], ['todo', 'Todo']].map(([k, t]) => `<button class="${F === k ? 'on' : ''}" onclick="VIEW.almF='${k}';renderTab()">${t}</button>`).join('')}</div><span style="flex:1"></span><span class="muted">${T.length} de ${R.length}</span></div>
+    ${almBuscador(R)}
     <div class="tc" style="overflow-x:auto">${T.length ? `<table><thead><tr><th>Producto</th><th style="text-align:right">${A === 'alm' ? 'Almacén' : A === 'adm' ? 'Contabilidad' : 'Existencia'}</th>${A === 'adm' ? '<th style="text-align:right">En quirófano</th>' : ''}${A === 'alm' ? '<th style="text-align:right">Mostrador</th>' : ''}<th style="text-align:right">Mínimo</th>${conPron ? '<th style="text-align:right">Salida / semana</th><th style="text-align:right">Alcanza para</th>' : ''}<th>Próxima caducidad</th><th>Estado</th>${A !== 'qui' && puede('pedidos') ? '<th></th>' : ''}</tr></thead><tbody>${T.map(fila).join('')}</tbody></table>` : '<div class="emp">Sin productos en esta lista</div>'}</div>
     <div class="mini" style="margin:10px 0 24px">${conPron ? `«Alcanza para» = existencia total (almacén + mostrador) entre las salidas diarias promedio de las últimas 4 semanas. «No se alcanzan a vender» = piezas que, al ritmo actual, seguirán en existencia el día que caduquen.` : 'Quirófano aún no registra consumo por cirugía, por eso no hay pronóstico de días; se usan mínimo y crítico.'}</div>
   </div>`}`;
+}
+// ── Buscador de la lista: nombre, fecha de alta, proveedor, caducidad ──
+const almProvDe = r => [...new Set(r.lotes.map(l => l.prov).filter(Boolean).concat(r.p?.proveedor_id ? [r.p.proveedor_id] : []))];
+const almProvTxt = r => almProvDe(r).map(nomEnt).filter(Boolean).join(', ');
+const almAltaTxt = r => { const e = r.lotes.map(l => l.entrada).filter(Boolean).sort().pop(); return e ? 'alta ' + fmtD(e) : ''; };
+function almBuscaActiva() { const B = VIEW.almB || {}; return !!(B.q || B.prov || B.altaD || B.altaH || B.cadD || B.cadH || B.cadP); }
+function almBuscaFiltro(r) {
+  const B = VIEW.almB || {}, q = normTx(B.q || '');
+  if (q && !normTx(r.n + ' ' + (r.cat || '') + ' ' + (r.p?.clave || '') + ' ' + (r.p?.marca || '') + ' ' + r.lotes.map(l => l.lote || '').join(' ')).includes(q)) return false;
+  const hoy = hoyISO(), cadH = B.cadP ? (B.cadP === 'cad' ? isoD(new Date(Date.now() - 864e5)) : isoD(new Date(Date.now() + num(B.cadP) * 864e5))) : B.cadH, cadD = B.cadP && B.cadP !== 'cad' ? hoy : B.cadD;
+  if (!(B.prov || B.altaD || B.altaH || cadD || cadH)) return true;
+  return r.lotes.some(l => (!B.prov || (l.prov || r.p?.proveedor_id) === B.prov)
+    && (!B.altaD || (l.entrada && l.entrada >= B.altaD)) && (!B.altaH || (l.entrada && l.entrada <= B.altaH))
+    && (!cadD || (l.cad && l.cad >= cadD)) && (!cadH || (l.cad && l.cad <= cadH)));
+}
+let _almBT = null;
+function almBusca(k, v, ya) {
+  VIEW.almB = VIEW.almB || {}; VIEW.almB[k] = v; if (k === 'cadD' || k === 'cadH') VIEW.almB.cadP = '';
+  clearTimeout(_almBT);
+  _almBT = setTimeout(() => { renderTab(); const e = document.getElementById('almB_' + k); if (e && e.type === 'text') { e.focus(); e.setSelectionRange(v.length, v.length); } }, ya ? 0 : 280);
+}
+function almBuscador(R) {
+  const B = VIEW.almB || {}, provs = [...new Set(R.flatMap(almProvDe))].map(id => [id, nomEnt(id)]).filter(x => x[1]).sort((a, b) => a[1].localeCompare(b[1]));
+  return `<div class="almbusca">
+    <input type="text" id="almB_q" placeholder="🔎 Buscar por nombre, clave, marca o lote" value="${esc(B.q || '')}" oninput="almBusca('q',this.value)">
+    <label>Proveedor<select onchange="almBusca('prov',this.value,1)"><option value="">Todos</option>${provs.map(([id, n]) => `<option value="${id}" ${B.prov === id ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
+    <label>Alta del<input type="date" value="${B.altaD || ''}" onchange="almBusca('altaD',this.value,1)"></label><label>al<input type="date" value="${B.altaH || ''}" onchange="almBusca('altaH',this.value,1)"></label>
+    <label>Caducidad<select onchange="almBusca('cadP',this.value,1)"><option value="">Cualquiera</option>${[['cad', 'Ya caducados'], ['30', 'En 30 días'], ['90', 'En 90 días'], ['180', 'En 6 meses'], ['365', 'En 1 año']].map(([k, t]) => `<option value="${k}" ${B.cadP === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+    <label>del<input type="date" value="${B.cadD || ''}" onchange="almBusca('cadD',this.value,1)"></label><label>al<input type="date" value="${B.cadH || ''}" onchange="almBusca('cadH',this.value,1)"></label>
+    ${almBuscaActiva() ? `<button class="btn btn-s btn-sm" onclick="VIEW.almB={};renderTab()">✕ Limpiar</button><span class="mini">Buscando en todo el inventario</span>` : ''}</div>`;
 }
 function almDetalle(area, id) {
   const r = almFilas(area).find(x => String(x.id) === String(id)); if (!r) return;
