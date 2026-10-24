@@ -751,6 +751,7 @@ tr.fps-prov td{background:var(--sf2)}
 .ppar{color:var(--pr);font-size:13px;width:12px}
 .ppprov+.ppcard,.ppcard+.ppcard{margin-left:10px}
 .ppprov>div b{display:block}.ppprov>.amt{flex-shrink:0}
+.wpasos{margin:0 0 4px 18px;padding:0;font-size:13px;line-height:1.5}.wpasos li{margin-bottom:6px}
 </style>
 </head>
 <body>
@@ -1071,7 +1072,7 @@ function miAcceso() {
     <div class="fld"><label>Contraseña actual</label><input type="password" id="maA" autocomplete="current-password"></div>
     <div class="fld"><label>Nueva contraseña (vacío = no cambiar)</label><input type="password" id="maP" autocomplete="new-password"></div>
     <div class="fld"><label>Nuevo PIN de firma (vacío = no cambiar)</label><input type="password" id="maN" maxlength="4" inputmode="numeric"></div>`,
-    `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="guardarMiAcceso()">Guardar</button>`, 'sm');
+    `<button class="btn btn-s" onclick="CM('mGen');abrirWidget()">📱 Widget iPhone</button><button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="guardarMiAcceso()">Guardar</button>`, 'sm');
 }
 async function guardarMiAcceso() {
   if (!maP.value && !maN.value) return toast('No hay cambios', 'warning');
@@ -3757,7 +3758,7 @@ function helloDir(sel) {
   const h = new Date().getHours(), saludo = h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
   const nom = String(cu.nombre || '').replace(/^(dr|dra)\.?\s+/i, '').split(' ').slice(0, 2).join(' ');
   return `<div class="hello"><div style="display:flex;gap:12px;align-items:center"><img src="assets/coe-logo.png" alt="COE" style="height:40px;width:auto"><div><div class="muted">${new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · Centro Ocular Especializado</div><h2>${saludo}, ${esc(nom)}</h2></div></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${segDir()}${sel}${puede('cxp') ? `<button class="btn btn-p btn-sm" onclick="openSubirPagos()">⬆ Subir pagos</button>` : ''}<button class="btn btn-s btn-sm" onclick="ventanaTuDia('aviso',true)">Tu día</button></div></div>${bannerAvisos()}`;
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${segDir()}${sel}${puede('cxp') ? `<button class="btn btn-p btn-sm" onclick="openSubirPagos()">⬆ Subir pagos</button>` : ''}<button class="btn btn-s btn-sm" onclick="ventanaTuDia('aviso',true)">Tu día</button><button class="btn btn-s btn-sm" title="Widget para la pantalla de inicio del iPhone" onclick="abrirWidget()">📱 Widget</button></div></div>${bannerAvisos()}`;
 }
 function dashPanorama(sel) {
   const P = panoramaVigente(), hoy = hoyISO(), mes = hoy.slice(0, 7);
@@ -5285,6 +5286,119 @@ async function ppMover(x, fecha) {
   if (x.variable && !(num(VIEW.pp.mon[x.k]) > 0)) return toast('Escribe primero el monto de este pago variable (vista Lista)', 'warning');
   VIEW.pp.sel = { [x.k]: true }; VIEW.pp.modo = 'unica'; VIEW.pp.fecha = fecha;
   await ppFirmar();
+}
+
+// ══ WIDGET PARA IPHONE (Scriptable) ══
+// Enlace de solo lectura por usuario (fin_widget_tokens) → RPC fin_widget(p_token) → script de Scriptable.
+const APP_URL = 'https://drvillegasta-beep.github.io/coe-finanzas.html/coe-finanzas-v3.html';
+function scriptWidget(token) {
+  return `// COE Finanzas · widget para iPhone (Scriptable)
+// Solo lectura. Si pierdes el teléfono, desactívalo en COE Finanzas › Mi acceso › Widget para iPhone.
+const TOKEN = "${token}";
+const API = "${SB_URL}/rest/v1/rpc/fin_widget";
+const KEY = "${SB_KEY}";
+const APP = "${APP_URL}#prop";
+const LOGO = "${APP_URL.replace(/[^/]*$/, '')}assets/coe-logo.png";
+
+const C = { fondo: new Color("#14171c"), caja: new Color("#1f242c"), txt: Color.white(), gris: new Color("#9aa4b2"), rojo: new Color("#ef4444"), ambar: new Color("#f59e0b"), azul: new Color("#60a5fa"), verde: new Color("#34d399") };
+const dinero = n => "$" + Math.round(n || 0).toLocaleString("es-MX");
+const corto = n => (n || 0) >= 1e6 ? "$" + ((n || 0) / 1e6).toFixed(1) + " M" : (n || 0) >= 1e4 ? "$" + Math.round((n || 0) / 1e3) + " k" : dinero(n);
+const dia = iso => { const d = new Date(iso + "T12:00:00"); return ["dom","lun","mar","mié","jue","vie","sáb"][d.getDay()] + " " + d.getDate(); };
+
+async function datos() {
+  const r = new Request(API);
+  r.method = "POST";
+  r.headers = { apikey: KEY, Authorization: "Bearer " + KEY, "Content-Type": "application/json" };
+  r.body = JSON.stringify({ p_token: TOKEN });
+  return await r.loadJSON();
+}
+function caja(st, titulo, valor, sub, color) {
+  const b = st.addStack(); b.layoutVertically(); b.backgroundColor = C.caja; b.cornerRadius = 10; b.setPadding(7, 9, 7, 9);
+  const t = b.addText(titulo); t.font = Font.semiboldSystemFont(9); t.textColor = C.gris; t.lineLimit = 1;
+  const v = b.addText(valor); v.font = Font.boldSystemFont(17); v.textColor = color || C.txt; v.minimumScaleFactor = 0.6; v.lineLimit = 1;
+  if (sub) { const s = b.addText(sub); s.font = Font.systemFont(9); s.textColor = C.gris; s.lineLimit = 1; s.minimumScaleFactor = 0.7; }
+  return b;
+}
+
+const fam = config.widgetFamily || "medium";
+let d;
+try { d = await datos(); } catch (e) { d = { ok: false, error: "sin_conexion" }; }
+const w = new ListWidget();
+w.backgroundColor = C.fondo; w.url = APP; w.setPadding(12, 13, 12, 13);
+w.refreshAfterDate = new Date(Date.now() + 30 * 60 * 1000);
+
+const h = w.addStack(); h.centerAlignContent();
+try { const img = await new Request(LOGO).loadImage(); const i = h.addImage(img); i.imageSize = new Size(16, 16); i.tintColor = C.txt; h.addSpacer(5); } catch (e) {}
+const ht = h.addText("COE Finanzas"); ht.font = Font.boldSystemFont(11); ht.textColor = C.gris;
+h.addSpacer();
+const hu = h.addText(d && d.ok ? d.actualizado : ""); hu.font = Font.systemFont(9); hu.textColor = C.gris;
+w.addSpacer(6);
+
+if (!d || !d.ok) {
+  const e = w.addText(d && d.error === "enlace_invalido" ? "Este widget fue desactivado. Genera uno nuevo en COE Finanzas › Mi acceso." : "Sin conexión. Se actualiza solo en unos minutos.");
+  e.font = Font.systemFont(12); e.textColor = C.txt;
+} else if (fam === "small") {
+  const a = w.addText("Vencido"); a.font = Font.semiboldSystemFont(10); a.textColor = C.gris;
+  const av = w.addText(corto(d.vencido.m)); av.font = Font.boldSystemFont(22); av.textColor = d.vencido.n ? C.rojo : C.verde; av.minimumScaleFactor = 0.6;
+  const an = w.addText(d.vencido.n + " cuenta(s)"); an.font = Font.systemFont(10); an.textColor = C.gris;
+  w.addSpacer(6);
+  const s = w.addText("Próx. 7 días " + corto(d.semana.m)); s.font = Font.semiboldSystemFont(11); s.textColor = C.ambar; s.minimumScaleFactor = 0.7;
+  const p = w.addText((d.fps + d.complementos) + " por solicitar · " + d.pedidos + " por autorizar"); p.font = Font.systemFont(9); p.textColor = C.gris; p.minimumScaleFactor = 0.7;
+} else {
+  const r1 = w.addStack(); r1.spacing = 6;
+  caja(r1, "VENCIDO", corto(d.vencido.m), d.vencido.n + " cuenta(s)", d.vencido.n ? C.rojo : C.verde);
+  caja(r1, "PRÓXIMOS 7 DÍAS", corto(d.semana.m), d.semana.n + " pago(s)" + (d.semana.variables ? " +" + d.semana.variables + " var." : ""), C.ambar);
+  w.addSpacer(6);
+  const r2 = w.addStack(); r2.spacing = 6;
+  caja(r2, "POR SOLICITAR", String(d.fps + d.complementos), d.complementos + " complemento(s)", (d.fps + d.complementos) ? C.ambar : C.verde);
+  caja(r2, "POR AUTORIZAR", String(d.pedidos), "pedido(s)", d.pedidos ? C.azul : C.verde);
+  caja(r2, "PENDIENTES", String(d.pendientes), "vencido(s)", d.pendientes ? C.rojo : C.verde);
+  if (fam === "large" || fam === "extraLarge") {
+    w.addSpacer(10);
+    const tt = w.addText("Pagos de los próximos 7 días"); tt.font = Font.semiboldSystemFont(11); tt.textColor = C.gris;
+    w.addSpacer(4);
+    if (!d.proximos.length) { const n = w.addText("Sin pagos programados"); n.font = Font.systemFont(11); n.textColor = C.txt; }
+    for (const x of d.proximos) {
+      const f = w.addStack(); f.centerAlignContent();
+      const a = f.addText(dia(x.f) + "  "); a.font = Font.mediumSystemFont(11); a.textColor = x.pr ? C.azul : C.gris;
+      const b = f.addText(x.p); b.font = Font.systemFont(11); b.textColor = C.txt; b.lineLimit = 1;
+      f.addSpacer();
+      const c = f.addText(dinero(x.m)); c.font = Font.semiboldMonospacedSystemFont(11); c.textColor = C.txt;
+      w.addSpacer(3);
+    }
+  }
+}
+w.addSpacer();
+if (config.runsInWidget) Script.setWidget(w); else await w.presentMedium();
+Script.complete();
+`;
+}
+function abrirWidget(script) {
+  const pasos = `<ol class="wpasos">
+    <li>Instala <b>Scriptable</b> desde la App Store (es gratis).</li>
+    <li>Aquí, toca <b>Generar mi widget</b> y firma con tu PIN; luego <b>Copiar script</b>.</li>
+    <li>Abre Scriptable → toca <b>+</b> (arriba a la derecha) → pega el script → toca el título y ponle <b>COE Finanzas</b> → <b>Listo</b>. Tócalo una vez para ver la vista previa.</li>
+    <li>En la pantalla de inicio, mantén presionado un espacio vacío → <b>Editar</b> → <b>Agregar widget</b> → busca <b>Scriptable</b> → elige el tamaño <b>mediano</b> (o grande para ver la lista de pagos) → <b>Agregar widget</b>.</li>
+    <li>Mantén presionado el widget nuevo → <b>Editar widget</b> → en <b>Script</b> elige <b>COE Finanzas</b>. Listo: se actualiza solo y al tocarlo abre la Propuesta de pagos.</li></ol>`;
+  modal('📱 Widget para iPhone', `<div class="mini" style="margin-bottom:10px">Muestra en tu pantalla de inicio lo vencido, los pagos de los próximos 7 días (cuentas, propuestos, recurrentes y nómina), facturas y complementos por solicitar, pedidos por autorizar y tus pendientes vencidos. Es de <b>solo lectura</b>: no permite pagar ni cambiar nada.</div>
+    ${pasos}
+    ${script ? `<div class="dsec" style="margin:12px 0 6px">Tu script</div><textarea id="wScript" readonly style="width:100%;height:150px;font-family:monospace;font-size:11px">${esc(script)}</textarea>
+      <div class="mini" style="margin-top:6px">Generar uno nuevo desactiva el anterior. Si pierdes el teléfono, toca <b>Desactivar widget</b>.</div>` : ''}`,
+    `${script ? `<button class="btn btn-s" onclick="widgetQuitar()">Desactivar widget</button><button class="btn btn-p" onclick="widgetCopiar()">📋 Copiar script</button>` : `<button class="btn btn-s" onclick="CM('mGen')">Cerrar</button><button class="btn btn-p" onclick="widgetGenerar()">Generar mi widget</button>`}`, 'lg');
+}
+async function widgetGenerar() {
+  const r = await rpcFirmado('fin_widget_token', {}, { titulo: 'Generar widget para iPhone', sub: 'Enlace de solo lectura' });
+  if (!r) return;
+  abrirWidget(scriptWidget(r.token));
+}
+async function widgetCopiar() {
+  const t = document.getElementById('wScript'); if (!t) return;
+  try { await navigator.clipboard.writeText(t.value); toast('Script copiado · pégalo en Scriptable', 'success'); }
+  catch { t.select(); document.execCommand('copy'); toast('Script copiado', 'success'); }
+}
+async function widgetQuitar() {
+  const r = await rpcFirmado('fin_widget_quitar', {}, { titulo: 'Desactivar widget', sub: 'El widget dejará de mostrar datos' });
+  if (r) { CM('mGen'); toast('Widget desactivado', 'success'); }
 }
 </script>
 </body></html>
