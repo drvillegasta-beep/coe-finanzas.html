@@ -728,6 +728,18 @@ i.dot{flex:0 0 10px;height:10px;border-radius:50%;margin-top:6px;align-self:flex
 .fpstot.ok,.fpstot.ok small{color:var(--sc)}
 tr.fps-mes td{background:var(--sf3)}
 tr.fps-prov td{background:var(--sf2)}
+
+.ppweeks{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(250px,1fr);gap:10px;overflow-x:auto;padding-bottom:8px}
+.ppweek{background:var(--sf);border:1px solid var(--br);border-radius:14px;padding:8px;min-height:160px;display:flex;flex-direction:column;gap:6px}
+.ppweek.hoy{border-color:var(--pr)}.ppweek.v{border-color:var(--dg);background:color-mix(in srgb,var(--dg) 6%,var(--sf))}
+.ppweek.over{outline:2px dashed var(--pr);outline-offset:-4px}
+.ppwh{display:flex;justify-content:space-between;gap:8px;padding:4px 4px 8px;border-bottom:1px solid var(--br);margin-bottom:2px}
+.ppcard{background:var(--sf2);border:1px solid var(--br);border-left:3px solid var(--wn);border-radius:10px;padding:8px 9px;cursor:grab;font-size:12.5px}
+.ppcard.p{border-left-color:var(--in)}.ppcard.v{border-left-color:var(--dg)}.ppcard.r:not(.p):not(.v){border-left-color:var(--pu)}
+.ppcard.drag{opacity:.4}
+.ppc1{display:flex;justify-content:space-between;gap:6px}.ppc1 b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ppc2{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-top:5px}
+@media(max-width:700px){.ppweeks{grid-auto-columns:85%}}
 </style>
 </head>
 <body>
@@ -4952,7 +4964,7 @@ function ctlFaltantes() {
 
 // ══ PROPUESTA DE PAGOS · calendario con recurrentes, agrupación y opciones ══
 // La Contadora arma la propuesta (cuentas por pagar + recurrentes calendarizados); el Director la ve en su pestaña del tablero y paga.
-VIEW.pp = VIEW.pp || { hz: 30, grp: 'prov', ord: 'fecha', vista: 'lista', fil: 'todo', mes: 0, dia: null, sel: {}, mon: {}, modo: 'venc', fecha: null };
+VIEW.pp = VIEW.pp || { hz: 30, grp: 'prov', ord: 'fecha', vista: 'sem', fil: 'todo', mes: 0, dia: null, sel: {}, mon: {}, modo: 'venc', fecha: null };
 const PP_GRP = { prov: 'Proveedor', semana: 'Semana', estado: 'Estado', pri: 'Prioridad', cat: 'Categoría' };
 const PP_FIL = { todo: 'Todo', por: 'Por proponer', prop: 'Propuestos', rec: 'Recurrentes', venc: 'Vencidos' };
 function ppCol() { try { return JSON.parse(localStorage.getItem('coe_pp_col') || '{}'); } catch { return {}; } }
@@ -5012,14 +5024,14 @@ function ppCuerpo(esDirTab) {
     ${kpi('Vencido sin proponer', $$(tot(venc)), `${venc.length} cuenta(s)`, venc.length ? 'var(--dg)' : 'var(--sc)', "VIEW.pp.fil='venc';renderTab()")}
   </div>`;
   const ctl = `<div class="ppctl">
-    <div class="seg">${[['lista', '☰ Lista'], ['cal', '▦ Calendario']].map(([k, t]) => `<button class="${P.vista === k ? 'on' : ''}" onclick="VIEW.pp.vista='${k}';renderTab()">${t}</button>`).join('')}</div>
+    <div class="seg">${[['sem', '▥ Por semana'], ['lista', '☰ Lista'], ['cal', '▦ Calendario']].map(([k, t]) => `<button class="${P.vista === k ? 'on' : ''}" onclick="VIEW.pp.vista='${k}';renderTab()">${t}</button>`).join('')}</div>
     <label>Agrupar <select onchange="VIEW.pp.grp=this.value;renderTab()">${Object.entries(PP_GRP).map(([k, t]) => `<option value="${k}" ${P.grp === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
     <label>Ordenar <select onchange="VIEW.pp.ord=this.value;renderTab()"><option value="fecha" ${P.ord === 'fecha' ? 'selected' : ''}>Fecha</option><option value="monto" ${P.ord === 'monto' ? 'selected' : ''}>Monto</option></select></label>
     <label>Horizonte <select onchange="VIEW.pp.hz=+this.value;renderTab()">${[7, 15, 30, 60, 90].map(d => `<option value="${d}" ${P.hz === d ? 'selected' : ''}>${d} días</option>`).join('')}</select></label>
     <div class="chips">${Object.entries(PP_FIL).map(([k, t]) => `<span class="chip ${P.fil === k ? 'act' : ''}" onclick="VIEW.pp.fil='${k}';renderTab()">${t}</span>`).join('')}</div>
     ${P.dia ? `<span class="chip act" onclick="VIEW.pp.dia=null;renderTab()">Día ${fmtD(P.dia)} ✕</span>` : ''}
   </div>`;
-  const cuerpo = P.vista === 'cal' ? ppCalendario(I) : ppLista(L, esDirTab);
+  const cuerpo = P.vista === 'cal' ? ppCalendario(I) : P.vista === 'sem' ? ppSemanas(L, esDirTab) : ppLista(L, esDirTab);
   const barra = nSel.length ? `<div class="ppbar"><b>${nSel.length} seleccionada(s) · ${$$(tot(selI))}</b>
     ${selI.some(x => !x.prop) && puede('cxp') ? `<label>Pagar <select id="ppModo" onchange="VIEW.pp.modo=this.value;renderTab()"><option value="venc" ${P.modo === 'venc' ? 'selected' : ''}>en su fecha de vencimiento</option><option value="unica" ${P.modo === 'unica' ? 'selected' : ''}>todas el mismo día</option><option value="viernes" ${P.modo === 'viernes' ? 'selected' : ''}>el viernes anterior al vencimiento</option></select></label>
       ${P.modo === 'unica' ? `<input type="date" id="ppFecha" value="${P.fecha || hoy}" onchange="VIEW.pp.fecha=this.value">` : ''}
@@ -5181,6 +5193,63 @@ async function fpGuardar() {
   for (const [x, ids] of Object.entries(grupos)) { const r = await rpcConPin('fin_cambiar_vencimiento', { p_facturas: ids, p_fecha: x, p_dias_proveedor: prov }, pin); if (r.ok) n += r.cuentas; else { err = ERR[r.error] || r.error; break; } }
   if (err) toast(err, 'error'); else toast(`Fecha de pago actualizada en ${n} cuenta(s)${prov !== null ? ' · el proveedor queda con ' + prov + ' días de crédito' : ''}`, 'success');
   CM('mGen'); VIEW.pp.sel = {}; await cargarTodo(); renderTab();
+}
+
+// ══ VISTA POR SEMANA: cuándo se paga cada semana (propuestos, cuentas, recurrentes y nómina) · arrastrar o «Mover» ══
+const ppDiaPago = x => x.prop || (x.fecha && x.fecha < hoyISO() ? null : x.fecha);
+function ppSemanaDe(x) { const d = ppDiaPago(x); return d ? ppLunes(d) : 'venc'; }
+function ppSemanas(L, esDirTab) {
+  const hoy = hoyISO(), l0 = ppLunes(hoy), n = Math.max(2, Math.ceil(VIEW.pp.hz / 7) + 1);
+  const W = [{ k: 'venc', t: 'Vencido sin fecha de pago', sub: 'proponer o pagar ya' }];
+  for (let i = 0; i < n; i++) { const l = sumaDias(l0, i * 7); W.push({ k: l, t: i === 0 ? 'Esta semana' : i === 1 ? 'Próxima semana' : 'Semana del ' + fmtD(l).slice(0, 5), sub: fmtD(l).slice(0, 5) + ' al ' + fmtD(sumaDias(l, 6)).slice(0, 5) }); }
+  const ult = W[W.length - 1].k;
+  window._ppL = L;
+  const B = {}; L.forEach((x, i) => { let k = ppSemanaDe(x); if (k !== 'venc' && k > ult) return; if (k !== 'venc' && k < l0) k = 'venc'; (B[k] = B[k] || []).push(i); });
+  const tarjeta = i => { const x = L[i], tarde = x.prop && x.fecha && x.prop > x.fecha, v = ppVencido(x) && !x.prop;
+    return `<div class="ppcard ${x.prop ? 'p' : ''} ${v ? 'v' : ''} ${x.rec ? 'r' : ''}" draggable="${puede('cxp') ? 'true' : 'false'}" ondragstart="event.dataTransfer.setData('text/plain','${i}');this.classList.add('drag')" ondragend="this.classList.remove('drag')" onclick="${x.f ? `verCuenta('${x.f.id}')` : ''}">
+      <div class="ppc1"><b>${esc(nomEnt(x.ent))}</b><span class="amt">${x.variable && !VIEW.pp.mon[x.k] ? '<span class="mini">variable</span>' : $$(ppMonto(x))}</span></div>
+      <div class="mini">${esc(String(x.desc || '').slice(0, 60))}</div>
+      <div class="ppc2">${x.prop ? `<span class="bdg bdg-aut">pagar ${fmtD(x.prop).slice(0, 5)}</span>` : ''}${x.nom ? '<span class="bdg pp-rec">nómina</span>' : x.rec ? '<span class="bdg pp-rec">↻</span>' : ''}${x.fecha ? `<span class="mini" style="${v || tarde ? 'color:var(--dg);font-weight:700' : ''}">vence ${fmtD(x.fecha).slice(0, 5)}${tarde ? ' · se paga tarde' : ''}</span>` : ''}
+        ${puede('cxp') ? `<button class="btn btn-s btn-sm" style="margin-left:auto;padding:2px 8px" onclick="event.stopPropagation();ppMoverDlg(${i})">Mover</button>` : ''}${x.f && puede('pagos', 3) && esDirTab ? `<button class="btn btn-p btn-sm" style="padding:2px 8px" onclick="event.stopPropagation();pagarCuenta('${x.f.id}')">Pagar</button>` : ''}</div></div>`; };
+  return `<div class="mini" style="margin:0 0 8px">Arrastra un pago a otra semana (o toca «Mover»). Los propuestos se pagan el día marcado; lo demás aparece en la semana en que vence. Si lo mueves después de su vencimiento te aviso.</div>
+  <div class="ppweeks">${W.map(w => { const I2 = B[w.k] || [], t = I2.reduce((s, i) => s + ppMonto(L[i]), 0), tp = I2.filter(i => L[i].prop).reduce((s, i) => s + ppMonto(L[i]), 0), nv = I2.filter(i => L[i].variable && !VIEW.pp.mon[L[i].k]).length;
+    if (w.k === 'venc' && !I2.length) return '';
+    return `<div class="ppweek ${w.k === 'venc' ? 'v' : ''} ${w.k === l0 ? 'hoy' : ''}" ondragover="event.preventDefault();this.classList.add('over')" ondragleave="this.classList.remove('over')" ondrop="this.classList.remove('over');ppDrop(event,'${w.k}')">
+      <div class="ppwh"><div><b>${w.t}</b><div class="mini">${w.sub}</div></div><div style="text-align:right"><b class="amt">${$$(t)}</b><div class="mini">${I2.length} pago(s)${tp ? ' · propuesto ' + moneyK(tp) : ''}${nv ? ' · +' + nv + ' variable(s)' : ''}</div></div></div>
+      ${I2.sort((a, b) => String(ppDiaPago(L[a]) || L[a].fecha || '').localeCompare(String(ppDiaPago(L[b]) || L[b].fecha || '')) || ppMonto(L[b]) - ppMonto(L[a])).map(tarjeta).join('') || '<div class="mini" style="padding:10px;text-align:center">Sin pagos</div>'}</div>`; }).join('')}</div>`;
+}
+// Día de pago al soltar en una semana: su vencimiento si cae en esa semana, si no el viernes; nunca antes de hoy
+function ppDiaEnSemana(x, l) {
+  const hoy = hoyISO(), fin = sumaDias(l, 6);
+  let d = x.fecha && x.fecha >= l && x.fecha <= fin ? x.fecha : sumaDias(l, 4);
+  if (d < hoy) d = hoy > fin ? hoy : hoy;
+  return d;
+}
+function ppDrop(ev, wk) {
+  ev.preventDefault(); const i = +ev.dataTransfer.getData('text/plain'); const x = (window._ppL || [])[i]; if (!x) return;
+  if (wk === 'venc') return toast('Elige una semana para pagarlo', 'info');
+  ppMover(x, ppDiaEnSemana(x, wk));
+}
+function ppMoverDlg(i) {
+  const x = window._ppL[i]; if (!x) return; window._ppMx = x;
+  const l0 = ppLunes(hoyISO()), op = [0, 1, 2, 3, 4, 5].map(n => { const l = sumaDias(l0, n * 7), d = ppDiaEnSemana(x, l); return `<button class="btn btn-s" style="justify-content:space-between;width:100%;margin-bottom:6px" onclick="CM('mGen');ppMover(window._ppMx,'${d}')"><span>${n === 0 ? 'Esta semana' : n === 1 ? 'Próxima semana' : 'Semana del ' + fmtD(l).slice(0, 5)}</span><span class="mini">pagar ${fmtD(d)}${x.fecha && d > x.fecha ? ' · <b style="color:var(--dg)">después del vencimiento</b>' : ''}</span></button>`; }).join('');
+  modal('Mover pago', `<div style="margin-bottom:10px"><b>${esc(nomEnt(x.ent))}</b> · ${x.variable && !VIEW.pp.mon[x.k] ? 'monto variable' : $$(ppMonto(x))}<div class="mini">${esc(x.desc || '')}${x.fecha ? ' · vence <b>' + fmtD(x.fecha) + '</b>' : ''}${x.prop ? ' · hoy propuesto para el ' + fmtD(x.prop) : ''}</div></div>${op}
+    <div class="fgrd" style="margin-top:8px"><div class="fgrp"><label>O elige el día</label><input type="date" id="ppMvF" value="${x.prop || x.fecha || hoyISO()}" min="${hoyISO()}"></div></div>`,
+    `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="const d=document.getElementById('ppMvF').value;CM('mGen');ppMover(window._ppMx,d)">Mover a esa fecha</button>`, 'sm');
+}
+async function ppMover(x, fecha) {
+  if (!fecha) return;
+  if (x.prop === fecha) return;
+  if (x.fecha && fecha > x.fecha && !confirm(`${nomEnt(x.ent)} vence el ${fmtD(x.fecha)}.\nSi lo pagas el ${fmtD(fecha)} serán ${diasEntre(x.fecha, fecha)} día(s) después del vencimiento.\n\n¿Moverlo de todos modos?`)) return;
+  if (x.prop && x.f) {
+    const r = await rpcFirmado('fin_proponer_pago', { p_facturas: [x.f.id], p_fecha: fecha }, { titulo: 'Mover pago propuesto', sub: `${nomEnt(x.ent)} · pagar el ${fmtD(fecha)}` });
+    if (r) { toast('Pago movido al ' + fmtD(fecha), 'success'); await cargarTodo(); renderTab(); }
+    return;
+  }
+  // No estaba propuesto: se propone en esa fecha (si es recurrente se crea su cuenta)
+  if (x.variable && !(num(VIEW.pp.mon[x.k]) > 0)) return toast('Escribe primero el monto de este pago variable (vista Lista)', 'warning');
+  VIEW.pp.sel = { [x.k]: true }; VIEW.pp.modo = 'unica'; VIEW.pp.fecha = fecha;
+  await ppFirmar();
 }
 </script>
 </body></html>
