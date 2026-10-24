@@ -722,6 +722,12 @@ i.dot{flex:0 0 10px;height:10px;border-radius:50%;margin-top:6px;align-self:flex
 .almbusca label{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--tm);white-space:nowrap}
 .almbusca select,.almbusca input[type=date]{width:auto;padding:6px 8px;font-size:12.5px}
 @media(max-width:700px){.almbusca label{flex:1 1 45%}.almbusca select,.almbusca input[type=date]{flex:1;min-width:0}}
+
+.fpstot{display:inline-flex;align-items:center;gap:8px;color:var(--dg);font-size:38px;font-weight:800;line-height:1;font-family:var(--fn)}
+.fpstot small{font-size:11.5px;font-weight:600;color:var(--dg);line-height:1.3;text-transform:none}
+.fpstot.ok,.fpstot.ok small{color:var(--sc)}
+tr.fps-mes td{background:var(--sf3)}
+tr.fps-prov td{background:var(--sf2)}
 </style>
 </head>
 <body>
@@ -1824,6 +1830,18 @@ function fpsCoincide(f, fecha) {
 }
 let _fpsBT = null;
 function fpsBusca(k, v, ya) { VIEW.fpsB[k] = v; clearTimeout(_fpsBT); _fpsBT = setTimeout(() => { renderTab(); const e = document.getElementById('fpsB_' + k); if (e && e.type === 'text') { e.focus(); e.setSelectionRange(v.length, v.length); } }, ya ? 0 : 280); }
+// Agrupa por mes y, dentro de cada mes, compacta por proveedor (se despliega solo al tocarlo)
+VIEW.fpsAbre = VIEW.fpsAbre || {}; VIEW.fpsMes = VIEW.fpsMes || {};
+function fpsMesProv(L, fechaDe, fila, cab, ncol, pre, montoDe, accProv) {
+  const M = {}; L.forEach(f => { const k = String(fechaDe(f) || '').slice(0, 7) || 'sin-fecha'; (M[k] = M[k] || []).push(f); });
+  const asc = VIEW.fpsOrd === 'fecha_asc', ks = Object.keys(M).sort((a, b) => asc ? a.localeCompare(b) : b.localeCompare(a));
+  const ordP = (a, b) => VIEW.fpsOrd.startsWith('monto') ? b.m - a.m : VIEW.fpsOrd === 'proveedor' ? a.n.localeCompare(b.n) : (b.venc - a.venc) || b.F.length - a.F.length || a.n.localeCompare(b.n);
+  return `<table>${cab}<tbody>${ks.map(k => { const F = M[k], mk = pre + k, cerrM = VIEW.fpsMes[mk], tm = F.reduce((s, f) => s + montoDe(f), 0), vm = F.filter(f => diasA(f._x ? f._x.lim : limFps(f)) < 0).length;
+    const G = {}; F.forEach(f => (G[f.entidad_id] = G[f.entidad_id] || []).push(f));
+    const P = Object.entries(G).map(([eid, F2]) => ({ eid, F: F2, n: nomEnt(eid), m: F2.reduce((s, f) => s + montoDe(f), 0), venc: F2.filter(f => diasA(f._x ? f._x.lim : limFps(f)) < 0).length })).sort(ordP);
+    return `<tr class="grp-hdr fps-mes" style="cursor:pointer" onclick="VIEW.fpsMes['${mk}']=!VIEW.fpsMes['${mk}'];renderTab()"><td>${cerrM ? '▸' : '▾'}</td><td colspan="2"><div class="grp-name">${k === 'sin-fecha' ? 'Sin fecha' : MES_TXT(k)} <span class="bdg bdg-ven" style="margin-left:6px">${F.length} pendiente(s)</span> <span class="mini">${P.length} proveedor(es)${vm ? ` · <b style="color:var(--dg)">${vm} fuera de plazo</b>` : ''}</span></div></td><td class="amt" style="text-align:right">${$$(tm)}</td><td colspan="${ncol - 4}"></td></tr>` + (cerrM ? '' : P.map(p => { const pk = mk + '|' + p.eid, ab = VIEW.fpsAbre[pk];
+      return `<tr class="fps-prov" style="cursor:pointer" onclick="VIEW.fpsAbre['${pk}']=!VIEW.fpsAbre['${pk}'];renderTab()"><td style="padding-left:18px">${ab ? '▾' : '▸'}</td><td colspan="2"><b>${esc(p.n)}</b> <span class="mini">${p.F.length} pendiente(s)${p.venc ? ` · <b style="color:var(--dg)">${p.venc} fuera de plazo</b>` : ''}</span></td><td class="amt" style="text-align:right">${$$(p.m)}</td><td colspan="${ncol - 4}" style="text-align:right" onclick="event.stopPropagation()">${accProv ? accProv(p.F) : ''}</td></tr>${ab ? p.F.map(fila).join('') : ''}`; }).join('')); }).join('')}</tbody></table>`;
+}
 function rFps() {
   const B = VIEW.fpsB, st = B.st || '';
   const TOD = vivas().filter(porSolicitar), CTOD = complementosPendientes(), ITOD = docsIncompletos();
@@ -1837,21 +1855,7 @@ function rFps() {
     <td>${fmtD(limFps(f))}<div class="mini">${fpsDiasTxt(f)}</div></td><td class="mini">${c ? fmtDT(c.enviado_at) : '<span style="color:var(--wn)">no se ha pedido</span>'}</td>
     <td>${puede('fps') ? `<div class="rowact"><button class="btn btn-s btn-sm" onclick="correoProveedor('${f.entidad_id}','${f.id}',null,'factura')">✉ Pedir</button><button class="btn btn-p btn-sm" onclick="openUpload('${f.id}')">⬆ XML/PDF</button></div>` : ''}</td></tr>`; };
   const cab = '<thead><tr><th></th><th>Proveedor · concepto</th><th>Pago</th><th style="text-align:right">Monto</th><th>Límite para solicitar</th><th>Último aviso</th><th></th></tr></thead>';
-  let cuerpo;
-  if (VIEW.fpsVista === 'prov') {
-    const G = {}; L.forEach(f => (G[f.entidad_id] = G[f.entidad_id] || []).push(f));
-    const grupos = Object.entries(G).sort((a, b) => (b[1].some(fpsPagada) - a[1].some(fpsPagada)) || (VIEW.fpsOrd.startsWith('monto') ? b[1].reduce((s, f) => s + num(f.monto_pagado), 0) - a[1].reduce((s, f) => s + num(f.monto_pagado), 0) : VIEW.fpsOrd === 'limite' ? Math.min(...a[1].map(f => diasA(limFps(f)))) - Math.min(...b[1].map(f => diasA(limFps(f)))) : VIEW.fpsOrd === 'proveedor' ? nomEnt(a[0]).localeCompare(nomEnt(b[0])) : String(b[1][0].fecha_pago || '').localeCompare(String(a[1][0].fecha_pago || ''))));
-    cuerpo = `<table>${cab}<tbody>${grupos.map(([eid, F]) => { const ab = VIEW.fpsAbre[eid], dmin = Math.min(...F.map(f => diasA(limFps(f)))), m = F.reduce((s, f) => s + num(fpsPagada(f) ? f.monto_pagado : f.monto_total), 0);
-      return `<tr class="grp-hdr" style="cursor:pointer" onclick="VIEW.fpsAbre['${eid}']=!VIEW.fpsAbre['${eid}'];renderTab()"><td>${ab ? '▾' : '▸'}</td><td colspan="2"><div class="grp-name">${esc(nomEnt(eid))} <span class="mini">${F.length} factura(s) · ${F.filter(fpsPagada).length} pagada(s)</span></div></td><td class="amt" style="text-align:right">${$$(m)}</td><td class="mini">${dmin < 0 ? `<b style="color:var(--dg)">${F.filter(f => diasA(limFps(f)) < 0).length} vencida(s)</b>` : 'quedan ' + dmin + ' d'}</td><td></td>
-        <td onclick="event.stopPropagation()">${puede('fps') ? `<button class="btn btn-s btn-sm" onclick="correoProveedor('${eid}','${F[0].id}',null,'factura')">✉ Pedir todas</button>` : ''}</td></tr>${ab ? F.map(fila).join('') : ''}`; }).join('')}</tbody></table>`;
-  } else {
-    // Separadas por mes (fecha de pago o, si no hay pago, de vencimiento), con número de facturas pendientes
-    const M = {}; L.forEach(f => { const k = fpsFecha(f).slice(0, 7) || 'sin-fecha'; (M[k] = M[k] || []).push(f); });
-    const asc = VIEW.fpsOrd === 'fecha_asc', ks = Object.keys(M).sort((a, b) => asc ? a.localeCompare(b) : b.localeCompare(a));
-    VIEW.fpsMes = VIEW.fpsMes || {};
-    cuerpo = `<table>${cab}<tbody>${ks.map(k => { const F = M[k], p = F.filter(fpsPagada), cerr = VIEW.fpsMes[k], m = F.reduce((s, f) => s + num(fpsPagada(f) ? f.monto_pagado : f.monto_total), 0);
-      return `<tr class="grp-hdr" style="cursor:pointer" onclick="VIEW.fpsMes['${k}']=!VIEW.fpsMes['${k}'];renderTab()"><td>${cerr ? '▸' : '▾'}</td><td colspan="2"><div class="grp-name">${k === 'sin-fecha' ? 'Sin fecha' : MES_TXT(k)} <span class="bdg bdg-pnd" style="margin-left:6px">${F.length} pendiente(s)</span> <span class="mini">pagadas sin factura</span></div></td><td class="amt" style="text-align:right">${$$(m)}</td><td colspan="3" class="mini">${F.filter(f => diasA(limFps(f)) < 0).length ? `<b style="color:var(--dg)">${F.filter(f => diasA(limFps(f)) < 0).length} fuera de plazo</b>` : ''}</td></tr>${cerr ? '' : F.map(fila).join('')}`; }).join('')}</tbody></table>`;
-  }
+  const cuerpo = fpsMesProv(L, fpsFecha, fila, cab, 7, 'f', f => num(fpsPagada(f) ? f.monto_pagado : f.monto_total), F => puede('fps') ? `<button class="btn btn-s btn-sm" onclick="correoProveedor('${F[0].entidad_id}','${F[0].id}',null,'factura')">✉ Pedir todas</button>` : '');
   const sel = (k, t) => `<option value="${k}" ${VIEW.fpsOrd === k ? 'selected' : ''}>${t}</option>`;
   const activo = !!(B.q || B.desde || B.hasta || st);
   const nTot = TOD.length + CTOD.length;
@@ -1862,13 +1866,13 @@ function rFps() {
     <label>Estatus<select onchange="fpsBusca('st',this.value,1)">${[['', 'Todos'], ['pag', 'Pagado sin factura'], ['comp', 'Pagado sin complemento de pago'], ['inc', 'Documento incompleto']].map(([k, t]) => `<option value="${k}" ${st === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
     ${activo ? `<button class="btn btn-s btn-sm" onclick="VIEW.fpsB={q:'',desde:'',hasta:'',st:''};renderTab()">✕ Limpiar</button>` : ''}
     <div class="chips" style="flex-basis:100%">${chip('comp', 'Pagadas sin complemento', CTOD.length)}${chip('pag', 'Pagadas sin factura', TOD.length)}${chip('inc', 'Documento incompleto', ITOD.length)}</div></div>`;
-  const compHTML = !st || st === 'comp' ? `<div class="dsec" style="margin:0 0 8px">Complementos de pago por solicitar (${C.length}${activo && C.length !== CTOD.length ? ' de ' + CTOD.length : ''})</div><div class="tc" style="margin-bottom:22px">${C.length ? `<table><thead><tr><th></th><th>Proveedor</th><th>Factura</th><th style="text-align:right">Total</th><th style="text-align:right">Pagado</th><th>Faltan</th><th>Límite</th><th></th></tr></thead><tbody>${C.map(x => `<tr><td><span class="sem ${x.d < 0 ? 'r' : x.d <= 5 ? 'a' : 'v'}"></span></td><td><b>${esc(nomEnt(x.f.entidad_id))}</b></td><td>${esc(x.f.numero_factura || x.f.descripcion)}</td><td class="amt" style="text-align:right">${$$(x.f.monto_total)}</td><td class="amt" style="text-align:right">${$$(x.f.monto_pagado)}</td><td><span class="dtag no">${x.falta} de ${x.pg}</span></td><td>${fmtD(x.lim)}<div class="mini">${x.d < 0 ? `<b style="color:var(--dg)">venció hace ${-x.d} d</b>` : 'quedan ' + x.d + ' d'}</div></td><td>${puede('fps') ? `<div class="rowact"><button class="btn btn-s btn-sm" onclick="correoProveedor('${x.f.entidad_id}','${x.f.id}',null,'aclaracion')">✉ Pedir</button><button class="btn btn-p btn-sm" onclick="openUpload('${x.f.id}')">⬆ Complemento</button></div>` : ''}</td></tr>`).join('')}</tbody></table>` : `<div class="emp" style="padding:18px">${activo ? 'Ningún complemento coincide' : '✓ Sin complementos pendientes'}</div>`}</div>` : '';
+  const compHTML = !st || st === 'comp' ? `<div class="dsec" style="margin:0 0 8px">Complementos de pago por solicitar (${C.length}${activo && C.length !== CTOD.length ? ' de ' + CTOD.length : ''})</div><div class="tc" style="margin-bottom:22px">${C.length ? fpsMesProv(C.map(x => Object.assign({}, x.f, { _x: x })), f => f._x.ult, f => { const x = f._x; return `<tr><td><span class="sem ${x.d < 0 ? 'r' : x.d <= 5 ? 'a' : 'v'}"></span></td><td><b>${esc(nomEnt(x.f.entidad_id))}</b><div class="mini">${esc(x.f.numero_factura || x.f.descripcion)}</div></td><td class="amt" style="text-align:right">${$$(x.f.monto_total)}</td><td class="amt" style="text-align:right">${$$(x.f.monto_pagado)}</td><td><span class="dtag no">${x.falta} de ${x.pg}</span></td><td>${fmtD(x.lim)}<div class="mini">${x.d < 0 ? `<b style="color:var(--dg)">venció hace ${-x.d} d</b>` : 'quedan ' + x.d + ' d'}</div></td><td>${puede('fps') ? `<div class="rowact"><button class="btn btn-s btn-sm" onclick="correoProveedor('${x.f.entidad_id}','${x.f.id}',null,'aclaracion')">✉ Pedir</button><button class="btn btn-p btn-sm" onclick="openUpload('${x.f.id}')">⬆ Complemento</button></div>` : ''}</td></tr>`; }, '<thead><tr><th></th><th>Proveedor · factura</th><th style="text-align:right">Total</th><th style="text-align:right">Pagado</th><th>Faltan</th><th>Límite</th><th></th></tr></thead>', 7, 'c', f => num(f.monto_pagado), F => puede('fps') ? `<button class="btn btn-s btn-sm" onclick="correoProveedor('${F[0].entidad_id}','${F[0].id}',null,'aclaracion')">✉ Pedir todos</button>` : '') : `<div class="emp" style="padding:18px">${activo ? 'Ningún complemento coincide' : '✓ Sin complementos pendientes'}</div>`}</div>` : '';
   const listaHTML = st === 'comp' || st === 'inc' ? '' : `<div class="dsec" style="margin:0 0 8px">Facturas por solicitar (${L.length}${activo && L.length !== TOD.length ? ' de ' + TOD.length : ''})</div>
-    <div class="almbar" style="margin-bottom:12px"><div class="seg">${[['lista', 'Por mes'], ['prov', 'Compacta por proveedor']].map(([k, t]) => `<button class="${VIEW.fpsVista === k ? 'on' : ''}" onclick="VIEW.fpsVista='${k}';renderTab()">${t}</button>`).join('')}</div>
+    <div class="almbar" style="margin-bottom:12px"><span class="mini">Por mes y compactadas por proveedor · toca un proveedor para ver sus facturas</span>
       <label class="mini" style="display:flex;gap:8px;align-items:center;margin:0">Ordenar por <select onchange="VIEW.fpsOrd=this.value;renderTab()" style="width:auto;min-height:34px;padding:4px 10px">${sel('fecha', 'Fecha de pago (reciente primero)')}${sel('fecha_asc', 'Fecha de pago (antigua primero)')}${sel('monto', 'Monto (mayor primero)')}${sel('monto_asc', 'Monto (menor primero)')}${sel('proveedor', 'Proveedor (A–Z)')}${sel('limite', 'Fecha límite')}</select></label>
       <span class="mini" style="margin-left:auto">${pag.length} pagadas · ${$$(tot)}${venc.length ? ` · <b style="color:var(--dg)">${venc.length} fuera de plazo</b>` : ''} · límite ${fmtD(ultHabil(finMesISO()))}</span></div>
     <div class="tc">${L.length ? cuerpo : `<div class="emp"><div class="ic">✓</div><p>${activo ? 'Ninguna factura coincide con la búsqueda.' : 'Lista en cero. No hay facturas por solicitar.'}</p></div>`}</div>`;
-  return `<div class="ph"><div><div class="ptit">Facturas por solicitar <span class="bdg ${nTot ? 'bdg-pnd' : 'bdg-apr'}" style="vertical-align:middle;font-size:13px">${nTot} pendiente(s)</span></div><div class="psub">Solo pagos ya hechos (con transferencia o comprobante) a los que les falta la factura o el complemento de pago · lo que aún no se liquida está en Por pagar · al subir el XML se cierran solos</div></div><button class="btn btn-p btn-sm" onclick="openUpload()">⬆ Subir factura</button></div>
+  return `<div class="ph"><div><div class="ptit" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">Facturas por solicitar <span class="fpstot ${nTot ? '' : 'ok'}">${nTot}<small>${nTot === 1 ? 'pendiente' : 'pendientes'}<br>${CTOD.length} complemento(s) · ${TOD.length} factura(s)</small></span></div><div class="psub">Solo pagos ya hechos (con transferencia o comprobante) a los que les falta la factura o el complemento de pago · lo que aún no se liquida está en Por pagar · al subir el XML se cierran solos</div></div><button class="btn btn-p btn-sm" onclick="openUpload()">⬆ Subir factura</button></div>
   <div class="pad">
     ${buscador}
     ${compHTML}
@@ -1891,7 +1895,7 @@ function complementosPendientes() {
     const pg = ABO.filter(a => a.factura_id === f.id && !a.anulado).length, cp = DOCS.filter(x => x.tabla === 'fin_facturas' && x.registro_id === f.id && x.tipo === 'complemento').length;
     const ult = ABO.filter(a => a.factura_id === f.id && !a.anulado).map(a => String(a.fecha_pago || '').slice(0, 10)).sort().pop() || hoyISO();
     const b = new Date(ult + 'T12:00:00'), lim = isoD(new Date(b.getFullYear(), b.getMonth() + 1, 5));
-    return { f, falta: pg - cp, pg, lim, d: diasA(lim) };
+    return { f, falta: pg - cp, pg, lim, d: diasA(lim), ult };
   }).filter(x => x.falta > 0).sort((a, b) => a.d - b.d);
 }
 
