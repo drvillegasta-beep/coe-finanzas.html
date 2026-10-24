@@ -1838,7 +1838,18 @@ function rFps() {
       <label class="mini" style="display:flex;gap:8px;align-items:center;margin:0">Ordenar por <select onchange="VIEW.fpsOrd=this.value;renderTab()" style="width:auto;min-height:34px;padding:4px 10px">${sel('fecha', 'Fecha de pago (reciente primero)')}${sel('fecha_asc', 'Fecha de pago (antigua primero)')}${sel('monto', 'Monto (mayor primero)')}${sel('monto_asc', 'Monto (menor primero)')}${sel('proveedor', 'Proveedor (A–Z)')}${sel('limite', 'Fecha límite')}</select></label>
       <span class="mini" style="margin-left:auto">${pag.length} pagadas · ${$$(tot)}${venc.length ? ` · <b style="color:var(--dg)">${venc.length} fuera de plazo</b>` : ''} · límite ${fmtD(ultHabil(finMesISO()))}</span></div>
     <div class="tc">${L.length ? cuerpo : '<div class="emp"><div class="ic">✓</div><p>Lista en cero. No hay facturas por solicitar.</p></div>'}</div>
+    ${docsIncompletosCaja()}
   </div>`;
+}
+// Facturas recabadas a las que les falta el XML o el PDF (seguimiento, no bloquean)
+const faltaDoc = f => { const x = !!(f.xml_url || DOCS.some(d => d.registro_id === f.id && d.tipo === 'xml')), p = !!(f.pdf_url || DOCS.some(d => d.registro_id === f.id && d.tipo === 'pdf')); return !x && p ? 'XML' : x && !p ? 'PDF' : !x && !p ? 'XML y PDF' : ''; };
+const docsIncompletos = () => vivas().filter(f => f.tipo === 'egreso' && f.uuid_cfdi && /AVISO: falta/.test(f.notas || '') && faltaDoc(f));
+function docsIncompletosCaja() {
+  const L = docsIncompletos().sort((a, b) => nomEnt(a.entidad_id).localeCompare(nomEnt(b.entidad_id)) || String(b.fecha_vencimiento).localeCompare(String(a.fecha_vencimiento)));
+  if (!L.length) return '';
+  const ab = VIEW.diAbre;
+  return `<div class="dsec" style="margin:22px 0 8px;cursor:pointer" onclick="VIEW.diAbre=!VIEW.diAbre;renderTab()">${ab ? '▾' : '▸'} Facturas recabadas con documento incompleto (${L.length}) <span class="mini" style="font-weight:400">· ya están pagadas y fuera de la lista; falta completar el archivo para el expediente</span></div>
+    ${ab ? `<div class="tc"><table><thead><tr><th>Proveedor</th><th>Factura</th><th style="text-align:right">Monto</th><th>Falta</th><th>Documentos</th><th></th></tr></thead><tbody>${L.map(f => `<tr style="cursor:pointer" onclick="verCuenta('${f.id}')"><td><b>${esc(nomEnt(f.entidad_id))}</b><div class="mini">${esc(f.descripcion || '')}</div></td><td>${esc(f.numero_factura || '')}<div class="mini">${fmtD(f.fecha_vencimiento)}</div></td><td class="amt" style="text-align:right">${$$(f.monto_total)}</td><td><span class="bdg bdg-pnd">${faltaDoc(f)}</span></td><td class="mini">${f.xml_url ? `<a href="${esc(f.xml_url)}" target="_blank" onclick="event.stopPropagation()">XML</a> ` : ''}${f.pdf_url ? `<a href="${esc(f.pdf_url)}" target="_blank" onclick="event.stopPropagation()">PDF</a>` : ''}</td><td onclick="event.stopPropagation()">${puede('fps') ? `<div class="rowact"><button class="btn btn-s btn-sm" onclick="correoProveedor('${f.entidad_id}','${f.id}',null,'factura')">✉ Pedir</button><button class="btn btn-p btn-sm" onclick="openUpload('${f.id}')">⬆ ${faltaDoc(f) === 'PDF' ? 'PDF' : 'XML'}</button></div>` : ''}</td></tr>`).join('')}</tbody></table></div>` : ''}`;
 }
 function complementosPendientes() {
   return vivas().filter(f => f.tipo === 'egreso' && f.metodo_pago === 'PPD').map(f => {
