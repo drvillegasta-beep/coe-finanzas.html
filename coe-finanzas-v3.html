@@ -740,6 +740,17 @@ tr.fps-prov td{background:var(--sf2)}
 .ppc1{display:flex;justify-content:space-between;gap:6px}.ppc1 b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ppc2{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-top:5px}
 @media(max-width:700px){.ppweeks{grid-auto-columns:85%}}
+
+.alr-mot{display:inline-block;font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:6px;margin-right:4px;background:color-mix(in srgb,var(--wn) 22%,transparent);color:var(--tx)}
+.alr-mot.r{background:color-mix(in srgb,var(--dg) 25%,transparent)}.alr-mot.i{background:color-mix(in srgb,var(--in) 22%,transparent)}
+.alr-ir{font-size:12px;font-weight:700;color:var(--pr);white-space:nowrap;align-self:center;padding-left:8px}
+
+.ppprov{display:flex;gap:8px;align-items:center;background:var(--sf2);border:1px solid var(--br);border-radius:10px;padding:8px 9px;cursor:pointer;font-size:12.5px}
+.ppprov:hover{border-color:var(--pr)}.ppprov.ab{border-color:var(--pr);background:var(--sf3)}
+.ppprov b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ppar{color:var(--pr);font-size:13px;width:12px}
+.ppprov+.ppcard,.ppcard+.ppcard{margin-left:10px}
+.ppprov>div b{display:block}.ppprov>.amt{flex-shrink:0}
 </style>
 </head>
 <body>
@@ -1118,7 +1129,7 @@ async function entrarApp() {
   await cargarTodo();
   suscribir();
   await initSW();
-  goTab(location.hash.slice(1) || 'dash');
+  abrirDestino(location.hash.slice(1) || 'dash');
   setInterval(tick, 30000);
   tick();
 }
@@ -1302,7 +1313,7 @@ function calcAlertas() {
   const fps = vivas().filter(porSolicitar);
   const fpsU = fps.filter(f => diasA(limFps(f)) <= 5);
   if (fpsU.length > 3) { const v = fpsU.filter(f => diasA(limFps(f)) < 0).length; A.push({ n: v ? 'r' : 'a', t: `Facturas por solicitar: ${fpsU.length} con límite próximo`, m: `${v ? v + ' ya vencidas · ' : ''}${$$(fpsU.reduce((s, f) => s + num(f.monto_pagado), 0))} pagados sin factura`, go: () => goTab('fps') }); }
-  else fpsU.forEach(f => { const d = diasA(limFps(f)); A.push({ n: d < 0 ? 'r' : 'a', t: `${d < 0 ? 'Factura no conseguida' : 'Factura por solicitar'}: ${nomEnt(f.entidad_id)}`, m: `${f.descripcion} · límite ${fmtD(limFps(f))}`, go: () => goTab('fps') }); });
+  else fpsU.forEach(f => { const d = diasA(limFps(f)); A.push({ n: d < 0 ? 'r' : 'a', t: `${d < 0 ? 'Factura no conseguida' : 'Factura por solicitar'}: ${nomEnt(f.entidad_id)}`, m: `${f.descripcion} · límite ${fmtD(limFps(f))}`, go: () => verCuenta(f.id) }); });
   TAR.filter(t => abiertaT(t) && (esMia(t) || (veEquipo() && t.prioridad === 'critico'))).forEach(t => {
     const d = diasA(t.fecha_limite), P = PRI[t.prioridad] || PRI.moderado, quien = esMia(t) ? '' : ' · ' + respNom(respKey(t));
     if (d < 0) A.push({ n: P.c === 'r' ? 'r' : P.c === 'a' ? 'a' : 'i', t: `Pendiente ${P.t.toLowerCase()} vencido hace ${-d} d: ${t.titulo}`, m: `Atraso real ${atraso(t)} d${quien} · ${t.ultimo_avance || 'sin avance'}`, go: () => verPendiente(t.id) });
@@ -1310,7 +1321,7 @@ function calcAlertas() {
     else if (t.prioridad === 'critico' && sinSeguimiento(t) >= 2) A.push({ n: 'a', t: `Pendiente crítico sin seguimiento ${sinSeguimiento(t)} d: ${t.titulo}`, m: respNom(respKey(t)), go: () => verPendiente(t.id) });
   });
   if (veEquipo()) equipoResp().filter(k => !String(k).startsWith('rol:') && k !== cu.id).forEach(k => { const h = new Date(); if (h.getHours() >= 20 && !yaCerre(k)) A.push({ n: 'i', t: `${nomUsr(k)} no ha cerrado su día`, m: 'Cierre del día pendiente', go: () => reporteDia() }); });
-  buildRecOcurrencias(aviso).filter(o => o.estado === 'vencido' || o.estado === 'proximo').forEach(o => A.push({ n: o.estado === 'vencido' ? 'r' : 'a', t: `Recurrente ${o.estado === 'vencido' ? 'vencido' : 'por vencer'}: ${o.rec.descripcion}`, m: `${nomEnt(o.rec.entidad_id)} · ${fmtD(isoD(o.fecha))}`, go: () => goTab('rec') }));
+  buildRecOcurrencias(aviso).filter(o => o.estado === 'vencido' || o.estado === 'proximo').forEach(o => A.push({ n: o.estado === 'vencido' ? 'r' : 'a', t: `Recurrente ${o.estado === 'vencido' ? 'vencido' : 'por vencer'}: ${o.rec.descripcion}`, m: `${nomEnt(o.rec.entidad_id)} · ${fmtD(isoD(o.fecha))}`, go: () => { if (o.factura) verCuenta(o.factura.id); else { VIEW.pp.vista = 'sem'; goTab('prop'); } } }));
   if (cu.rol === 'contadora' || esAdmin()) vivas().filter(f => f.revision === 'observado').forEach(f => A.push({ n: 'a', t: `Observación pendiente: ${nomEnt(f.entidad_id)}`, m: f.revision_nota || f.descripcion, go: () => verCuenta(f.id) }));
   if (puedeEliminar()) SOLB.filter(s => s.estado === 'pendiente').forEach(s => { const x = descSolicitud(s); A.push({ n: 'a', t: `Solicitud de eliminación: ${nomUsr(s.solicitado_por)}`, m: `${x.txt} · ${s.motivo}`, go: () => x.f.id && verCuenta(x.f.id) }); });
   if (puede('pedidos')) try { almAlertas('alm').forEach(a => A.push(a)); } catch (e) { console.warn(e); }
@@ -1333,10 +1344,29 @@ function calcAlertas() {
   document.title = (urg ? `(${urg}) ` : '') + 'COE Finanzas';
 }
 function bdg(id, n) { const e = document.getElementById(id); if (!e) return; e.style.display = n ? 'inline-block' : 'none'; e.textContent = n; }
+// Motivo de cada alerta (se muestra como etiqueta y en el aviso al teléfono)
+function motivoAlerta(a) {
+  const t = a.t || '';
+  return /^Pago vencido/.test(t) ? 'Motivo: pago vencido' : /^Vence/.test(t) ? 'Motivo: pago por vencer' : /^Cobro vencido/.test(t) ? 'Motivo: cobro vencido' : /^Cobro/.test(t) ? 'Motivo: cobro por vencer'
+    : /por autorizar/.test(t) ? 'Motivo: requiere tu autorización' : /sin enviar/.test(t) ? 'Motivo: falta enviar al proveedor' : /^Factura no conseguida/.test(t) ? 'Motivo: venció el plazo para pedir la factura'
+    : /^Factura/.test(t) ? 'Motivo: pago sin factura' : /^Pendiente.*vencido/.test(t) ? 'Motivo: pendiente atrasado' : /^Pendiente.*(hoy|mañana)/.test(t) ? 'Motivo: pendiente por vencer'
+    : /sin seguimiento/.test(t) ? 'Motivo: sin avance registrado' : /cerrado su día/.test(t) ? 'Motivo: falta cierre del día' : /^Recurrente vencido/.test(t) ? 'Motivo: recurrente sin pagar'
+    : /^Recurrente/.test(t) ? 'Motivo: recurrente por vencer' : /^Observación/.test(t) ? 'Motivo: observación contable' : /eliminación|baja/.test(t) ? 'Motivo: autorizar eliminación'
+    : /sin lote/.test(t) ? 'Motivo: falta lote o caducidad' : /caduc/.test(t) ? 'Motivo: caducidad' : /^Almac/.test(t) ? 'Motivo: existencia baja' : 'Motivo: revisar';
+}
+// Abre la pantalla del aviso: #tab, #cuenta:<id>, #pend:<id>, #ped:<id>
+function abrirDestino(h) {
+  h = String(h || '').replace(/^#/, ''); const [k, id] = h.split(':');
+  if (k === 'cuenta' && id) { goTab('cxp'); setTimeout(() => verCuenta(id), 60); return; }
+  if (k === 'pend' && id) { goTab('tar'); setTimeout(() => verPendiente(id), 60); return; }
+  if (k === 'ped' && id) { goTab('ped'); setTimeout(() => verPedido(id), 60); return; }
+  goTab(k || 'dash');
+  if (k === 'alr' || !k || k === 'dash') return;
+}
 function alertasHtml(lista) {
   if (!lista.length) return `<div class="emp"><div class="ic">✓</div><p>Sin pendientes. Todo al corriente.</p></div>`;
   window._alrGo = lista.map(a => a.go);
-  return `<div class="alist">${lista.map((a, i) => `<div class="aitem ${a.n}" onclick="CM('mGen');_alrGo[${i}]()"><div><div class="at">${esc(a.t)}</div><div class="am">${esc(a.m)}</div></div></div>`).join('')}</div>`;
+  return `<div class="alist">${lista.map((a, i) => `<div class="aitem ${a.n}" onclick="CM('mGen');_alrGo[${i}]()"><div style="flex:1"><div class="at">${esc(a.t)}</div><div class="am"><span class="alr-mot ${a.n}">${esc(motivoAlerta(a))}</span> ${esc(a.m)}</div></div><span class="alr-ir">Ir ›</span></div>`).join('')}</div>`;
 }
 function mostrarResumen() {
   modal(`Resumen del día · ${new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}`, alertasHtml(ALR), `<button class="btn btn-s" onclick="CM('mGen')">Entendido</button>`);
@@ -3175,7 +3205,7 @@ async function initSW() {
   if (!('serviceWorker' in navigator) || location.protocol === 'file:') return;
   try {
     SWREG = await navigator.serviceWorker.register('sw.js');
-    navigator.serviceWorker.addEventListener('message', e => { if (e.data && e.data.tipo === 'abrir') { goTab('dash'); ventanaTuDia('aviso', true); } });
+    navigator.serviceWorker.addEventListener('message', e => { if (e.data && e.data.tipo === 'abrir') { const h = String(e.data.url || '').split('#')[1] || ''; if (!h || h === 'dash') { goTab('dash'); ventanaTuDia('aviso', true); } else abrirDestino(h); } });
     await revisarAvisos();
   } catch (e) { console.warn('SW', e); }
 }
@@ -4278,7 +4308,8 @@ function almAvisos(A) {
 }
 function almAlertas(A) {   // para la campana de Alertas
   const out = [], S = almAvisosDatos('alm'), g = (i, n, txt) => { const L = S[i][2]; if (L.length) out.push({ n, t: `Almacén: ${L.length} ${txt}`, m: L.slice(0, 3).map(x => x[0].n + ' (' + x[2] + ')').join(' · ') + (L.length > 3 ? '…' : ''), go: () => { VIEW.almA = 'alm'; goTab('alm'); setTimeout(() => almAvisos('alm'), 80); } }); };
-  g(0, 'r', 'lote(s) caducados en existencia'); g(1, 'r', 'lote(s) caducan en 30 días'); g(3, 'r', 'producto(s) acabados o críticos'); g(4, 'a', 'producto(s) bajo mínimo'); g(5, 'a', 'producto(s) se acaban en ' + DIAS_ALERTA_FIN + ' días'); g(6, 'a', 'equipo(s) con garantía por vencer');
+  g(1, 'r', 'lote(s) caducados en existencia'); g(2, 'r', 'lote(s) caducan en 30 días'); g(4, 'r', 'producto(s) acabados o críticos'); g(5, 'a', 'producto(s) bajo mínimo'); g(6, 'a', 'producto(s) se acaban en ' + DIAS_ALERTA_FIN + ' días'); g(7, 'a', 'equipo(s) con garantía por vencer');
+  { const F = S[0][2]; if (F.length) out.push({ n: 'i', t: `Almacén: ${F.length} producto(s) sin lote o caducidad`, m: F.slice(0, 3).map(x => x[0].n).join(' · ') + (F.length > 3 ? '…' : ''), go: () => { VIEW.almA = 'alm'; goTab('alm'); setTimeout(() => almCapturarLotes(), 80); } }); }
   const sol = INV.farSol || []; if (sol.length) out.push({ n: 'i', t: `Almacén: ${sol.length} solicitud(es) de farmacia por surtir`, m: 'Hacer el traspaso a mostrador', go: () => { VIEW.almA = 'alm'; goTab('alm'); setTimeout(() => almTraspaso(), 80); } });
   return out;
 }
@@ -5198,6 +5229,7 @@ async function fpGuardar() {
 // ══ VISTA POR SEMANA: cuándo se paga cada semana (propuestos, cuentas, recurrentes y nómina) · arrastrar o «Mover» ══
 const ppDiaPago = x => x.prop || (x.fecha && x.fecha < hoyISO() ? null : x.fecha);
 function ppSemanaDe(x) { const d = ppDiaPago(x); return d ? ppLunes(d) : 'venc'; }
+VIEW.ppSemAbre = VIEW.ppSemAbre || {};
 function ppSemanas(L, esDirTab) {
   const hoy = hoyISO(), l0 = ppLunes(hoy), n = Math.max(2, Math.ceil(VIEW.pp.hz / 7) + 1);
   const W = [{ k: 'venc', t: 'Vencido sin fecha de pago', sub: 'proponer o pagar ya' }];
@@ -5211,12 +5243,15 @@ function ppSemanas(L, esDirTab) {
       <div class="mini">${esc(String(x.desc || '').slice(0, 60))}</div>
       <div class="ppc2">${x.prop ? `<span class="bdg bdg-aut">pagar ${fmtD(x.prop).slice(0, 5)}</span>` : ''}${x.nom ? '<span class="bdg pp-rec">nómina</span>' : x.rec ? '<span class="bdg pp-rec">↻</span>' : ''}${x.fecha ? `<span class="mini" style="${v || tarde ? 'color:var(--dg);font-weight:700' : ''}">vence ${fmtD(x.fecha).slice(0, 5)}${tarde ? ' · se paga tarde' : ''}</span>` : ''}
         ${puede('cxp') ? `<button class="btn btn-s btn-sm" style="margin-left:auto;padding:2px 8px" onclick="event.stopPropagation();ppMoverDlg(${i})">Mover</button>` : ''}${x.f && puede('pagos', 3) && esDirTab ? `<button class="btn btn-p btn-sm" style="padding:2px 8px" onclick="event.stopPropagation();pagarCuenta('${x.f.id}')">Pagar</button>` : ''}</div></div>`; };
-  return `<div class="mini" style="margin:0 0 8px">Arrastra un pago a otra semana (o toca «Mover»). Los propuestos se pagan el día marcado; lo demás aparece en la semana en que vence. Si lo mueves después de su vencimiento te aviso.</div>
+  return `<div class="mini" style="margin:0 0 8px">Cada semana viene compactada por proveedor: toca la flecha ▸ para ver sus pagos. Arrastra un pago a otra semana (o toca «Mover»). Los propuestos se pagan el día marcado; lo demás aparece en la semana en que vence. Si lo mueves después de su vencimiento te aviso.</div>
   <div class="ppweeks">${W.map(w => { const I2 = B[w.k] || [], t = I2.reduce((s, i) => s + ppMonto(L[i]), 0), tp = I2.filter(i => L[i].prop).reduce((s, i) => s + ppMonto(L[i]), 0), nv = I2.filter(i => L[i].variable && !VIEW.pp.mon[L[i].k]).length;
     if (w.k === 'venc' && !I2.length) return '';
     return `<div class="ppweek ${w.k === 'venc' ? 'v' : ''} ${w.k === l0 ? 'hoy' : ''}" ondragover="event.preventDefault();this.classList.add('over')" ondragleave="this.classList.remove('over')" ondrop="this.classList.remove('over');ppDrop(event,'${w.k}')">
       <div class="ppwh"><div><b>${w.t}</b><div class="mini">${w.sub}</div></div><div style="text-align:right"><b class="amt">${$$(t)}</b><div class="mini">${I2.length} pago(s)${tp ? ' · propuesto ' + moneyK(tp) : ''}${nv ? ' · +' + nv + ' variable(s)' : ''}</div></div></div>
-      ${I2.sort((a, b) => String(ppDiaPago(L[a]) || L[a].fecha || '').localeCompare(String(ppDiaPago(L[b]) || L[b].fecha || '')) || ppMonto(L[b]) - ppMonto(L[a])).map(tarjeta).join('') || '<div class="mini" style="padding:10px;text-align:center">Sin pagos</div>'}</div>`; }).join('')}</div>`;
+      ${(() => { if (!I2.length) return '<div class="mini" style="padding:10px;text-align:center">Sin pagos</div>';
+        const G = {}; I2.forEach(i => (G[L[i].ent || '—'] = G[L[i].ent || '—'] || []).push(i));
+        return Object.entries(G).map(([e, ix]) => ({ e, ix, m: ix.reduce((s, i) => s + ppMonto(L[i]), 0) })).sort((a, b) => b.m - a.m).map(g => { const kk = w.k + '|' + g.e, ab = VIEW.ppSemAbre[kk], np = g.ix.filter(i => L[i].prop).length, nv = g.ix.filter(i => ppVencido(L[i]) && !L[i].prop).length;
+          return `<div class="ppprov ${ab ? 'ab' : ''}" draggable="${puede('cxp') && g.ix.length === 1 ? 'true' : 'false'}" ondragstart="event.dataTransfer.setData('text/plain','${g.ix[0]}')" onclick="VIEW.ppSemAbre['${esc(kk)}']=!VIEW.ppSemAbre['${esc(kk)}'];renderTab()"><span class="ppar">${ab ? '▾' : '▸'}</span><div style="flex:1;min-width:0"><b>${esc(nomEnt(g.e) || 'Sin proveedor')}</b><div class="mini">${g.ix.length} pago(s)${np ? ' · ' + np + ' propuesto(s)' : ''}${nv ? ` · <b style="color:var(--dg)">${nv} vencido(s)</b>` : ''}</div></div><b class="amt">${g.m ? $$(g.m) : '<span class="mini">variable</span>'}</b></div>${ab ? g.ix.sort((a, b) => String(ppDiaPago(L[a]) || L[a].fecha || '').localeCompare(String(ppDiaPago(L[b]) || L[b].fecha || ''))).map(tarjeta).join('') : ''}`; }).join(''); })()}</div>`; }).join('')}</div>`;
 }
 // Día de pago al soltar en una semana: su vencimiento si cae en esa semana, si no el viernes; nunca antes de hoy
 function ppDiaEnSemana(x, l) {
