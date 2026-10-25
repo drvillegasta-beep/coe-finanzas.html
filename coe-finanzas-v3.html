@@ -752,6 +752,7 @@ tr.fps-prov td{background:var(--sf2)}
 .ppprov+.ppcard,.ppcard+.ppcard{margin-left:10px}
 .ppprov>div b{display:block}.ppprov>.amt{flex-shrink:0}
 .wpasos{margin:0 0 4px 18px;padding:0;font-size:13px;line-height:1.5}.wpasos li{margin-bottom:6px}
+.spapl{margin-top:8px;padding:8px 10px;border:1px dashed var(--br2);border-radius:10px;background:var(--sf2)}.sptab{margin-top:6px;width:100%}.sptab td,.sptab th{padding:4px 6px;font-size:12px}
 </style>
 </head>
 <body>
@@ -3956,6 +3957,8 @@ function spOpciones(it) {
   const O = [];
   SP.oc.forEach((o, i) => { const ref = nomRef(o.rec), esp = spEsperado(o), n = ref === 'fijo' ? 'Nómina personal fijo' : nomEnt(o.rec.entidad_id);
     O.push({ v: 'oc:' + i, g: ref ? 'hon' : 'rec', s: sc(o.rec.entidad_id, esp, n), t: `${ref === 'fijo' ? 'Nómina · personal fijo' : ref ? 'Honorarios · ' + n : n + ' · ' + o.rec.descripcion} · ${fmtD(isoD(o.fecha))}${esp ? ' · ' + $$(esp) : ''}` }); });
+  const D = {}; abiertas('egreso').filter(f => !f.recurrente_id && saldo(f) > 0.01).forEach(f => (D[f.entidad_id] = D[f.entidad_id] || []).push(f));
+  Object.entries(D).forEach(([eid, F]) => { const t = F.reduce((s, f) => s + saldo(f), 0); if (F.length > 1) O.push({ v: 'deuda:' + eid, g: 'deu', s: sc(eid, t, nomEnt(eid)) + (m && m < t - 1 ? 1 : 0), t: `${nomEnt(eid)} · deuda total ${$$(t)} · ${F.length} cuentas` }); });
   abiertas('egreso').filter(f => !f.recurrente_id).forEach(f => O.push({ v: 'cxp:' + f.id, g: 'cxp', s: sc(f.entidad_id, saldo(f), nomEnt(f.entidad_id)), t: `${nomEnt(f.entidad_id)} · ${String(f.descripcion || '').slice(0, 50)} · saldo ${$$(saldo(f))}${f.fecha_vencimiento ? ' · vence ' + fmtD(f.fecha_vencimiento) : ''}` }));
   return O;
 }
@@ -3971,8 +3974,52 @@ function spSugerir(it) {
 function spDestino(it) {
   if (it.sel.startsWith('oc:')) { const o = SP.oc[+it.sel.slice(3)]; return { o, eid: o.rec.entidad_id, nf: nomRef(o.rec) === 'fijo' || !!ent(o.rec.entidad_id)?.no_factura, esp: spEsperado(o) }; }
   if (it.sel.startsWith('cxp:')) { const f = FAC.find(x => x.id === it.sel.slice(4)); return { f, eid: f?.entidad_id, nf: !!ent(f?.entidad_id)?.no_factura || !!f?.uuid_cfdi || !!f?.xml_url, esp: f ? saldo(f) : null }; }
+  if (it.sel.startsWith('deuda:')) { const eid = it.sel.slice(6), F = spCuentasDe(eid); return { eid, deuda: true, nf: !!ent(eid)?.no_factura, esp: F.reduce((s, f) => s + saldo(f), 0) }; }
   if (it.sel === 'nuevo') return { eid: it.ent === '__alta' ? null : it.ent, nf: it.ent === '__alta' ? it.alta.nf : !!ent(it.ent)?.no_factura };
   return {};
+}
+// Cuentas abiertas del proveedor, de la más antigua a la más reciente
+const spCuentasDe = eid => abiertas('egreso').filter(f => f.entidad_id === eid && !f.recurrente_id && saldo(f) > 0.01).sort((a, b) => String(a.fecha_vencimiento || '9').localeCompare(String(b.fecha_vencimiento || '9')) || String(a.created_at).localeCompare(String(b.created_at)));
+// Cómo se reparte el pago: [{ f, m }] según la opción elegida
+function spReparto(it) {
+  const m = num(it.monto), D = spDestino(it); if (!(m > 0)) return [];
+  it.apl = it.apl || {};
+  const fifo = (F, monto) => { let r = monto; const out = []; for (const f of F) { if (r <= 0.009) break; const t = Math.min(r, saldo(f)); out.push({ f, m: Math.round(t * 100) / 100 }); r -= t; } return out; };
+  if (D.f) {
+    const modo = it.apl.modo || (m > saldo(D.f) + 0.01 && spCuentasDe(D.eid).some(f => f.id !== D.f.id) ? 'deuda' : 'factura');
+    if (modo === 'factura' || m <= saldo(D.f) + 0.01 && modo !== 'deuda') return [{ f: D.f, m: Math.min(m, saldo(D.f)) }];
+    // liquidar esta y el resto a la deuda (o aplicar todo a la deuda empezando por esta)
+    return fifo([D.f].concat(spCuentasDe(D.eid).filter(f => f.id !== D.f.id)), m);
+  }
+  if (D.deuda) {
+    const F = spCuentasDe(D.eid);
+    if ((it.apl.modo || 'fifo') === 'elegir' && !it.apl.montos) { it.apl.montos = {}; let r = m; F.forEach(f => { const t = Math.max(0, Math.min(r, saldo(f))); it.apl.montos[f.id] = t ? Math.round(t * 100) / 100 : ''; r -= t; }); }
+    if ((it.apl.modo || 'fifo') === 'elegir') return F.filter(f => num(it.apl.montos?.[f.id]) > 0).map(f => ({ f, m: Math.min(num(it.apl.montos[f.id]), saldo(f)) }));
+    return fifo(F, m);
+  }
+  return [];
+}
+function spPanelAplicar(it, i) {
+  const D = spDestino(it), m = num(it.monto); if (!(m > 0) || !(D.f || D.deuda)) return '';
+  it.apl = it.apl || {};
+  const modo0 = it.apl.modo || (D.f ? (m > saldo(D.f) + 0.01 && spCuentasDe(D.eid).some(f => f.id !== D.f.id) ? 'deuda' : 'factura') : 'fifo');
+  const radio = (k, t, sub) => `<label class="opt ${(modo0 === k) ? 'sel' : ''}" style="margin:0"><input type="radio" name="apl${i}" ${(modo0 === k) ? 'checked' : ''} onchange="SP.items[${i}].apl.modo='${k}';spPintar()"><span><b>${t}</b>${sub ? `<br><span class="mini">${sub}</span>` : ''}</span></label>`;
+  let ops = '';
+  if (D.f) {
+    const s = saldo(D.f), otras = spCuentasDe(D.eid).filter(f => f.id !== D.f.id), totO = otras.reduce((a, f) => a + saldo(f), 0);
+    if (Math.abs(m - s) <= 0.5 && !otras.length) return '';
+    if (m < s - 0.5) ops = radio('factura', `Abono parcial a esta factura`, `Queda saldo de ${$$(s - m)} en esta cuenta`) + (otras.length ? radio('deuda', 'Aplicar a la deuda general del proveedor', `De la más antigua a la más reciente · deuda total ${$$(s + totO)} en ${otras.length + 1} cuentas`) : '');
+    else if (m > s + 0.5) ops = otras.length ? radio('deuda', `Liquidar esta factura y abonar el resto (${$$(m - s)}) a sus otras cuentas`, 'Primero las más antiguas') : '';
+    else ops = radio('factura', 'Liquidar esta factura', '') + (otras.length ? radio('deuda', 'Aplicar a la deuda general del proveedor (más antiguas primero)', `Deuda total ${$$(s + totO)}`) : '');
+  } else {
+    ops = radio('fifo', 'Abonar a la deuda, de la más antigua a la más reciente', m < D.esp - 0.5 ? `Quedan ${$$(D.esp - m)} de deuda` : 'Liquida toda la deuda') + radio('elegir', 'Elegir a qué facturas y cuánto a cada una', '');
+  }
+  const R = spReparto(it), tot = R.reduce((a, x) => a + x.m, 0);
+  const elegir = D.deuda && it.apl.modo === 'elegir';
+  if (elegir && !it.apl.montos) { it.apl.montos = {}; let r = m; spCuentasDe(D.eid).forEach(f => { const t = Math.max(0, Math.min(r, saldo(f))); it.apl.montos[f.id] = t ? Math.round(t * 100) / 100 : ''; r -= t; }); }
+  const tabla = elegir ? `<table class="sptab"><thead><tr><th>Cuenta</th><th>Vence</th><th style="text-align:right">Saldo</th><th style="text-align:right;width:120px">Aplicar</th></tr></thead><tbody>${spCuentasDe(D.eid).map(f => `<tr><td>${esc(String(f.descripcion || '').slice(0, 45))}<div class="mini">${esc(f.numero_factura || '')}</div></td><td class="mini">${fmtD(f.fecha_vencimiento)}</td><td class="amt" style="text-align:right">${$$(saldo(f))}</td><td><div class="ipfx"><span>$</span><input type="number" step="0.01" min="0" max="${saldo(f)}" value="${it.apl.montos[f.id] ?? ''}" onchange="SP.items[${i}].apl.montos['${f.id}']=this.value;spPintar()"></div></td></tr>`).join('')}</tbody></table>`
+    : R.length > 1 || (R[0] && R[0].m < saldo(R[0].f) - 0.01) ? `<div class="mini" style="margin-top:4px">${R.map(x => `${esc(String(x.f.descripcion || '').slice(0, 40))}: <b>${$$(x.m)}</b> ${x.m >= saldo(x.f) - 0.01 ? '· liquida' : '· abono, queda ' + $$(saldo(x.f) - x.m)}`).join('<br>')}</div>` : '';
+  return `<div class="spapl"><div class="mini" style="margin-bottom:4px"><b>¿Cómo aplico este pago de ${$$(m)}?</b></div><div style="display:grid;gap:6px">${ops}</div>${tabla}${elegir ? `<div class="mini" style="margin-top:4px">Repartido ${$$(tot)} de ${$$(m)}${Math.abs(tot - m) > 0.5 ? ` · <b style="color:var(--dg)">faltan ${$$(m - tot)}</b>` : ' ✓'}</div>` : ''}</div>`;
 }
 function spProblema(it) {
   if (/leyendo|preparando/.test(it.estado)) return 'leyendo';
@@ -3985,13 +4032,18 @@ function spProblema(it) {
     if (it.ent === '__alta' && !it.alta.nombre.trim()) return 'Escribe el nombre del proveedor nuevo';
     if (!it.concepto.trim()) return 'Escribe el concepto del pago';
   }
-  const D = spDestino(it);
-  if (D.f && num(it.monto) > saldo(D.f) + 1) return `El monto es mayor que el saldo de la cuenta (${$$(saldo(D.f))})`;
+  const D = spDestino(it), m = num(it.monto);
+  if (D.f || D.deuda) {
+    const R = spReparto(it), tot = R.reduce((a, x) => a + x.m, 0), deuda = spCuentasDe(D.eid).reduce((a, f) => a + saldo(f), 0) + (D.f && D.f.recurrente_id ? saldo(D.f) : 0);
+    if (m > Math.max(deuda, D.f ? saldo(D.f) : 0) + 1) return `El monto es mayor que la deuda del proveedor (${$$(Math.max(deuda, D.f ? saldo(D.f) : 0))})`;
+    if (D.f && m > saldo(D.f) + 1 && !(it.apl?.modo || (spCuentasDe(D.eid).some(f => f.id !== D.f.id) ? 'deuda' : 'factura')).startsWith('deuda')) return `El monto es mayor que el saldo de la cuenta (${$$(saldo(D.f))}) · elige cómo aplicar el resto`;
+    if (Math.abs(tot - m) > 0.5) return `Reparte el monto completo: faltan ${$$(m - tot)}`;
+  }
   return null;
 }
 function spPintar() {
   const el = document.getElementById('spList'); if (!el) return;
-  const G = { hon: 'Honorarios y nómina (quincenas sin pago)', rec: 'Pagos recurrentes sin pagar', cxp: 'Cuentas por pagar abiertas' };
+  const G = { hon: 'Honorarios y nómina (quincenas sin pago)', rec: 'Pagos recurrentes sin pagar', deu: 'Deuda general de un proveedor (varias cuentas)', cxp: 'Cuentas por pagar abiertas (una factura)' };
   el.innerHTML = SP.items.map((it, i) => {
     const O = spOpciones(it), D = spDestino(it), p = spProblema(it), img = it.file.type.startsWith('image/');
     const opts = `<option value="">— Elige a qué corresponde —</option>${it.sugerido ? `<option value="${it.sugerido}" ${it.sel === it.sugerido ? 'selected' : ''}>★ Sugerido: ${esc(O.find(o => o.v === it.sugerido)?.t || '')}</option>` : ''}
@@ -4005,18 +4057,19 @@ function spPintar() {
         <div class="sphd"><b>${esc(it.file.name)}</b><span class="mini">${esc(it.estado)}</span><span class="mcls" title="Quitar" onclick="SP.items.splice(${i},1);spPintar()">✕</span></div>
         ${it.dup ? `<div class="warnbox" style="margin:6px 0">${esc(it.dup)}</div>` : ''}
         <div class="fgrd">
-          <div class="fgrp sp2"><label>Corresponde a</label><select onchange="SP.items[${i}].sel=this.value;spPintar()">${opts}</select></div>
+          <div class="fgrp sp2"><label>Corresponde a</label><select onchange="SP.items[${i}].sel=this.value;SP.items[${i}].apl={};spPintar()">${opts}</select></div>
           ${it.sel === 'nuevo' ? `<div class="fgrp"><label>Proveedor</label><select onchange="const it=SP.items[${i}];it.ent=this.value;it.cat=ent(this.value)?.categoria||it.cat;if(this.value==='__alta'&&!it.alta.nombre)it.alta.nombre=it.lect?.beneficiario||'';spPintar()"><option value="">— Elige —</option><option value="__alta" ${it.ent === '__alta' ? 'selected' : ''}>＋ Dar de alta proveedor nuevo…</option>${ENT.filter(e => e.activo !== false && e.tipo !== 'cliente').sort((a, b) => a.nombre.localeCompare(b.nombre)).map(e => `<option value="${e.id}" ${it.ent === e.id ? 'selected' : ''}>${esc(e.nombre)}${it.entDet?.id === e.id ? ' ★' : ''}</option>`).join('')}</select></div>
             <div class="fgrp"><label>Categoría</label><select onchange="SP.items[${i}].cat=this.value">${catOpts(it.cat)}</select></div>
             ${it.ent === '__alta' ? `<div class="fgrp"><label>Nombre del proveedor nuevo</label><input type="text" value="${esc(it.alta.nombre)}" placeholder="${esc(it.lect?.beneficiario || 'Razón social o nombre')}" oninput="SP.items[${i}].alta.nombre=this.value" onchange="spPintar()"></div>
               <div class="fgrp"><label>RFC (opcional)</label><input type="text" value="${esc(it.alta.rfc)}" oninput="SP.items[${i}].alta.rfc=this.value.toUpperCase()"></div>
               <div class="fgrp sp2"><label style="display:flex;gap:8px;align-items:center;cursor:pointer"><input type="checkbox" style="width:auto" ${it.alta.nf ? 'checked' : ''} onchange="SP.items[${i}].alta.nf=this.checked;spPintar()"> Este proveedor no da factura</label></div>` : ''}
             <div class="fgrp sp2"><label>Concepto</label><input type="text" value="${esc(it.concepto)}" placeholder="Ej. Mantenimiento del aire acondicionado" oninput="SP.items[${i}].concepto=this.value" onchange="spPintar()"></div>` : ''}
-          ${it.sel !== 'nada' ? `<div class="fgrp"><label>Monto${D.esp ? ` <span class="mini">(esperado ${$$(D.esp)})</span>` : ''}</label><div class="ipfx"><span>$</span><input type="number" step="0.01" value="${it.monto}" onchange="SP.items[${i}].monto=this.value;spPintar()"></div></div>
+          ${it.sel !== 'nada' ? `<div class="fgrp"><label>Monto${D.esp ? ` <span class="mini">(esperado ${$$(D.esp)})</span>` : ''}</label><div class="ipfx"><span>$</span><input type="number" step="0.01" value="${it.monto}" onchange="SP.items[${i}].monto=this.value;if(SP.items[${i}].apl)SP.items[${i}].apl.montos=null;spPintar()"></div></div>
           <div class="fgrp"><label>Fecha del pago</label><input type="date" value="${it.fecha}" onchange="SP.items[${i}].fecha=this.value;spPintar()"></div>
           <div class="fgrp"><label>Forma de pago</label><select onchange="SP.items[${i}].metodo=this.value">${['Transferencia', 'Efectivo', 'Tarjeta', 'Cheque', 'Domiciliado'].map(x => `<option ${it.metodo === x ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
           <div class="fgrp"><label>Referencia / rastreo</label><input type="text" value="${esc(it.ref)}" oninput="SP.items[${i}].ref=this.value"></div>` : ''}
         </div>
+        ${it.sel !== 'nada' ? spPanelAplicar(it, i) : ''}
         <div class="spft">${p && p !== 'leyendo' ? `<b style="color:var(--dg)">${esc(p)}</b>` : fac}</div>
       </div></div>`;
   }).join('');
@@ -4046,8 +4099,18 @@ async function spAplicar() {
           if (!c.ok) throw new Error(/duplicate|recurrente_periodo_uq/.test(c.error || '') ? 'ese periodo ya estaba registrado' : (ERR[c.error] || c.error));
           fid = c.id;
         }
-      } else if (it.sel.startsWith('cxp:')) {
-        fid = it.sel.slice(4); nombre = nomEnt(FAC.find(f => f.id === fid)?.entidad_id);
+      } else if (it.sel.startsWith('cxp:') || it.sel.startsWith('deuda:')) {
+        // Pago a una factura, a la deuda general o repartido: un abono por cuenta con el mismo comprobante
+        const Rp = spReparto(it); nombre = nomEnt(spDestino(it).eid);
+        const det = [];
+        for (const x of Rp) {
+          const p = await R('fin_pagar', { p_factura: x.f.id, p_monto: x.m, p_fecha: it.fecha, p_metodo: it.metodo, p_referencia: it.ref || '', p_comprobante_url: up.url, p_sha256: up.sha });
+          if (!p.ok) throw new Error((det.length ? 'se aplicaron ' + det.length + ' abono(s) y luego falló: ' : '') + (ERR[p.error] || p.error));
+          det.push(`${String(x.f.descripcion || '').slice(0, 30)} ${$$(x.m)}${p.liquidada ? ' (liquidada)' : ' (abono)'}`);
+        }
+        ok.push(`${nombre} · ${$$(m)} → ${det.join(' · ')}${spDestino(it).nf ? '' : ' · factura por solicitar si falta'}`);
+        it.sel = 'nada'; it.hecho = true;
+        continue;
       } else {
         let eid = it.ent;
         if (eid === '__alta') {
