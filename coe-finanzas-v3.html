@@ -4278,14 +4278,15 @@ const provs = () => ENT.filter(e => e.activo !== false && e.tipo !== 'cliente').
 const optProv = sel => `<option value="">— Sin proveedor —</option>${provs().map(e => `<option value="${e.id}" ${sel === e.id ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}`;
 function almBarra(A) {
   if (!puede('pedidos')) return '';
-  if (A === 'qui') return `<div class="pad" style="padding-bottom:0"><div class="almbar"><button class="btn btn-p btn-sm" onclick="VIEW.envOrg=null;almEnvio()">⇄ Traspaso (almacén de quirófano → quirófano o consultorio)</button></div></div>`;
+  if (A === 'qui') return `<div class="pad" style="padding-bottom:0"><div class="almbar"><button class="btn btn-p btn-sm" onclick="VIEW.envOrg=null;almEnvio()">⇄ Traspaso (almacén de quirófano → quirófano o consultorio)</button><button class="btn btn-s btn-sm" onclick="almMinimos('qui')">⚙ Mínimos</button></div></div>`;
   const sol = A === 'alm' ? (INV.farSol || []).length : 0;
   return `<div class="pad" style="padding-bottom:0"><div class="almbar">
     ${esAlmCont(A) ? `<div class="seg">${[['tablero', 'Tablero'], ['agregar', 'Agregar manualmente']].map(([k, t]) => `<button class="${VIEW.almV === k ? 'on' : ''}" onclick="VIEW.almV='${k}';renderTab()">${t}</button>`).join('')}</div>
       <button class="btn btn-p btn-sm" onclick="almSubir('${A}')">⬆ Subir inventario</button>
       ${A === 'alm' ? `<button class="btn btn-s btn-sm" onclick="almTraspaso()">⇄ Traspaso (mostrador o consultorio)${sol ? ` <span class="nbdg" style="position:static;display:inline-block">${sol}</span>` : ''}</button>` : `<button class="btn btn-s btn-sm" onclick="VIEW.envOrg=qxAdmId();almEnvio()">⇄ Traspaso (quirófano o consultorio)</button>`}` : ''}
     <button class="btn btn-s btn-sm" onclick="almSolicitar('${A}')">📦 Solicitar a proveedor</button>
-    <button class="btn btn-s btn-sm" onclick="almAvisos('${A}')">🔔 Avisos</button></div></div>`;
+    <button class="btn btn-s btn-sm" onclick="almAvisos('${A}')">🔔 Avisos</button>
+    <button class="btn btn-s btn-sm" onclick="almMinimos('${A}')">⚙ Mínimos</button></div></div>`;
 }
 
 // ── Avisos: caducados, por caducar, acabados, bajo mínimo, garantías ──
@@ -4741,6 +4742,48 @@ async function almCapGuardar() {
   if ((r.errores || []).length) { const e = r.errores.map(x => (window._cap.find(c => String(c.id) === String(x.lote_id))?.n || '') + ': ' + x.error); toast(e.join(' · '), 'error'); }
   else { CM('mGen'); toast(`Lote y caducidad guardados en ${r.lotes} producto(s)`, 'success'); }
   renderTab();
+}
+
+// ── Editar mínimos (y crítico) de insumos por inventario ──
+function almMinimos(A) {
+  A = A || VIEW.almA || 'alm';
+  const R = {}; try { almFilas(A).forEach(r => R[String(r.id)] = r); } catch (e) {}
+  const far = A === 'alm' || A === 'far', conCrit = A !== 'alm';
+  const L = far ? (INV.farProd || []).filter(p => !p.servicio && p.activo !== false).map(p => ({ id: p.id, n: p.nombre, cat: TIPO_INS[p.tipo_insumo] || p.categoria || '', min: A === 'alm' ? num(p.minimo_alm) : num(p.minimo), crit: num(p.critico), r: R[String(p.id)] }))
+    : (INV.qxMat || []).filter(m => m.activo !== false).map(m => ({ id: m.id, n: m.nombre, cat: m.categoria || '', min: num(m.stock_minimo), crit: num(m.stock_critico), r: R[String(m.id)], u: m.unidad }));
+  L.sort((a, b) => (b.r ? 1 : 0) - (a.r ? 1 : 0) || a.n.localeCompare(b.n));
+  window._minL = L;
+  const nom = (ALM_AREAS.find(x => x[0] === A) || [, ''])[1];
+  modal('Editar mínimos · ' + nom, `<div class="mini" style="margin-bottom:8px">${A === 'alm' ? 'Mínimo del <b>almacén</b>: cuando la existencia del almacén llega a este número, avisa para pedir al proveedor.' : A === 'far' ? 'Mínimo y crítico del <b>mostrador</b>: en el mínimo avisa para traspasar del almacén; en crítico es urgente.' : 'Mínimo y crítico del material de <b>quirófano</b> (se usan en COE Quirófano y en el Almacén de Contabilidad).'} «Sugerir» propone 2 semanas de consumo (mínimo) y 1 semana (crítico) cuando hay salidas registradas.</div>
+    <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap"><input type="text" placeholder="Buscar insumo…" oninput="const q=normTx(this.value);document.querySelectorAll('#minL tr[data-n]').forEach(t=>t.style.display=t.dataset.n.includes(q)?'':'none')" style="flex:1;min-width:180px">
+      <label class="mini" style="display:flex;gap:6px;align-items:center"><input type="checkbox" style="width:auto" onchange="document.querySelectorAll('#minL tr[data-sin]').forEach(t=>t.style.display=this.checked&&t.dataset.sin==='0'?'none':'')"> Solo sin mínimo</label>
+      <button class="btn btn-s btn-sm" onclick="almMinSugerirTodos()">Sugerir a todos los que tienen consumo</button></div>
+    <div class="tc" style="max-height:56vh;overflow:auto"><table><thead><tr><th>Insumo</th><th style="text-align:right">Existencia</th><th style="text-align:right">Sale / semana</th><th style="text-align:right;width:90px">Mínimo</th>${conCrit ? '<th style="text-align:right;width:90px">Crítico</th>' : ''}<th></th></tr></thead><tbody id="minL">
+    ${L.map((x, i) => { const sem = x.r && x.r.c4 ? x.r.c4 / 4 : 0; return `<tr data-n="${esc(normTx(x.n + ' ' + x.cat))}" data-sin="${x.min ? '0' : '1'}"><td><b>${esc(x.n)}</b><div class="mini">${esc(x.cat)}${x.u ? ' · ' + esc(x.u) : ''}</div></td>
+      <td class="amt" style="text-align:right">${x.r ? almNum(x.r.ex) : '<span class="mini">0</span>'}</td><td class="amt" style="text-align:right">${sem ? almNum(sem) : '<span class="mini">—</span>'}</td>
+      <td><input type="number" min="0" step="1" class="minM" data-i="${i}" value="${x.min || ''}" placeholder="0" style="text-align:right"></td>${conCrit ? `<td><input type="number" min="0" step="1" class="minC" data-i="${i}" value="${x.crit || ''}" placeholder="0" style="text-align:right"></td>` : ''}
+      <td>${sem ? `<button class="btn btn-s btn-sm" onclick="almMinSugerir(${i})">Sugerir</button>` : ''}</td></tr>`; }).join('') || '<tr><td colspan="6" class="mini">Sin insumos en este inventario</td></tr>'}</tbody></table></div>`,
+    `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="almMinGuardar('${A}')">Firmar y guardar</button>`, 'xl');
+}
+function almMinSugerir(i) {
+  const x = window._minL[i], sem = x.r && x.r.c4 ? x.r.c4 / 4 : 0; if (!sem) return;
+  const m = document.querySelector(`.minM[data-i="${i}"]`), c = document.querySelector(`.minC[data-i="${i}"]`);
+  if (m) m.value = Math.max(1, Math.ceil(sem * 2)); if (c) c.value = Math.max(1, Math.ceil(sem));
+}
+function almMinSugerirTodos() { window._minL.forEach((x, i) => { if (x.r && x.r.c4) almMinSugerir(i); }); toast('Sugerencias aplicadas · revisa y firma', 'info'); }
+async function almMinGuardar(A) {
+  const L = window._minL, items = [];
+  L.forEach((x, i) => {
+    const m = document.querySelector(`.minM[data-i="${i}"]`), c = document.querySelector(`.minC[data-i="${i}"]`);
+    const nm = m && m.value !== '' ? num(m.value) : 0, nc = c && c.value !== '' ? num(c.value) : (A === 'alm' ? null : 0);
+    if (nm !== x.min || (c && nc !== x.crit)) items.push({ id: x.id, minimo: nm, critico: c ? nc : null });
+  });
+  if (!items.length) return toast('No hay cambios', 'info');
+  const malos = items.filter(x => x.critico != null && x.minimo && x.critico > x.minimo);
+  if (malos.length && !confirm(`${malos.length} insumo(s) tienen el crítico mayor que el mínimo. ¿Guardar de todos modos?`)) return;
+  const r = await rpcFirmado('fin_inv_minimos', { p_area: A, p_items: items }, { titulo: 'Guardar mínimos', sub: `${items.length} insumo(s)` });
+  if (!r) return;
+  CM('mGen'); toast(`Mínimos actualizados en ${r.cambios} insumo(s)`, 'success'); await cargarTodo(); renderTab();
 }
 
 // ══ ELIMINAR FACTURAS O PAGOS MAL CAPTURADOS (Por pagar / Por cobrar) ══
