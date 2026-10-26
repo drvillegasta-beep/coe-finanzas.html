@@ -816,6 +816,16 @@ tr.fps-prov td{background:var(--sf2)}
 .mtrub{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--tm);padding:10px 2px 4px;display:flex;gap:6px}
 .mtrub span{color:var(--tx)}
 .pri.pc{background:rgba(96,165,250,.15);color:#60a5fa;border:1px solid rgba(96,165,250,.4)}
+/* Evaluación conforme al Manual */
+.evtop{display:flex;gap:16px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+.evcal{font-size:46px;font-weight:900;line-height:1}.evcal small{font-size:16px;color:var(--tm);font-weight:600}
+.evchips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}.evchips span{border:1px solid;border-radius:999px;padding:2px 8px;font-size:11.5px}
+.evtab{width:100%;font-size:13px}.evtab td{vertical-align:middle}
+.evbar{height:7px;background:var(--sf2);border-radius:4px;overflow:hidden;margin-bottom:3px}.evbar i{display:block;height:100%}
+.evhash{margin-top:12px;font-size:12px;color:var(--tm);padding:8px 10px;border:1px dashed var(--br);border-radius:8px}.evhash code{font-size:11px}
+.evarch{display:flex;gap:8px;flex-wrap:wrap}
+.evr{display:flex;flex-direction:column;align-items:center;padding:8px 12px;border:1px solid var(--br);border-radius:10px;cursor:pointer;min-width:84px}
+.evr b{font-size:20px}.evr span{font-size:12px}.evr small{font-size:10px;color:var(--tm)}.evr.sel{border-color:var(--pr);background:var(--sf2)}
 </style>
 </head>
 <body>
@@ -3176,6 +3186,7 @@ function rRep() {
     ${kpi('Reprogramaciones', String(d.tar.reduce((s, t) => s + (t.reprogramaciones || 0), 0)), 'en el periodo')}
     ${kpi('Facturas no conseguidas', String(d.fpsV.length), 'pasado el límite', d.fpsV.length ? 'var(--dg)' : '')}
   </div>
+  ${cajaEvaluacion(per)}
   ${cajaContaDesempeno()}
   <div class="tc" style="margin-bottom:20px;overflow-x:auto"><table><thead><tr><th>Responsable</th><th style="text-align:right">Asig.</th><th style="text-align:right">A tiempo</th><th style="text-align:right">Tarde</th><th style="text-align:right">No cumpl.</th><th style="text-align:right">Críticos</th><th style="text-align:right">Atraso</th><th style="text-align:right">Reprog.</th><th style="text-align:right">Cierres</th><th style="text-align:right">%</th></tr></thead><tbody>
     ${d.porResp.length ? d.porResp.map(r => `<tr><td><b>${esc(r.nombre)}</b></td><td style="text-align:right">${r.total}</td><td style="text-align:right">${r.aTiempo}</td><td style="text-align:right">${r.tarde}</td><td style="text-align:right;${r.noCump ? 'color:var(--dg)' : ''}">${r.noCump}</td><td style="text-align:right;${r.criticosNoCump ? 'color:var(--dg);font-weight:800' : ''}">${r.criticosNoCump}</td><td style="text-align:right">${r.prom} d</td><td style="text-align:right">${r.reprog}</td><td style="text-align:right">${String(r.k).startsWith('rol:') ? '—' : r.cierres + ' / ' + r.habiles}</td><td style="text-align:right;font-weight:800;color:${colPct(r.pct)}">${r.pct}%</td></tr>`).join('') : '<tr><td colspan="10" class="mini">Sin pendientes en el periodo</td></tr>'}
@@ -5984,6 +5995,70 @@ function hmEstadoTxt(f) {
   if (!f || !ent(f.entidad_id)?.factura_mensual) return null;
   const mes = hmMesDe(f.recurrente_periodo || f.fecha_pago || f.fecha_vencimiento), g = hmGrupo(f.entidad_id, mes), d = +String(f.recurrente_periodo || f.fecha_pago || '').slice(8, 10);
   return `Honorarios · quincena ${d <= 15 ? '15' : 'fin de mes'} de ${MES_TXT(mes)} → factura mensual${g.falta.length ? ' · le falta: ' + g.falta.join(', ') : ' · completa'} · límite ${fmtD(g.lim)}`;
+}
+
+// ══ EVALUACIÓN DE LA CONTADORA CONFORME AL MANUAL DE RESPONSABILIDADES ══
+// La calcula la base (fin_eval_contadora) con lo que registra el sistema; al terminar cada semana, quincena y mes se CONGELA
+// en fin_eval_reportes con su huella SHA-256: nadie puede modificarlo ni borrarlo (la base lo impide).
+const EVAL = { live: {}, arch: null, cargando: false };
+const EV_CLASE = { tiempo: ['A tiempo', '#22a06b'], tarde: ['Tarde', '#e8a317'], nodem: ['No demostrable', '#8b5cf6'], noreal: ['No realizado', '#ef4444'], crit: ['Crítico no realizado', '#7f1d1d'], plazo: ['En plazo', '#8a94a3'] };
+const evNivel = c => c === null || c === undefined ? ['Sin datos', 'var(--tm)'] : c >= 90 ? ['Óptimo', 'var(--sc)'] : c >= 70 ? ['Regular', 'var(--wn)'] : ['Desempeño crítico', 'var(--dg)'];
+function evPeriodo(per, off = 0) {
+  const h = hoyD();
+  if (per === 'semanal') { const l = new Date(h); l.setDate(h.getDate() - ((h.getDay() + 6) % 7) + off * 7); const f = new Date(l); f.setDate(l.getDate() + 6); return [isoD(l), isoD(f)]; }
+  if (per === 'quincenal') { let y = h.getFullYear(), m = h.getMonth(), q = h.getDate() <= 15 ? 0 : 1; let k = m * 2 + q + off; y += Math.floor(k / 24); k = ((k % 24) + 24) % 24; m = Math.floor(k / 2); q = k % 2;
+    return q ? [isoD(new Date(y, m, 16)), isoD(new Date(y, m + 1, 0))] : [isoD(new Date(y, m, 1)), isoD(new Date(y, m, 15))]; }
+  const a = new Date(h.getFullYear(), h.getMonth() + off, 1); return [isoD(a), isoD(new Date(a.getFullYear(), a.getMonth() + 1, 0))];
+}
+async function evCargar(per) {
+  const [a, b] = evPeriodo(per), k = a + '|' + b;
+  if (EVAL.cargando) return;
+  EVAL.cargando = true;
+  try {
+    const [r1, r2] = await Promise.all([sb.rpc('fin_eval_contadora', { p_desde: a, p_hasta: b }), sb.from('fin_eval_reportes').select('*').order('desde', { ascending: false }).limit(200)]);
+    EVAL.live[k] = r1.error ? { _err: r1.error.message } : r1.data; EVAL.at = EVAL.at || {}; EVAL.at[k] = Date.now();
+    if (!r2.error) EVAL.arch = r2.data || [];
+  } finally { EVAL.cargando = false; }
+  if (tab === 'rep') renderTab();
+}
+function evTabla(d) {
+  return `<table class="evtab"><thead><tr><th>Indicador del Manual</th><th>Meta</th><th style="text-align:right">Resultado</th><th style="width:150px">Cumplimiento</th></tr></thead><tbody>${(d.indicadores || []).map(x => { const p = x.pct, c = p === null || p === undefined ? 'var(--tm)' : p >= 90 ? 'var(--sc)' : p >= 70 ? 'var(--wn)' : 'var(--dg)';
+    const res = x.id === 'cxc' ? `${x.real ?? 0} % (${$$(x.num)} de ${$$(x.den)})` : x.id === 'cfdi' ? `${x.num} factura(s)` : x.den === null || x.den === undefined ? `${x.num}` : `${x.num} de ${x.den}`;
+    return `<tr><td><b>${esc(x.t)}</b><div class="mini">${esc(x.fuente)}</div></td><td class="mini">${esc(x.meta)}</td><td style="text-align:right">${p === null || p === undefined && !x.den ? '<span class="mini">no aplica en el periodo</span>' : res}</td><td>${p === null || p === undefined ? '<span class="mini">—</span>' : `<div class="evbar"><i style="width:${Math.max(3, p)}%;background:${c}"></i></div><b style="color:${c}">${p} %</b>`}</td></tr>`; }).join('')}</tbody></table>`;
+}
+function evCuerpo(d, congelado) {
+  const n = evNivel(d.calificacion), R = d.resumen || {}, T = d.tareas || [];
+  const malos = T.filter(t => ['crit', 'noreal', 'nodem', 'tarde'].includes(t.clase));
+  return `<div class="evtop"><div class="evcal" style="color:${n[1]}">${d.calificacion ?? '—'}<small>/100</small></div><div><div style="font-size:18px;font-weight:800;color:${n[1]}">${n[0]}</div>
+      <div class="mini">${fmtD(d.desde)} al ${fmtD(d.hasta)}${d.corte && d.corte < d.hasta ? ' · corte al ' + fmtD(d.corte) : ''} · ${d.dias_activos} de ${d.habiles} días hábiles con actividad · ${esc(d.contadora || '')}</div>
+      <div class="evchips">${Object.entries(EV_CLASE).filter(([k]) => R[k]).map(([k, [t, c]]) => `<span style="border-color:${c};color:${c}">${t} <b>${R[k]}</b></span>`).join('')}</div></div></div>
+    ${evTabla(d)}
+    ${malos.length ? `<div class="dsec" style="margin:14px 0 6px">Responsabilidades no cumplidas o fuera de regla (${malos.length})</div><div class="alist">${malos.map(t => `<div class="aitem ${['crit', 'noreal'].includes(t.clase) ? 'r' : 'a'}"><div style="flex:1"><div class="at">${esc(t.titulo)}</div><div class="am"><b style="color:${EV_CLASE[t.clase][1]}">${EV_CLASE[t.clase][0]}</b> · límite ${fmtD(t.limite)}${t.cumplida ? ' · cumplido ' + fmtD(t.cumplida) : ''}</div></div></div>`).join('')}</div>` : ''}
+    ${congelado ? `<div class="evhash">🔒 Reporte congelado el ${fmtDT(congelado.generado_at)} · no se puede modificar ni borrar · huella SHA-256 <code>${congelado.hash.slice(0, 16)}…</code></div>` : `<div class="mini" style="margin-top:8px">Periodo en curso: se recalcula con cada registro y se congela automáticamente al terminar.</div>`}`;
+}
+function cajaEvaluacion(per) {
+  const [a, b] = evPeriodo(per), k = a + '|' + b, d = EVAL.live[k];
+  if (!(k in EVAL.live) || EVAL.arch === null || Date.now() - ((EVAL.at || {})[k] || 0) > 120000) { if (!EVAL.cargando) setTimeout(() => evCargar(per), 0); }
+  const arch = (EVAL.arch || []).filter(x => x.tipo === per);
+  const ver = VIEW.evVer && arch.find(x => x.id === VIEW.evVer);
+  return `<div class="cfg-section" style="margin-bottom:20px"><h3 style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">Evaluación conforme al Manual del Contador · ${per}
+      <span style="display:flex;gap:6px">${ver ? `<button class="btn btn-s btn-sm" onclick="VIEW.evVer=null;renderTab()">← Periodo en curso</button>` : ''}<button class="btn btn-p btn-sm" onclick="evImprimir('${per}')">🖨 Imprimir (1 página)</button></span></h3>
+    <div class="body">${ver ? evCuerpo(ver.datos, ver) : d && d._err ? `<div class="errbox">No se pudo calcular: ${esc(d._err)}</div>` : d ? evCuerpo(d, null) : '<div class="mini">Calculando…</div>'}
+      <div class="dsec" style="margin:16px 0 6px">Reportes congelados (${arch.length})</div>
+      ${arch.length ? `<div class="evarch">${arch.map(x => { const n = evNivel(x.datos.calificacion); return `<div class="evr ${VIEW.evVer === x.id ? 'sel' : ''}" onclick="VIEW.evVer='${x.id}';renderTab()"><b style="color:${n[1]}">${x.datos.calificacion ?? '—'}</b><span>${fmtD(x.desde).slice(0, 5)}–${fmtD(x.hasta).slice(0, 5)}</span><small>🔒 ${x.hash.slice(0, 6)}</small></div>`; }).join('')}</div>` : '<div class="mini">Aún no termina ningún periodo; el primero se congela al cierre.</div>'}
+    </div></div>`;
+}
+function evImprimir(per) {
+  const arch = (EVAL.arch || []).find(x => x.id === VIEW.evVer), [a, b] = evPeriodo(per), d = arch ? arch.datos : EVAL.live[a + '|' + b]; if (!d) return toast('Aún calculando', 'warning');
+  const n = evNivel(d.calificacion), T = d.tareas || [], malos = T.filter(t => ['crit', 'noreal', 'nodem', 'tarde'].includes(t.clase));
+  imprimir(`Evaluación ${per} de la Contadora · ${fmtD(d.desde)} al ${fmtD(d.hasta)}`, `
+    <div class="kv"><b>Calificación</b><div><b style="font-size:18px;color:${d.calificacion >= 90 ? '#16794f' : d.calificacion >= 70 ? '#a86b00' : '#b42318'}">${d.calificacion ?? '—'} / 100 · ${n[0]}</b></div>
+      <b>Contadora</b><div>${esc(d.contadora || '')}</div><b>Periodo</b><div>${fmtD(d.desde)} al ${fmtD(d.hasta)}${d.corte < d.hasta ? ' (corte ' + fmtD(d.corte) + ')' : ''} · ${d.dias_activos} de ${d.habiles} días hábiles con actividad</div>
+      <b>Base</b><div>Manual de Responsabilidades · Contador (v1.0) y registros de COE Finanzas</div></div>
+    <table><thead><tr><th>Indicador</th><th>Meta</th><th class="r">Resultado</th><th class="r">%</th></tr></thead><tbody>${(d.indicadores || []).map(x => `<tr><td>${esc(x.t)}</td><td>${esc(x.meta)}</td><td class="r">${x.id === 'cxc' ? (x.real ?? 0) + ' %' : x.den === null || x.den === undefined ? x.num : x.num + ' de ' + x.den}</td><td class="r"><b>${x.pct ?? '—'}</b></td></tr>`).join('')}</tbody></table>
+    ${malos.length ? `<table><thead><tr><th>No cumplido / fuera de regla</th><th>Clasificación</th><th>Límite</th></tr></thead><tbody>${malos.slice(0, 18).map(t => `<tr><td>${esc(t.titulo)}</td><td>${EV_CLASE[t.clase][0]}</td><td>${fmtD(t.limite)}</td></tr>`).join('')}${malos.length > 18 ? `<tr><td colspan="3">y ${malos.length - 18} más</td></tr>` : ''}</tbody></table>` : ''}
+    <div style="font-size:9.5px;color:#556;margin-top:6px">${arch ? `Reporte congelado el ${fmtDT(arch.generado_at)} · inalterable · huella SHA-256: ${arch.hash}` : 'Periodo en curso · cálculo preliminar'}</div>
+    <div class="firmas"><div>Contadora · enterada<br>&nbsp;</div><div>Dirección General<br><b>Dr. José Antonio Villegas Ávila</b></div></div>`);
 }
 
 // ══ WIDGET PARA IPHONE (Scriptable) ══
