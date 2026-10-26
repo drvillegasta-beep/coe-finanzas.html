@@ -830,6 +830,7 @@ tr.fps-prov td{background:var(--sf2)}
 .fxslot{position:relative;border:1.5px dashed var(--br);border-radius:12px;padding:16px;text-align:center;cursor:pointer;display:flex;flex-direction:column;gap:4px;text-transform:none;letter-spacing:0;font-size:13px;color:var(--tx);font-weight:400}
 .fxslot b{font-size:18px}.fxslot span{font-size:11.5px;color:var(--tm);word-break:break-all}
 .fxslot input{position:absolute;inset:0;opacity:0;cursor:pointer}.fxslot.ok{border-style:solid;border-color:var(--sc);background:rgba(34,160,107,.08)}
+.pp-var{color:var(--wn);text-align:right;font-weight:600}
 </style>
 </head>
 <body>
@@ -2246,6 +2247,8 @@ async function _confirmarRecurrente(i) {
   const o = window._recOc[i], r = o.rec, monto = num(pgM.value), file = _pgFile;
   if (!file) { toast('Sube el comprobante', 'warning'); return; }
   if (monto <= 0) { toast('Escribe el monto', 'warning'); return; }
+  { const fp = pgF.value, ya = ABO.find(a => !a.anulado && Math.abs(num(a.monto) - monto) <= 1 && a.fecha_pago && fp && Math.abs((new Date(a.fecha_pago) - new Date(fp)) / 864e5) <= 2 && FAC.find(f => f.id === a.factura_id && !f.anulado && f.entidad_id === r.entidad_id));
+    if (ya && !confirm(`Ya hay una transferencia igual registrada: ${$$(ya.monto)} del ${fmtD(ya.fecha_pago)} a ${nomEnt(r.entidad_id)}.\n\n¿Es otro pago distinto? (Cancelar si es la misma)`)) return; }
   let pin; try { pin = await askPin('Firmar pago recurrente', `${r.descripcion} · ${$$(monto)}`); } catch { return; }
   let pinDir = null;
   let up; try { up = await subirArchivo(file, 'recurrentes'); } catch (e) { toast(e.message, 'error'); return; }
@@ -3191,7 +3194,7 @@ function reporteDia(fecha = hoyISO()) {
 // ── Desempeño semanal, quincenal y mensual ──
 function rangoPer(per) {
   const h = hoyD(); let ini;
-  if (per === 'semanal') { ini = new Date(h); ini.setDate(h.getDate() - ((h.getDay() + 6) % 7)); }
+  if (per === 'semanal') { ini = new Date(h); ini.setDate(h.getDate() - ((h.getDay() + 1) % 7)); }
   else if (per === 'quincenal') ini = new Date(h.getFullYear(), h.getMonth(), h.getDate() <= 15 ? 1 : 16);
   else ini = new Date(h.getFullYear(), h.getMonth(), 1);
   return [isoD(ini), isoD(h)];
@@ -4482,10 +4485,29 @@ function spPanelAplicar(it, i) {
     : R.length > 1 || (R[0] && R[0].m < saldo(R[0].f) - 0.01) ? `<div class="mini" style="margin-top:4px">${R.map(x => `${esc(String(x.f.descripcion || '').slice(0, 40))}: <b>${$$(x.m)}</b> ${x.desc ? '· liquida con descuento de ' + $$(x.desc) : x.m >= saldo(x.f) - 0.01 ? '· liquida' : '· abono, queda ' + $$(saldo(x.f) - x.m)}`).join('<br>')}</div>` : '';
   return `<div class="spapl"><div class="mini" style="margin-bottom:4px"><b>¿Cómo aplico este pago de ${$$(m)}?</b></div><div style="display:grid;gap:6px">${ops}</div>${tabla}${elegir ? `<div class="mini" style="margin-top:4px">Repartido ${$$(tot)} de ${$$(m)}${Math.abs(tot - m) > 0.5 ? ` · <b style="color:var(--dg)">faltan ${$$(m - tot)}</b>` : ' ✓'}</div>` : ''}</div>`;
 }
+// Candados contra duplicados: misma transferencia ya registrada, o pago «nuevo» cuando ya existe la cuenta / el proveedor
+function spDuplicado(it) {
+  if (it.forzar || !it.sel || it.sel === 'nada') return null;
+  const m = num(it.monto), D = spDestino(it); if (!(m > 0)) return null;
+  const eids = new Set([D.eid].filter(Boolean));
+  if (it.sel === 'nuevo' && it.ent === '__alta' && it.alta.nombre.trim()) ENT.filter(e => e.activo !== false && simil(e.nombre, it.alta.nombre) >= 0.75).forEach(e => eids.add(e.id));
+  const dias = (a, b) => Math.abs((new Date(a + 'T12:00:00') - new Date(b + 'T12:00:00')) / 864e5);
+  // 1) Ya hay un pago igual (mismo proveedor, mismo monto, fecha cercana)
+  const ya = ABO.find(a => !a.anulado && Math.abs(num(a.monto) - m) <= 1 && it.fecha && a.fecha_pago && dias(a.fecha_pago, it.fecha) <= 2 && (() => { const f = FAC.find(x => x.id === a.factura_id); return f && !f.anulado && eids.has(f.entidad_id); })());
+  if (ya) { const f = FAC.find(x => x.id === ya.factura_id); return { msg: `Parece la misma transferencia ya registrada: ${nomEnt(f.entidad_id)} · ${f.descripcion} · ${$$(ya.monto)} pagado el ${fmtD(ya.fecha_pago)}.`, cual: 'dup' }; }
+  // 2) Pago «nuevo» pero ya existe una cuenta abierta de ese proveedor por ese monto
+  if (it.sel === 'nuevo') {
+    const c = abiertas('egreso').find(f => (eids.has(f.entidad_id) || (it.lect?.beneficiario && simil(nomEnt(f.entidad_id), it.lect.beneficiario) >= 0.7)) && Math.abs(saldo(f) - m) <= 1);
+    if (c) return { msg: `Ya existe la cuenta abierta ${nomEnt(c.entidad_id)} · ${c.descripcion} por ${$$(saldo(c))}: aplica el pago a esa cuenta en lugar de crear otra.`, usar: 'cxp:' + c.id };
+    if (it.ent === '__alta') { const e = ENT.find(x => x.activo !== false && simil(x.nombre, it.alta.nombre) >= 0.75); if (e) return { msg: `Ya existe el proveedor «${e.nombre}». Elígelo en lugar de dar de alta otro.`, prov: e.id }; }
+  }
+  return null;
+}
 function spProblema(it) {
   if (/leyendo|preparando/.test(it.estado)) return 'leyendo';
   if (it.sel === 'nada') return null;
   if (!it.sel) return 'Elige a qué corresponde';
+  { const d = spDuplicado(it); if (d) return d.msg; }
   if (!(num(it.monto) > 0)) return 'Escribe el monto';
   if (!it.fecha) return 'Escribe la fecha del pago';
   if (it.sel === 'nuevo') {
@@ -4532,6 +4554,7 @@ function spPintar() {
           <div class="fgrp"><label>Referencia / rastreo</label><input type="text" value="${esc(it.ref)}" oninput="SP.items[${i}].ref=this.value"></div>` : ''}
         </div>
         ${it.sel !== 'nada' ? spPanelAplicar(it, i) : ''}
+        ${(() => { const d = spDuplicado(it); return d ? `<div class="warnbox" style="margin:8px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="flex:1;min-width:200px">⚠ ${esc(d.msg)}</span>${d.usar ? `<button class="btn btn-p btn-sm" onclick="SP.items[${i}].sel='${d.usar}';SP.items[${i}].apl={};spPintar()">Aplicar a esa cuenta</button>` : ''}${d.prov ? `<button class="btn btn-p btn-sm" onclick="SP.items[${i}].ent='${d.prov}';spPintar()">Usar ese proveedor</button>` : ''}${d.cual === 'dup' ? `<button class="btn btn-s btn-sm" onclick="SP.items[${i}].sel='nada';spPintar()">No registrar</button>` : ''}<label style="display:flex;gap:6px;align-items:center;font-size:12px;text-transform:none;cursor:pointer"><input type="checkbox" style="width:auto" onchange="SP.items[${i}].forzar=this.checked;spPintar()"> Sí es otro pago</label></div>` : ''; })()}
         <div class="spft">${p && p !== 'leyendo' ? `<b style="color:var(--dg)">${esc(p)}</b>` : fac}</div>
       </div></div>`;
   }).join('');
@@ -5635,12 +5658,19 @@ function ppItems() {
   window._recOc.forEach((o, i) => {
     if (o.factura || o.diasDiff < -45) return;
     const r = o.rec, per = isoD(o.fecha), mn = montoNomina(r, per), m = r.monto ? num(r.monto) : mn;
-    I.push({ k: 'r:' + r.id + '|' + per, o, oi: i, r, ent: r.entidad_id, desc: r.descripcion, monto: m ?? null, variable: m == null, fecha: per, prop: null, rec: true, sinCuenta: true, cat: r.categoria || 'Sin categoría', pri: r.prioridad || '', nom: !!nomRef(r) });
+    I.push({ k: 'r:' + r.id + '|' + per, o, oi: i, r, ent: r.entidad_id, desc: r.descripcion, monto: m ?? null, variable: m == null, est: m == null ? recEstimado(r) : null, fecha: per, prop: null, rec: true, sinCuenta: true, cat: r.categoria || 'Sin categoría', pri: r.prioridad || '', nom: !!nomRef(r) });
   });
   return I;
 }
 const ppVencido = x => x.fecha && x.fecha < hoyISO();
-const ppMonto = x => x.monto ?? num(VIEW.pp.mon[x.k] || 0);
+const ppMonto = x => x.monto ?? num(VIEW.pp.mon[x.k] || x.est || 0);
+// Monto estimado de un recurrente variable (nómina u honorarios): el último pago registrado; en nómina fija, la estimación de COE Nómina
+function recEstimado(r) {
+  const U = FAC.filter(f => f.recurrente_id === r.id && !f.anulado && num(f.monto_total) > 0).sort((a, b) => String(b.recurrente_periodo || b.fecha_vencimiento).localeCompare(String(a.recurrente_periodo || a.fecha_vencimiento)))[0];
+  if (U) return num(U.monto_total);
+  if (nomRef(r) === 'fijo' && typeof nominaEstimada === 'function' && nominaEstimada()) return nominaEstimada();
+  return null;
+}
 function ppFiltrar(I) {
   const F = VIEW.pp.fil;
   let L = I.filter(x => F === 'todo' ? true : F === 'por' ? !x.prop : F === 'prop' ? !!x.prop : F === 'rec' ? x.rec : F === 'venc' ? ppVencido(x) : F === 'desc' ? !!(x.f && descPP(x.f)?.vig) : true);
@@ -5698,7 +5728,7 @@ function ppFila(x, esDirTab) {
   const P = VIEW.pp, v = ppVencido(x), pagar = puede('pagos', 3);
   const est = x.prop ? `<span class="bdg bdg-aut">propuesto ${fmtD(x.prop).slice(0, 5)}</span>` : v ? '<span class="bdg bdg-rt-r">vencido</span>' : '';
   const tag = x.sinCuenta ? `<span class="bdg pp-rec">↻ ${x.nom ? 'nómina' : 'recurrente'}</span>` : x.rec ? '<span class="bdg pp-rec">↻</span>' : '';
-  const monto = x.variable ? (puede('cxp') ? `<div class="ipfx pp-mon" onclick="event.stopPropagation()"><span>$</span><input type="number" step="0.01" placeholder="${x.nom ? 'según Nómina' : 'monto'}" value="${esc(P.mon[x.k] || '')}" onchange="VIEW.pp.mon['${x.k}']=this.value;renderTab()"></div>` : '<span class="mini">variable</span>') : `<b class="amt">${$$(x.monto)}</b>`;
+  const monto = x.variable ? (puede('cxp') ? `<div onclick="event.stopPropagation()"><div class="ipfx pp-mon"><span>$</span><input type="number" step="0.01" placeholder="${x.nom ? 'según Nómina' : 'monto'}" value="${esc(P.mon[x.k] || (x.est ? x.est.toFixed(2) : ''))}" onchange="VIEW.pp.mon['${x.k}']=this.value;renderTab()"></div><div class="mini pp-var">variable${x.est && !P.mon[x.k] ? ' · estimado del último pago' : ''}</div></div>` : x.est ? `<b class="amt">${$$(x.est)}</b><div class="mini pp-var">variable</div>` : '<span class="mini">variable</span>') : `<b class="amt">${$$(x.monto)}</b>`;
   const ir = x.f ? `verCuenta('${x.f.id}')` : '';
   const acc = esDirTab || pagar ? (x.f && pagar ? `<button class="btn ${x.prop ? 'btn-p' : 'btn-s'} btn-sm" onclick="event.stopPropagation();pagarCuenta('${x.f.id}')">Pagar</button>` : x.sinCuenta && pagar ? `<button class="btn btn-s btn-sm" onclick="event.stopPropagation();pagarRecurrenteDesde(${x.oi})">Pagar</button>` : '') : '';
   return `<div class="pprow ${v ? 'v' : ''} ${x.prop ? 'p' : ''}" ${ir ? `onclick="${ir}"` : ''}>
@@ -5865,7 +5895,7 @@ function ppSemanas(L, esDirTab) {
   const B = {}; L.forEach((x, i) => { let k = ppSemanaDe(x); if (k !== 'venc' && k > ult) return; if (k !== 'venc' && k < l0) k = 'venc'; (B[k] = B[k] || []).push(i); });
   const tarjeta = i => { const x = L[i], tarde = x.prop && x.fecha && x.prop > x.fecha, v = ppVencido(x) && !x.prop;
     return `<div class="ppcard ${x.prop ? 'p' : ''} ${v ? 'v' : ''} ${x.rec ? 'r' : ''}" draggable="${puede('cxp') ? 'true' : 'false'}" ondragstart="event.dataTransfer.setData('text/plain','${i}');this.classList.add('drag')" ondragend="this.classList.remove('drag')" onclick="${x.f ? `verCuenta('${x.f.id}')` : ''}">
-      <div class="ppc1"><b>${esc(nomEnt(x.ent))}</b><span class="amt">${x.variable && !VIEW.pp.mon[x.k] ? '<span class="mini">variable</span>' : $$(ppMonto(x))}</span></div>
+      <div class="ppc1"><b>${esc(nomEnt(x.ent))}</b><span class="amt" style="text-align:right">${x.variable && !VIEW.pp.mon[x.k] && !x.est ? '<span class="mini">variable</span>' : $$(ppMonto(x)) + (x.variable ? '<div class="mini pp-var">variable</div>' : '')}</span></div>
       <div class="mini">${esc(String(x.desc || '').slice(0, 60))}</div>${ppDescChip(x)}
       <div class="ppc2">${x.prop ? `<span class="bdg bdg-aut">pagar ${fmtD(x.prop).slice(0, 5)}</span>` : ''}${x.nom ? '<span class="bdg pp-rec">nómina</span>' : x.rec ? '<span class="bdg pp-rec">↻</span>' : ''}${x.fecha ? `<span class="mini" style="${v || tarde ? 'color:var(--dg);font-weight:700' : ''}">vence ${fmtD(x.fecha).slice(0, 5)}${tarde ? ' · se paga tarde' : ''}</span>` : ''}
         ${puede('cxp') ? `<button class="btn btn-s btn-sm" style="margin-left:auto;padding:2px 8px" onclick="event.stopPropagation();ppMoverDlg(${i})">Mover</button>` : ''}${x.f && puede('pagos', 3) && esDirTab ? `<button class="btn btn-p btn-sm" style="padding:2px 8px" onclick="event.stopPropagation();pagarCuenta('${x.f.id}')">Pagar</button>` : ''}</div></div>`; };
@@ -5929,7 +5959,7 @@ function hmGrupo(eid, mes) {
   const pagadas = cuentas.filter(f => num(f.monto_pagado) > 0.009);
   const q = n => cuentas.find(f => { const d = +String(f.recurrente_periodo || f.fecha_pago || f.fecha_vencimiento).slice(8, 10); return n === 1 ? d <= 15 : d > 15; });
   const q1 = q(1), q2 = q(2);
-  const trans = pagadas.reduce((s, f) => s + num(f.monto_pagado), 0);
+  const trans = pagadas.reduce((s, f) => s + num(f.monto_pagado), 0), transSin = pagadas.filter(f => !tieneXML(f)).reduce((s, f) => s + num(f.monto_pagado), 0);
   const fm = FM.find(x => x.entidad_id === eid && x.mes === mes) || {};
   const ant = (() => { const p = new Date(y, m - 2, 1), k = isoD(p).slice(0, 7); const A = FM.find(x => x.entidad_id === eid && x.mes === k); return A?.monto_confirmado ? num(A.monto_confirmado) : null; })();
   const habitual = num(e?.monto_factura_habitual) || ant || null;
@@ -5942,7 +5972,7 @@ function hmGrupo(eid, mes) {
   else if (!fm.solicitado_at && !xml) falta.push('solicitar la factura');
   if (!xml) falta.push('recibir y subir el XML/PDF');
   if (xml && ppd && comps < pagadas.length) falta.push('complemento de pago (la factura es PPD)');
-  return { e, r, eid, mes, fin, lim, d: diasA(lim), cuentas, pagadas, q1, q2, trans, fm, habitual, xml, ppd, comps, falta, listo: !falta.length };
+  return { e, r, eid, mes, fin, lim, d: diasA(lim), cuentas, pagadas, q1, q2, trans, transSin, yaFact: pagadas.some(tieneXML), fm, habitual, xml, ppd, comps, falta, listo: !falta.length };
 }
 // Grupos a mostrar: el mes en curso y cualquier mes anterior con algo pendiente
 function hmGrupos() {
@@ -5996,12 +6026,12 @@ function hmSubirQ(eid, dia) {
 }
 // ② Comprobar el monto antes de pedir la factura
 function hmConfirmar(eid, mes) {
-  const g = hmGrupo(eid, mes), v = num(g.fm.monto_confirmado) || g.habitual || g.trans || '';
+  const g = hmGrupo(eid, mes), v = num(g.fm.monto_confirmado) || (g.yaFact ? g.transSin : g.habitual || g.trans) || '';
   modal('Comprobar monto a facturar · ' + g.e.nombre, `<div class="kv" style="margin-bottom:12px"><b>Quincena 15</b><div>${g.q1 && num(g.q1.monto_pagado) ? $$(g.q1.monto_pagado) : '<span style="color:var(--wn)">sin transferencia</span>'}</div><b>Fin de mes</b><div>${g.q2 && num(g.q2.monto_pagado) ? $$(g.q2.monto_pagado) : '<span style="color:var(--wn)">sin transferencia</span>'}</div><b>Total transferido</b><div><b>${$$(g.trans)}</b></div><b>Monto habitual</b><div>${g.habitual ? $$(g.habitual) : 'sin registrar'}</div></div>
     <div class="fgrd"><div class="fgrp"><label>Monto que debe facturar</label><div class="ipfx"><span>$</span><input type="number" step="0.01" id="hmM" value="${v}"></div></div>
       <div class="fgrp"><label>Nota (opcional)</label><input type="text" id="hmN" placeholder="Ej. incluye bono de octubre" value="${esc(g.fm.nota || '')}"></div>
       <div class="fgrp sp2"><label style="display:flex;gap:8px;align-items:center;cursor:pointer;text-transform:none;font-size:13px"><input type="checkbox" id="hmH" style="width:auto" ${g.habitual ? '' : 'checked'}> Guardar como monto habitual de ${esc(g.e.nombre)}</label></div></div>
-    <div class="mini">Revisa que el monto coincida con lo pactado y con las transferencias. Hasta confirmarlo no se puede pedir la factura.</div>`,
+    ${g.yaFact ? `<div class="warnbox" style="margin-bottom:8px">Una transferencia de este mes ya tiene factura: esta factura debe ser solo por lo que falta (${$$(g.transSin)}).</div>` : ''}<div class="mini">Revisa que el monto coincida con lo pactado y con las transferencias. Hasta confirmarlo no se puede pedir la factura.</div>`,
     `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="hmConfirmarFirmar('${eid}','${mes}')">Firmar monto</button>`);
 }
 async function hmConfirmarFirmar(eid, mes) {
@@ -6065,7 +6095,7 @@ const EV_CLASE = { tiempo: ['A tiempo', '#22a06b'], tarde: ['Tarde', '#e8a317'],
 const evNivel = c => c === null || c === undefined ? ['Sin datos', 'var(--tm)'] : c >= 90 ? ['Óptimo', 'var(--sc)'] : c >= 70 ? ['Regular', 'var(--wn)'] : ['Desempeño crítico', 'var(--dg)'];
 function evPeriodo(per, off = 0) {
   const h = hoyD();
-  if (per === 'semanal') { const l = new Date(h); l.setDate(h.getDate() - ((h.getDay() + 6) % 7) + off * 7); const f = new Date(l); f.setDate(l.getDate() + 6); return [isoD(l), isoD(f)]; }
+  if (per === 'semanal') { const l = new Date(h); l.setDate(h.getDate() - ((h.getDay() + 1) % 7) + off * 7);  /* semana de sábado a viernes (corte viernes 6:30 p.m.) */ const f = new Date(l); f.setDate(l.getDate() + 6); return [isoD(l), isoD(f)]; }
   if (per === 'quincenal') { let y = h.getFullYear(), m = h.getMonth(), q = h.getDate() <= 15 ? 0 : 1; let k = m * 2 + q + off; y += Math.floor(k / 24); k = ((k % 24) + 24) % 24; m = Math.floor(k / 2); q = k % 2;
     return q ? [isoD(new Date(y, m, 16)), isoD(new Date(y, m + 1, 0))] : [isoD(new Date(y, m, 1)), isoD(new Date(y, m, 15))]; }
   const a = new Date(h.getFullYear(), h.getMonth() + off, 1); return [isoD(a), isoD(new Date(a.getFullYear(), a.getMonth() + 1, 0))];
@@ -6101,7 +6131,7 @@ function cajaEvaluacion(per) {
   if (!(k in EVAL.live) || EVAL.arch === null || Date.now() - ((EVAL.at || {})[k] || 0) > 120000) { if (!EVAL.cargando) setTimeout(() => evCargar(per), 0); }
   const arch = (EVAL.arch || []).filter(x => x.tipo === per);
   const ver = VIEW.evVer && arch.find(x => x.id === VIEW.evVer);
-  return `<div class="cfg-section" style="margin-bottom:20px"><h3 style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">Evaluación conforme al Manual del Contador · ${per}
+  return `<div class="cfg-section" style="margin-bottom:20px"><h3 style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">Evaluación conforme al Manual del Contador · ${per}${per === 'semanal' ? ' (sábado a viernes · corte viernes 6:30 p.m.)' : ''}
       <span style="display:flex;gap:6px">${ver ? `<button class="btn btn-s btn-sm" onclick="VIEW.evVer=null;renderTab()">← Periodo en curso</button>` : ''}<button class="btn btn-p btn-sm" onclick="evImprimir('${per}')">🖨 Imprimir (1 página)</button></span></h3>
     <div class="body">${ver ? evCuerpo(ver.datos, ver) : d && d._err ? `<div class="errbox">No se pudo calcular: ${esc(d._err)}</div>` : d ? evCuerpo(d, null) : '<div class="mini">Calculando…</div>'}
       <div class="dsec" style="margin:16px 0 6px">Reportes congelados (${arch.length})</div>
