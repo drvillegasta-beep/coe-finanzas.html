@@ -789,6 +789,15 @@ tr.fps-prov td{background:var(--sf2)}
 .cdd-kv b{font-size:18px}.cdd-kv span{font-size:11px;color:var(--tm)}
 .cdd-g{margin-top:8px}.cdd-h{margin-bottom:4px}
 .cdd-nav{display:flex;gap:6px;align-items:center;margin-left:auto;font-size:13px}
+/* Honorarios · factura mensual */
+.hmgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:12px;margin-bottom:22px}
+.hmcard{border:1px solid var(--br);border-left:4px solid var(--in);border-radius:12px;padding:12px;background:var(--sf)}
+.hmcard.a{border-left-color:var(--wn)}.hmcard.r{border-left-color:var(--dg)}.hmcard.ok{border-left-color:var(--sc);opacity:.85}
+.hmh{display:flex;justify-content:space-between;gap:10px;margin-bottom:8px}
+.hmp{display:flex;gap:10px;align-items:center;padding:7px 0;border-top:1px dashed var(--br)}
+.hmn{width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;background:var(--sf2);flex:none}
+.hmp.ok .hmn{background:var(--sc);color:#fff}.hmp.ok b{color:var(--tm)}
+.hmfalta{margin-top:8px;font-size:12.5px;color:var(--dg)}
 </style>
 </head>
 <body>
@@ -946,6 +955,7 @@ function closeSb() { document.getElementById('sdb').classList.remove('open'); do
 
 // ── Estado ──────────────────────────────────────
 let sb = null, cu = null, tab = 'dash';
+let FM = [];
 let USR = [], ENT = [], FAC = [], ABO = [], REC = [], PED = [], TAR = [], DOCS = [], RS = [], CIE = [], SUC = [], CORR = [], NOM = [], NOM_EMP = [], INV = {};
 let CFG = { monto_doble_firma: 3000, correo_alertas: 'drvillegas.ta@gmail.com', hora_alertas: '09:00', dias_aviso: 3 };
 let FALTA_SQL = [];
@@ -1248,11 +1258,13 @@ async function cargarTodo(silencioso) {
     q('fin_inventario_controles', x => x.gte('fecha', isoD(new Date(Date.now() - 120 * 864e5))).order('fecha', { ascending: false })),
     q('far_conteos', x => x.select('fecha,ubicacion').gte('fecha', isoD(new Date(Date.now() - 120 * 864e5))).limit(3000)),
     q('qx_conteos', x => x.select('created_at,ubicacion_id,estado').gte('created_at', new Date(Date.now() - 120 * 864e5).toISOString()).limit(500)),
+    q('fin_fact_mensual'),
   ]);
   [ENT, FAC, ABO, REC, PED, TAR, DOCS, RS, CIE, SUC] = r;
   if (silencioso !== 'sinusr') { await cargarUsuarios(); const yo = USR.find(u => u.id === cu.id); if (!yo || yo.activo === false || yo.debe_cambiar) { try { localStorage.removeItem(SESSION_KEY); } catch { } alert('Tu acceso fue cambiado por Dirección General. Entra de nuevo.'); location.reload(); return; } if (yo) { cu.permisos = yo.permisos || {}; cu.rol = yo.rol; cu.sede = yo.sede || null; aplicarPermisosMenu(); } }
   CORR = r[11]; AVA = r[12]; CJ = r[13]; SOLB = r[14]; NOM_EMP = r[15] || []; NOM = r[16] || [];
   INV = { farProd: r[17] || [], farLotes: r[18] || [], farPed: r[19] || [], quiInv: r[20] || [], quiLotes: r[21] || [], quiLentes: r[22] || [], quiPed: r[23] || [], farSol: r[24] || [], qxMat: r[25] || [], qxLot: r[26] || [], qxLio: r[27] || [], qxUb: r[28] || [], farMov: r[29] || [], quiLio: r[30] || [], ctl: r[31] || [], farCnt: r[32] || [], qxCnt: r[33] || [] };
+  FM = r[r.length - 1] || [];
   r[10].forEach(c => { CFG[c.clave] = c.valor; });
   if (!RS.length) RS = [{ id: null, nombre: 'José Antonio Villegas Ávila', rfc: 'VIAA870425115' }];
   const crit = FALLO_CARGA.filter(t => /^fin_/.test(t));
@@ -1274,7 +1286,7 @@ let canal = null;
 function suscribir() {
   if (canal) sb.removeChannel(canal);
   canal = sb.channel('coe-finanzas-v3');
-  ['fin_facturas', 'fin_abonos', 'fin_pedidos', 'fin_tareas', 'fin_documentos', 'fin_entidades', 'fin_recurrentes', 'con_cierres_dia', 'fin_correos', 'fin_tareas_avances', 'fin_cierres_jornada', 'fin_solicitudes_baja']
+  ['fin_facturas', 'fin_abonos', 'fin_pedidos', 'fin_tareas', 'fin_documentos', 'fin_entidades', 'fin_recurrentes', 'con_cierres_dia', 'fin_correos', 'fin_tareas_avances', 'fin_cierres_jornada', 'fin_solicitudes_baja', 'fin_fact_mensual']
     .forEach(t => canal.on('postgres_changes', { event: '*', schema: 'public', table: t }, p => onCambio(t, p)));
   canal.subscribe(st => {
     rtState = st === 'SUBSCRIBED' ? 'on' : (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT' || st === 'CLOSED') ? 'off' : 'wait';
@@ -1937,11 +1949,13 @@ function editarProv(id, pre = {}) {
     <div class="fgrp"><label>Banco</label><input type="text" id="pvB" value="${esc(e.banco || '')}"></div>
     <div class="fgrp"><label>CLABE</label><input type="text" id="pvCl" value="${esc(e.clabe || '')}"></div>
     <div class="fgrp"><label>Convenio CIE</label><input type="text" id="pvCie" value="${esc(e.convenio_cie || '')}"></div>
-    <div class="fgrp sp2"><label style="text-transform:none;font-size:13px;color:var(--tx)"><input type="checkbox" id="pvNF" ${e.no_factura ? 'checked' : ''}> Este proveedor no factura (sus pagos no se piden como factura pendiente)</label></div></div>`,
+    <div class="fgrp sp2"><label style="text-transform:none;font-size:13px;color:var(--tx)"><input type="checkbox" id="pvNF" ${e.no_factura ? 'checked' : ''}> Este proveedor no factura (sus pagos no se piden como factura pendiente)</label></div>
+    <div class="fgrp"><label style="text-transform:none;font-size:13px;color:var(--tx)"><input type="checkbox" id="pvFM" ${e.factura_mensual ? 'checked' : ''}> Honorarios: emite UNA factura al mes por sus dos quincenas</label></div>
+    <div class="fgrp"><label>Monto habitual de su factura mensual</label><div class="ipfx"><span>$</span><input type="number" step="0.01" id="pvMH" value="${e.monto_factura_habitual ?? ''}" placeholder="Ej. 9000"></div></div></div>`,
     `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="guardarProv('${id || ''}')">Firmar y guardar</button>`);
 }
 async function guardarProv(id) {
-  const d = { id, nombre: pvN.value, rfc: pvR.value, dias_credito: pvD.value, categoria: pvC.value, email: pvE.value, telefono: pvT.value, banco: pvB.value, clabe: pvCl.value, convenio_cie: pvCie.value, no_factura: pvNF.checked, descuento_pp: pvDp.value || 0, dias_pronto_pago: pvDd.value };
+  const d = { id, nombre: pvN.value, rfc: pvR.value, dias_credito: pvD.value, categoria: pvC.value, email: pvE.value, telefono: pvT.value, banco: pvB.value, clabe: pvCl.value, convenio_cie: pvCie.value, no_factura: pvNF.checked, descuento_pp: pvDp.value || 0, dias_pronto_pago: pvDd.value, factura_mensual: pvFM.checked, monto_factura_habitual: pvMH.value };
   const r = await rpcFirmado('fin_guardar_proveedor', { p_datos: d }, { titulo: 'Firmar datos de proveedor' });
   if (r) { CM('mGen'); toast('Proveedor guardado', 'success'); await cargarTodo(); }
 }
@@ -1984,7 +1998,8 @@ function fpsMesProv(L, fechaDe, fila, cab, ncol, pre, montoDe, accProv) {
 }
 function rFps() {
   const B = VIEW.fpsB, st = B.st || '';
-  const TOD = vivas().filter(porSolicitar), CTOD = complementosPendientes(), ITOD = docsIncompletos();
+  const HMX = hmExcluir(), HMG = hmGrupos().filter(g => !g.listo);
+  const TOD = vivas().filter(f => porSolicitar(f) && !HMX.has(f.id)), CTOD = complementosPendientes(), ITOD = docsIncompletos();
   const L = fpsOrdenar(TOD.filter(f => fpsCoincide(f) && (!st || st === 'pag')));
   const C = CTOD.filter(x => fpsCoincide(x.f, ABO.filter(a => a.factura_id === x.f.id && !a.anulado).map(a => String(a.fecha_pago || '').slice(0, 10)).sort().pop()) && (!st || st === 'comp'));
   const pag = L.filter(fpsPagada), tot = pag.reduce((s, f) => s + num(f.monto_pagado), 0), venc = L.filter(f => diasA(limFps(f)) < 0);
@@ -1998,14 +2013,14 @@ function rFps() {
   const cuerpo = fpsMesProv(L, fpsFecha, fila, cab, 7, 'f', f => num(fpsPagada(f) ? f.monto_pagado : f.monto_total), F => puede('fps') ? `<button class="btn btn-s btn-sm" onclick="correoProveedor('${F[0].entidad_id}','${F[0].id}',null,'factura')">✉ Pedir todas</button>` : '');
   const sel = (k, t) => `<option value="${k}" ${VIEW.fpsOrd === k ? 'selected' : ''}>${t}</option>`;
   const activo = !!(B.q || B.desde || B.hasta || st);
-  const nTot = TOD.length + CTOD.length;
+  const nTot = TOD.length + CTOD.length + HMG.length;
   const chip = (k, t, n) => `<span class="chip ${st === k ? 'act' : ''}" onclick="fpsBusca('st','${st === k ? '' : k}',1)">${t} <b>${n}</b></span>`;
   const buscador = `<div class="almbusca">
     <input type="text" id="fpsB_q" placeholder="🔎 Buscar proveedor, concepto, folio o monto" value="${esc(B.q || '')}" oninput="fpsBusca('q',this.value)">
     <label>Del<input type="date" value="${B.desde || ''}" onchange="fpsBusca('desde',this.value,1)"></label><label>al<input type="date" value="${B.hasta || ''}" onchange="fpsBusca('hasta',this.value,1)"></label>
     <label>Estatus<select onchange="fpsBusca('st',this.value,1)">${[['', 'Todos'], ['pag', 'Pagado sin factura'], ['comp', 'Pagado sin complemento de pago'], ['inc', 'Documento incompleto']].map(([k, t]) => `<option value="${k}" ${st === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
     ${activo ? `<button class="btn btn-s btn-sm" onclick="VIEW.fpsB={q:'',desde:'',hasta:'',st:''};renderTab()">✕ Limpiar</button>` : ''}
-    <div class="chips" style="flex-basis:100%"><span class="chip ${!st ? 'act' : ''}" onclick="fpsBusca('st','',1)">Todas <b>${TOD.length + CTOD.length}</b></span>${chip('pag', 'Pagadas sin factura', TOD.length)}${chip('comp', 'Pagadas sin complemento', CTOD.length)}${chip('inc', 'Documento incompleto', ITOD.length)}</div></div>
+    <div class="chips" style="flex-basis:100%"><span class="chip ${!st ? 'act' : ''}" onclick="fpsBusca('st','',1)">Todas <b>${nTot}</b></span>${chip('pag', 'Pagadas sin factura', TOD.length)}${chip('comp', 'Pagadas sin complemento', CTOD.length)}${chip('inc', 'Documento incompleto', ITOD.length)}</div></div>
     ${st ? `<div class="warnbox" style="margin:0 0 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span>Filtro activo: solo <b>${{ pag: 'pagadas sin factura', comp: 'pagadas sin complemento', inc: 'documentos incompletos' }[st]}</b>.${st !== 'pag' && TOD.length ? ` Las <b>${TOD.length}</b> pagadas sin factura están ocultas.` : ''}${st !== 'comp' && CTOD.length ? ` Los <b>${CTOD.length}</b> complementos están ocultos.` : ''}</span><button class="btn btn-s btn-sm" onclick="fpsBusca('st','',1)">Ver todo</button></div>` : ''}`;
   const compHTML = !st || st === 'comp' ? `<div class="dsec" style="margin:0 0 8px">Complementos de pago por solicitar (${C.length}${activo && C.length !== CTOD.length ? ' de ' + CTOD.length : ''})</div><div class="tc" style="margin-bottom:22px">${C.length ? fpsMesProv(C.map(x => Object.assign({}, x.f, { _x: x })), f => f._x.ult, f => { const x = f._x; return `<tr><td><span class="sem ${x.d < 0 ? 'r' : x.d <= 5 ? 'a' : 'v'}"></span></td><td><b>${esc(nomEnt(x.f.entidad_id))}</b><div class="mini">${esc(x.f.numero_factura || x.f.descripcion)}</div></td><td class="amt" style="text-align:right">${$$(x.f.monto_total)}</td><td class="amt" style="text-align:right">${$$(x.f.monto_pagado)}</td><td><span class="dtag no">${x.falta} de ${x.pg}</span></td><td>${fmtD(x.lim)}<div class="mini">${x.d < 0 ? `<b style="color:var(--dg)">venció hace ${-x.d} d</b>` : 'quedan ' + x.d + ' d'}</div></td><td>${puede('fps') ? `<div class="rowact"><button class="btn btn-s btn-sm" onclick="correoProveedor('${x.f.entidad_id}','${x.f.id}',null,'aclaracion')">✉ Pedir</button><button class="btn btn-p btn-sm" onclick="openUpload('${x.f.id}')">⬆ Complemento</button></div>` : ''}</td></tr>`; }, '<thead><tr><th></th><th>Proveedor · factura</th><th style="text-align:right">Total</th><th style="text-align:right">Pagado</th><th>Faltan</th><th>Límite</th><th></th></tr></thead>', 7, 'c', f => num(f.monto_pagado), F => puede('fps') ? `<button class="btn btn-s btn-sm" onclick="correoProveedor('${F[0].entidad_id}','${F[0].id}',null,'aclaracion')">✉ Pedir todos</button>` : '') : `<div class="emp" style="padding:18px">${activo ? 'Ningún complemento coincide' : '✓ Sin complementos pendientes'}</div>`}</div>` : '';
   const listaHTML = st === 'comp' || st === 'inc' ? '' : `<div class="dsec" style="margin:0 0 8px">Facturas por solicitar (${L.length}${activo && L.length !== TOD.length ? ' de ' + TOD.length : ''})</div>
@@ -2013,9 +2028,10 @@ function rFps() {
       <label class="mini" style="display:flex;gap:8px;align-items:center;margin:0">Ordenar por <select onchange="VIEW.fpsOrd=this.value;renderTab()" style="width:auto;min-height:34px;padding:4px 10px">${sel('fecha', 'Fecha de pago (reciente primero)')}${sel('fecha_asc', 'Fecha de pago (antigua primero)')}${sel('monto', 'Monto (mayor primero)')}${sel('monto_asc', 'Monto (menor primero)')}${sel('proveedor', 'Proveedor (A–Z)')}${sel('limite', 'Fecha límite')}</select></label>
       <span class="mini" style="margin-left:auto">${pag.length} pagadas · ${$$(tot)}${venc.length ? ` · <b style="color:var(--dg)">${venc.length} fuera de plazo</b>` : ''} · límite ${fmtD(ultHabil(finMesISO()))}</span></div>
     <div class="tc" style="margin-bottom:22px">${L.length ? cuerpo : `<div class="emp"><div class="ic">✓</div><p>${activo ? 'Ninguna factura coincide con la búsqueda.' : 'Lista en cero. No hay facturas por solicitar.'}</p></div>`}</div>`;
-  return `<div class="ph"><div><div class="ptit" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">Facturas por solicitar <span class="fpstot ${nTot ? '' : 'ok'}">${nTot}<small>${nTot === 1 ? 'pendiente' : 'pendientes'}<br>${CTOD.length} complemento(s) · ${TOD.length} factura(s)</small></span></div><div class="psub">Solo pagos ya hechos (con transferencia o comprobante) a los que les falta la factura o el complemento de pago · lo que aún no se liquida está en Por pagar · al subir el XML se cierran solos</div></div><button class="btn btn-p btn-sm" onclick="openUpload()">⬆ Subir factura</button></div>
+  return `<div class="ph"><div><div class="ptit" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">Facturas por solicitar <span class="fpstot ${nTot ? '' : 'ok'}">${nTot}<small>${nTot === 1 ? 'pendiente' : 'pendientes'}<br>${CTOD.length} complemento(s) · ${TOD.length} factura(s)${HMG.length ? ' · ' + HMG.length + ' mensual(es)' : ''}</small></span></div><div class="psub">Solo pagos ya hechos (con transferencia o comprobante) a los que les falta la factura o el complemento de pago · lo que aún no se liquida está en Por pagar · al subir el XML se cierran solos</div></div><button class="btn btn-p btn-sm" onclick="openUpload()">⬆ Subir factura</button></div>
   <div class="pad">
     ${buscador}
+    ${!st || st === 'pag' ? hmSeccion() : ''}
     ${listaHTML}
     ${compHTML}
     ${!st || st === 'inc' ? docsIncompletosCaja(st === 'inc') : ''}
@@ -4410,6 +4426,7 @@ function fpsVerificar(ids) {
   const fila = f => {
     if (f._falta) return `<div class="errbox" style="margin:4px 0">⚠ Un pago no aparece al releer la base. Toca «Actualizar» o recarga; si sigue sin aparecer avísame.</div>`;
     const n = esc(nomEnt(f.entidad_id)) + ' · ' + $$(f.monto_pagado);
+    const hm = hmEstadoTxt(f); if (hm) return `<div class="okbox" style="margin:4px 0;padding:6px 10px">✓ ${n} → <b>${esc(hm)}</b> <a href="#" onclick="event.preventDefault();CM('mGen');VIEW.fpsB={q:'',desde:'',hasta:'',st:''};goTab('fps')">ver ›</a></div>`;
     if (porSolicitar(f)) return `<div class="okbox" style="margin:4px 0;padding:6px 10px">✓ ${n} → <b>Facturas por solicitar · ${MES_TXT(fpsFecha(f).slice(0, 7))}</b> · límite ${fmtD(limFps(f))} <a href="#" onclick="event.preventDefault();CM('mGen');VIEW.fpsB={q:'',desde:'',hasta:'',st:''};VIEW.fpsMes=VIEW.fpsMes||{};VIEW.fpsMes['f${fpsFecha(f).slice(0, 7)}']=false;goTab('fps')">ver ›</a></div>`;
     const motivo = tieneXML(f) ? 'ya tiene su XML' : ent(f.entidad_id)?.no_factura ? 'el proveedor está marcado como «no factura»' : f.origen === 'nomina' ? 'es nómina por plantilla' : num(f.monto_pagado) <= 0.009 ? 'no quedó pagado' : 'revisar';
     return `<div class="mini" style="margin:4px 0">${n} → no requiere solicitar factura (${motivo})</div>`;
@@ -5705,6 +5722,150 @@ async function ppMover(x, fecha) {
   if (x.variable && !(num(VIEW.pp.mon[x.k]) > 0)) return toast('Escribe primero el monto de este pago variable (vista Lista)', 'warning');
   VIEW.pp.sel = { [x.k]: true }; VIEW.pp.modo = 'unica'; VIEW.pp.fecha = fecha;
   await ppFirmar();
+}
+
+// ══ HONORARIOS CON FACTURA MENSUAL ══
+// Prestadores que cobran por quincena y emiten UNA factura al final del mes por las dos transferencias.
+// Pasos (todo antes del último día hábil del mes, por validez fiscal):
+//   ① transferencias de la quincena 15 y fin de mes  ② confirmar el monto a facturar (monto habitual)
+//   ③ solicitar la factura (solo con monto confirmado)  ④ subir XML/PDF (se liga a las dos quincenas)  ⑤ complemento de pago si la factura es PPD
+
+const hmEntes = () => ENT.filter(e => e.factura_mensual && e.activo !== false);
+const hmRec = eid => REC.find(r => r.activo && r.entidad_id === eid && nomRef(r) && nomRef(r) !== 'fijo') || REC.find(r => r.activo && r.entidad_id === eid);
+const hmMesDe = iso => String(iso || '').slice(0, 7);
+function hmGrupo(eid, mes) {
+  const e = ent(eid), r = hmRec(eid), [y, m] = mes.split('-').map(Number);
+  const fin = isoD(new Date(y, m, 0)), lim = ultHabil(fin + 'T12:00:00');
+  const cuentas = FAC.filter(f => f.entidad_id === eid && f.tipo === 'egreso' && !f.anulado && hmMesDe(f.recurrente_periodo || f.fecha_pago || f.fecha_vencimiento) === mes);
+  const pagadas = cuentas.filter(f => num(f.monto_pagado) > 0.009);
+  const q = n => cuentas.find(f => { const d = +String(f.recurrente_periodo || f.fecha_pago || f.fecha_vencimiento).slice(8, 10); return n === 1 ? d <= 15 : d > 15; });
+  const q1 = q(1), q2 = q(2);
+  const trans = pagadas.reduce((s, f) => s + num(f.monto_pagado), 0);
+  const fm = FM.find(x => x.entidad_id === eid && x.mes === mes) || {};
+  const ant = (() => { const p = new Date(y, m - 2, 1), k = isoD(p).slice(0, 7); const A = FM.find(x => x.entidad_id === eid && x.mes === k); return A?.monto_confirmado ? num(A.monto_confirmado) : null; })();
+  const habitual = num(e?.monto_factura_habitual) || ant || null;
+  const xml = pagadas.length > 0 && pagadas.every(tieneXML);
+  const ppd = pagadas.some(f => f.metodo_pago === 'PPD'), comps = DOCS.filter(d => d.tabla === 'fin_facturas' && d.tipo === 'complemento' && pagadas.some(f => f.id === d.registro_id)).length;
+  const falta = [];
+  if (!q1 || num(q1.monto_pagado) <= 0.009) falta.push('transferencia de la quincena 15');
+  if (!q2 || num(q2.monto_pagado) <= 0.009) falta.push('transferencia de fin de mes');
+  if (!fm.confirmado_at) falta.push('confirmar el monto a facturar');
+  else if (!fm.solicitado_at && !xml) falta.push('solicitar la factura');
+  if (!xml) falta.push('recibir y subir el XML/PDF');
+  if (xml && ppd && comps < pagadas.length) falta.push('complemento de pago (la factura es PPD)');
+  return { e, r, eid, mes, fin, lim, d: diasA(lim), cuentas, pagadas, q1, q2, trans, fm, habitual, xml, ppd, comps, falta, listo: !falta.length };
+}
+// Grupos a mostrar: el mes en curso y cualquier mes anterior con algo pendiente
+function hmGrupos() {
+  const mesHoy = hoyISO().slice(0, 7), G = [];
+  hmEntes().forEach(e => {
+    const meses = new Set([mesHoy]);
+    FAC.filter(f => f.entidad_id === e.id && f.tipo === 'egreso' && !f.anulado && num(f.monto_pagado) > 0.009 && !tieneXML(f)).forEach(f => meses.add(hmMesDe(f.recurrente_periodo || f.fecha_pago || f.fecha_vencimiento)));
+    [...meses].filter(Boolean).sort().forEach(k => { const g = hmGrupo(e.id, k); if (k === mesHoy || !g.listo) G.push(g); });
+  });
+  return G.sort((a, b) => a.mes.localeCompare(b.mes) || a.e.nombre.localeCompare(b.e.nombre));
+}
+// Cuentas de quincena que ya se controlan en la factura mensual (no se repiten en la lista normal)
+const hmExcluir = () => new Set(hmGrupos().flatMap(g => g.cuentas.map(f => f.id)));
+const hmPaso = (ok, n, t, sub, acc) => `<div class="hmp ${ok ? 'ok' : ''}"><span class="hmn">${ok ? '✓' : n}</span><div style="flex:1;min-width:0"><b>${t}</b>${sub ? `<div class="mini">${sub}</div>` : ''}</div>${acc || ''}</div>`;
+function hmTarjeta(g) {
+  const k = g.eid + '|' + g.mes, mesTxt = MES_TXT(g.mes), fm = g.fm, conf = num(fm.monto_confirmado);
+  const q = (f, n, dia) => f && num(f.monto_pagado) > 0.009
+    ? `${$$(f.monto_pagado)} · ${fmtD(f.fecha_pago)}${f.comprobante_pago_url ? ` · <a href="${esc(f.comprobante_pago_url)}" target="_blank">comprobante</a>` : ''}`
+    : `<span style="color:var(--wn)">falta · ${fmtD(dia)}</span>`;
+  const dia15 = g.mes + '-15', diaFin = g.fin;
+  const t1 = g.q1 && num(g.q1.monto_pagado) > 0.009, t2 = g.q2 && num(g.q2.monto_pagado) > 0.009;
+  const upQ = (n, dia) => puede('pagos', 3) || puede('recurrentes') ? `<button class="btn btn-s btn-sm" onclick="hmSubirQ('${g.eid}','${dia}')">⬆ Transferencia</button>` : '';
+  const sugerido = conf || g.habitual || g.trans || '';
+  const dif = conf && g.trans ? conf - g.trans : null;
+  const paso2 = fm.confirmado_at
+    ? hmPaso(true, 2, `Monto a facturar confirmado: ${$$(conf)}`, `${esc(nomUsr(fm.confirmado_por))} · ${fmtDT(fm.confirmado_at)}${dif !== null && Math.abs(dif) > 0.5 ? ` · <b style="color:var(--wn)">${dif > 0 ? 'falta transferir' : 'transferido de más'} ${$$(Math.abs(dif))}</b>` : g.trans ? ' · cuadra con lo transferido' : ''}${fm.nota ? ' · ' + esc(fm.nota) : ''}`, puede('fps') && !g.xml ? `<button class="btn btn-s btn-sm" onclick="hmConfirmar('${g.eid}','${g.mes}')">Cambiar</button>` : '')
+    : hmPaso(false, 2, 'Comprobar el monto antes de pedir la factura', `Monto habitual ${g.habitual ? $$(g.habitual) : 'sin registrar'} · transferido ${$$(g.trans)}${g.habitual && g.trans && Math.abs(g.habitual - g.trans) > 0.5 && t1 && t2 ? ` · <b style="color:var(--wn)">difiere ${$$(Math.abs(g.habitual - g.trans))}</b>` : ''}`, puede('fps') ? `<button class="btn btn-p btn-sm" onclick="hmConfirmar('${g.eid}','${g.mes}')">Comprobar monto</button>` : '');
+  const paso3 = hmPaso(!!fm.solicitado_at || g.xml, 3, fm.solicitado_at ? `Factura solicitada ${fmtDT(fm.solicitado_at)}` : 'Solicitar la factura', fm.solicitado_at ? esc(nomUsr(fm.solicitado_por)) : fm.confirmado_at ? `por ${$$(conf)} · antes del ${fmtD(g.lim)}` : 'Primero comprueba el monto', puede('fps') && !g.xml ? `<button class="btn ${fm.confirmado_at && !fm.solicitado_at ? 'btn-p' : 'btn-s'} btn-sm" ${fm.confirmado_at ? '' : 'disabled'} onclick="hmSolicitar('${g.eid}','${g.mes}')">${fm.solicitado_at ? 'Volver a pedir' : '✉ Solicitar'}</button>` : '');
+  const paso4 = hmPaso(g.xml, 4, g.xml ? `Factura recibida${fm.xml_uuid ? ' · UUID ' + esc(fm.xml_uuid.slice(0, 8)) + '…' : ''}${fm.total_xml ? ' · ' + $$(fm.total_xml) : ''}` : 'Subir XML y PDF de la factura mensual', g.xml ? `ligada a ${g.pagadas.length} transferencia(s)${fm.metodo ? ' · ' + esc(fm.metodo) : ''}` : 'Se liga sola a las dos quincenas', puede('fps') && !g.xml ? `<label class="btn btn-s btn-sm" style="cursor:pointer">⬆ XML/PDF<input type="file" multiple accept=".xml,.pdf,text/xml,application/pdf" style="display:none" onchange="hmXml('${g.eid}','${g.mes}',this.files);this.value=''"></label>` : '');
+  const paso5 = g.xml && g.ppd ? hmPaso(g.comps >= g.pagadas.length, 5, 'Complemento de pago', `La factura es PPD: se necesita complemento por cada transferencia (${g.comps} de ${g.pagadas.length})`, g.comps < g.pagadas.length && puede('fps') ? `<button class="btn btn-s btn-sm" onclick="openUpload('${g.pagadas.find(f => !DOCS.some(d => d.registro_id === f.id && d.tipo === 'complemento'))?.id || g.pagadas[0].id}')">⬆ Complemento</button>` : '') : '';
+  const urg = g.listo ? 'ok' : g.d < 0 ? 'r' : g.d <= 3 ? 'a' : '';
+  return `<div class="hmcard ${urg}"><div class="hmh"><div><b>${esc(g.e.nombre)}</b><div class="mini">Honorarios · factura mensual de ${mesTxt}${g.e.rfc ? ' · RFC ' + esc(g.e.rfc) : ' · <b style="color:var(--wn)">sin RFC</b>'}</div></div>
+      <div style="text-align:right"><b class="amt">${$$(conf || g.trans || g.habitual || 0)}</b><div class="mini" style="${g.d < 0 && !g.listo ? 'color:var(--dg);font-weight:700' : ''}">${g.listo ? '✓ completo' : g.d < 0 ? `venció el ${fmtD(g.lim)}` : `límite ${fmtD(g.lim)} · ${g.d === 0 ? 'HOY' : 'quedan ' + g.d + ' d'}`}</div></div></div>
+    ${hmPaso(t1 && t2, 1, 'Transferencias de la quincena', `Quincena 15: ${q(g.q1, 1, dia15)}<br>Fin de mes: ${q(g.q2, 2, diaFin)}${!t2 && diaFin > g.lim ? `<br><b style="color:var(--wn)">El ${fmtD(diaFin)} es inhábil: transfiere a más tardar el ${fmtD(g.lim)} para que la factura salga en el mes</b>` : ''}`, `<div style="display:flex;flex-direction:column;gap:4px">${!t1 ? upQ(1, dia15) : ''}${!t2 ? upQ(2, diaFin) : ''}</div>`)}
+    ${paso2}${paso3}${paso4}${paso5}
+    ${g.falta.length ? `<div class="hmfalta">Le falta: <b>${g.falta.join(' · ')}</b></div>` : ''}</div>`;
+}
+function hmSeccion() {
+  const G = hmGrupos(); if (!G.length) return '';
+  const pend = G.filter(g => !g.listo);
+  return `<div class="dsec" style="margin:0 0 8px">Honorarios · factura mensual (${pend.length} pendiente${pend.length === 1 ? '' : 's'})</div>
+    <div class="mini" style="margin-bottom:8px">Una factura por mes por las dos quincenas. Comprueba el monto, pide la factura y sube el XML <b>antes del último día hábil del mes</b>: después ya no es válida fiscalmente.</div>
+    <div class="hmgrid">${G.map(hmTarjeta).join('')}</div>`;
+}
+// ① Subir la transferencia de una quincena
+function hmSubirQ(eid, dia) {
+  const r = hmRec(eid); if (!r) { toast('Este prestador no tiene recurrente de honorarios; súbelo con «Subir pagos»', 'warning'); return; }
+  const oc = buildRecOcurrencias(Math.max(1, diasA(dia) + 2)), i = oc.findIndex(o => o.rec.id === r.id && isoD(o.fecha).slice(0, 7) === dia.slice(0, 7) && (+isoD(o.fecha).slice(8, 10) <= 15) === (+dia.slice(8, 10) <= 15));
+  if (i < 0) { toast('No encontré esa quincena en el calendario; súbela con «Subir pagos»', 'warning'); return; }
+  window._recOc = oc; window._volverTransf = false; pagarRecurrente(i);
+}
+// ② Comprobar el monto antes de pedir la factura
+function hmConfirmar(eid, mes) {
+  const g = hmGrupo(eid, mes), v = num(g.fm.monto_confirmado) || g.habitual || g.trans || '';
+  modal('Comprobar monto a facturar · ' + g.e.nombre, `<div class="kv" style="margin-bottom:12px"><b>Quincena 15</b><div>${g.q1 && num(g.q1.monto_pagado) ? $$(g.q1.monto_pagado) : '<span style="color:var(--wn)">sin transferencia</span>'}</div><b>Fin de mes</b><div>${g.q2 && num(g.q2.monto_pagado) ? $$(g.q2.monto_pagado) : '<span style="color:var(--wn)">sin transferencia</span>'}</div><b>Total transferido</b><div><b>${$$(g.trans)}</b></div><b>Monto habitual</b><div>${g.habitual ? $$(g.habitual) : 'sin registrar'}</div></div>
+    <div class="fgrd"><div class="fgrp"><label>Monto que debe facturar</label><div class="ipfx"><span>$</span><input type="number" step="0.01" id="hmM" value="${v}"></div></div>
+      <div class="fgrp"><label>Nota (opcional)</label><input type="text" id="hmN" placeholder="Ej. incluye bono de octubre" value="${esc(g.fm.nota || '')}"></div>
+      <div class="fgrp sp2"><label style="display:flex;gap:8px;align-items:center;cursor:pointer;text-transform:none;font-size:13px"><input type="checkbox" id="hmH" style="width:auto" ${g.habitual ? '' : 'checked'}> Guardar como monto habitual de ${esc(g.e.nombre)}</label></div></div>
+    <div class="mini">Revisa que el monto coincida con lo pactado y con las transferencias. Hasta confirmarlo no se puede pedir la factura.</div>`,
+    `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="hmConfirmarFirmar('${eid}','${mes}')">Firmar monto</button>`);
+}
+async function hmConfirmarFirmar(eid, mes) {
+  const m = num(hmM.value); if (!(m > 0)) return toast('Escribe el monto', 'warning');
+  const r = await rpcFirmado('fin_fact_mensual_accion', { p_entidad: eid, p_mes: mes, p_accion: 'confirmar', p_datos: { monto: m, nota: hmN.value.trim(), habitual: hmH.checked } }, { titulo: 'Confirmar monto a facturar', sub: `${nomEnt(eid)} · ${$$(m)}` });
+  if (r) { CM('mGen'); toast('Monto confirmado · ya puedes solicitar la factura', 'success'); await cargarTodo(true); renderTab(); }
+}
+// ③ Solicitar la factura (texto listo para WhatsApp o correo)
+function hmTextoSolicitud(g) {
+  const rs = RS.find(x => x.rfc) || RS[0] || {}, m = num(g.fm.monto_confirmado);
+  return `Hola ${String(g.e.nombre).split(' ')[0].toLowerCase().replace(/^./, c => c.toUpperCase())}, te pido por favor tu factura de honorarios de ${MES_TXT(g.mes)}:\n\n` +
+    `• Monto total: ${$$(m)}${g.q1 && g.q2 ? ` (quincena 15: ${$$(g.q1.monto_pagado)} + fin de mes: ${$$(g.q2?.monto_pagado || 0)})` : ''}\n` +
+    `• A nombre de: ${rs.nombre || ''}${rs.rfc ? ' · RFC ' + rs.rfc : ''}\n• Uso CFDI: G03 · Método: PUE · Forma de pago: 03 Transferencia\n\n` +
+    `Es importante que la emitas a más tardar el ${fmtD(g.lim)} (fin de mes), si no ya no es válida fiscalmente. Envíame el XML y el PDF. Gracias.\n— Centro Ocular Especializado`;
+}
+function hmSolicitar(eid, mes) {
+  const g = hmGrupo(eid, mes); if (!g.fm.confirmado_at) return toast('Primero comprueba el monto', 'warning');
+  const tx = hmTextoSolicitud(g), tel = String(g.e.telefono || '').replace(/\D/g, '');
+  window._hmTx = tx;
+  modal('Solicitar factura · ' + g.e.nombre, `<textarea id="hmTx" style="width:100%;min-height:210px">${esc(tx)}</textarea>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn btn-s btn-sm" onclick="navigator.clipboard.writeText(hmTx.value).then(()=>toast('Copiado','success'))">📋 Copiar</button>
+      <a class="btn btn-s btn-sm" target="_blank" href="https://wa.me/${tel.length === 10 ? '52' + tel : tel}?text=${encodeURIComponent(tx)}">WhatsApp${tel ? '' : ' (sin teléfono)'}</a>
+      ${g.e.email ? `<a class="btn btn-s btn-sm" href="mailto:${esc(g.e.email)}?subject=${encodeURIComponent('Factura de honorarios ' + MES_TXT(g.mes))}&body=${encodeURIComponent(tx)}">✉ Correo</a>` : ''}</div>
+    <div class="mini" style="margin-top:8px">Después de enviarlo, firma «Marcar como solicitada» para que quede registrado.</div>`,
+    `<button class="btn btn-s" onclick="CM('mGen')">Cerrar</button><button class="btn btn-p" onclick="hmSolicitado('${eid}','${mes}')">Marcar como solicitada</button>`);
+}
+async function hmSolicitado(eid, mes) {
+  const r = await rpcFirmado('fin_fact_mensual_accion', { p_entidad: eid, p_mes: mes, p_accion: 'solicitado', p_datos: {} }, { titulo: 'Factura solicitada', sub: nomEnt(eid) + ' · ' + MES_TXT(mes) });
+  if (r) { CM('mGen'); toast('Registrado: factura solicitada', 'success'); await cargarTodo(true); renderTab(); }
+}
+// ④ XML/PDF de la factura mensual: se valida y se liga a las dos quincenas
+async function hmXml(eid, mes, files) {
+  const L = [...(files || [])], fx = L.find(f => /\.xml$/i.test(f.name) || /xml/.test(f.type)), fp = L.find(f => /\.pdf$/i.test(f.name) || /pdf/.test(f.type));
+  if (!fx) return toast('Falta el XML (puedes elegir XML y PDF juntos)', 'warning');
+  const c = parseCFDI(await fx.text()); if (!c || !c.uuid) return toast('No pude leer el XML', 'error');
+  const g = hmGrupo(eid, mes), conf = num(g.fm.monto_confirmado), av = [];
+  if (g.e.rfc && c.emisorRfc && c.emisorRfc !== String(g.e.rfc).toUpperCase()) av.push(`El RFC del emisor (${c.emisorRfc}) no es el de ${g.e.nombre} (${g.e.rfc}).`);
+  if (conf && Math.abs(c.total - conf) > 1) av.push(`El total del XML (${$$(c.total)}) no coincide con el monto confirmado (${$$(conf)}).`);
+  if (!conf && Math.abs(c.total - g.trans) > 1) av.push(`El total del XML (${$$(c.total)}) no coincide con lo transferido (${$$(g.trans)}).`);
+  if (c.fecha && c.fecha.slice(0, 7) !== mes) av.push(`La factura es del ${fmtD(c.fecha)}, fuera de ${MES_TXT(mes)}: fiscalmente debe ser del mes de pago.`);
+  if (c.metodo === 'PPD') av.push('La factura es PPD: después habrá que pedir el complemento de pago.');
+  if (c.tipo && c.tipo !== 'I') av.push('El XML no es una factura de ingreso (tipo ' + c.tipo + ').');
+  if (av.length && !confirm('Revisa antes de ligar la factura:\n\n• ' + av.join('\n• ') + '\n\n¿Ligarla de todos modos?')) return;
+  let ux, up = null;
+  try { ux = await subirArchivo(fx, 'facturas'); if (fp) up = await subirArchivo(fp, 'facturas'); } catch (e) { return toast(e.message, 'error'); }
+  const r = await rpcFirmado('fin_fact_mensual_accion', { p_entidad: eid, p_mes: mes, p_accion: 'xml', p_datos: { uuid: c.uuid, metodo: c.metodo, total: c.total, rfc: c.emisorRfc, folio: (c.serie || '') + (c.folio || ''), xml_url: ux.url, sha: ux.sha, pdf_url: up?.url || '', pdf_sha: up?.sha || '' } }, { titulo: 'Ligar factura mensual', sub: `${nomEnt(eid)} · ${$$(c.total)}` });
+  if (r) { toast(`Factura ligada a ${r.cuentas} transferencia(s)${c.metodo === 'PPD' ? ' · pide el complemento de pago' : ''}${fp ? '' : ' · falta el PDF'}`, 'success'); await cargarTodo(true); renderTab(); }
+}
+// Texto para la confirmación de «Subir pagos»: a qué corresponde y qué le falta
+function hmEstadoTxt(f) {
+  if (!f || !ent(f.entidad_id)?.factura_mensual) return null;
+  const mes = hmMesDe(f.recurrente_periodo || f.fecha_pago || f.fecha_vencimiento), g = hmGrupo(f.entidad_id, mes), d = +String(f.recurrente_periodo || f.fecha_pago || '').slice(8, 10);
+  return `Honorarios · quincena ${d <= 15 ? '15' : 'fin de mes'} de ${MES_TXT(mes)} → factura mensual${g.falta.length ? ' · le falta: ' + g.falta.join(', ') : ' · completa'} · límite ${fmtD(g.lim)}`;
 }
 
 // ══ WIDGET PARA IPHONE (Scriptable) ══
