@@ -815,6 +815,7 @@ tr.fps-prov td{background:var(--sf2)}
 .rubg .aitem{margin-left:14px}
 .mtrub{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--tm);padding:10px 2px 4px;display:flex;gap:6px}
 .mtrub span{color:var(--tx)}
+.pri.pc{background:rgba(96,165,250,.15);color:#60a5fa;border:1px solid rgba(96,165,250,.4)}
 </style>
 </head>
 <body>
@@ -2575,7 +2576,7 @@ function tablaDia(tareas) {
 }
 function ladoMisTareas(misP) {
   return `<div class="cfg-section"><h3 style="display:flex;justify-content:space-between;align-items:center">Mis tareas (${misP.length})${puede('tareas') ? `<button class="btn btn-s btn-sm" onclick="nuevoPendiente()">+</button>` : ''}</h3>
-    <div class="body mtl">${misP.length ? misP.slice().sort((a, b) => RUBROS.findIndex(r => r[0] === rubroDe(a)) - RUBROS.findIndex(r => r[0] === rubroDe(b)) || ordenPend(a, b)).map((t, i, A) => { const s = semT(t), rb = rubroDe(t), nuevo = !i || rubroDe(A[i - 1]) !== rb; return `${nuevo ? `<div class="mtrub">${RUB_LBL[rb][1]} ${RUB_LBL[rb][2]} <span>${A.filter(x => rubroDe(x) === rb).length}</span></div>` : ''}<div class="mt ${s}" onclick="verPendiente('${t.id}')">
+    <div class="body mtl">${cu.rol === 'contadora' || sujetoDash().rol === 'contadora' ? (() => { const X = extraContable().contable; return X.n ? `<div class="mtrub">∑ Contable · solicitar facturas</div>${X.html}` : ''; })() : ''}${misP.length ? misP.slice().sort((a, b) => RUBROS.findIndex(r => r[0] === rubroDe(a)) - RUBROS.findIndex(r => r[0] === rubroDe(b)) || ordenPend(a, b)).map((t, i, A) => { const s = semT(t), rb = rubroDe(t), nuevo = !i || rubroDe(A[i - 1]) !== rb; return `${nuevo ? `<div class="mtrub">${RUB_LBL[rb][1]} ${RUB_LBL[rb][2]} <span>${A.filter(x => rubroDe(x) === rb).length}</span></div>` : ''}<div class="mt ${s}" onclick="verPendiente('${t.id}')">
       ${puede('tareas') ? `<button class="mtchk" title="Marcar hecho con evidencia" onclick="event.stopPropagation();cumplirTarea('${t.id}')"></button>` : ''}
       <div style="flex:1;min-width:0"><div class="mtt">${esc(t.titulo)}</div><div class="mini">${priBdg(t.prioridad, t.id)} ${s === 'r' ? `<b style="color:var(--dg)">venció ${fmtD(t.fecha_limite)}</b>` : 'vence ' + fmtD(t.fecha_limite)}${t.estado === 'bloqueado' ? ' · <b style="color:var(--dg)">bloqueado</b>' : ''}</div></div></div>`; }).join('') : '<div class="mini">✓ Sin tareas abiertas</div>'}</div>
     <div style="padding:0 16px 14px"><button class="btn btn-s btn-sm" style="width:100%" onclick="VIEW.pAmb='mios';goTab('tar')">Ver todos mis pendientes</button></div></div>`;
@@ -3308,10 +3309,23 @@ function rubroDe(t) {
 }
 // Pendientes de un responsable agrupados por rubro (compactos; se abren al tocarlos)
 VIEW.rubAbre = VIEW.rubAbre || {};
-function listaPorRubro(L, fila, pre) {
+function listaPorRubro(L, fila, pre, extra = {}) {
   const G = {}; L.forEach(t => (G[rubroDe(t)] = G[rubroDe(t)] || []).push(t));
-  return RUBROS.filter(r => G[r[0]]).map(([k, ico, lbl]) => { const T = G[k], v = T.filter(vencidaT).length, cr = T.filter(t => vencidaT(t) && t.prioridad === 'critico').length, kk = pre + k, ab = VIEW.rubAbre[kk];
-    return `<div class="rubg"><div class="rubh ${v ? 'v' : ''}" onclick="VIEW.rubAbre['${kk}']=!VIEW.rubAbre['${kk}'];renderTab()"><span class="ppar">${ab ? '▾' : '▸'}</span><span class="rubi">${ico}</span><b style="flex:1">${lbl}</b><span class="mini">${T.length}${v ? ` · <b style="color:var(--dg)">${v} vencido(s)${cr ? ', ' + cr + ' crítico(s)' : ''}</b>` : ''}</span></div>${ab ? T.map(fila).join('') : ''}</div>`; }).join('');
+  return RUBROS.filter(r => G[r[0]] || extra[r[0]]).map(([k, ico, lbl]) => { const T = G[k] || [], X = extra[k] || { html: '', n: 0, v: 0 }, v = T.filter(vencidaT).length + X.v, cr = T.filter(t => vencidaT(t) && t.prioridad === 'critico').length, kk = pre + k, ab = VIEW.rubAbre[kk];
+    return `<div class="rubg"><div class="rubh ${v ? 'v' : ''}" onclick="VIEW.rubAbre['${kk}']=!VIEW.rubAbre['${kk}'];renderTab()"><span class="ppar">${ab ? '▾' : '▸'}</span><span class="rubi">${ico}</span><b style="flex:1">${lbl}</b><span class="mini">${T.length + X.n}${v ? ` · <b style="color:var(--dg)">${v} vencido(s)${cr ? ', ' + cr + ' crítico(s)' : ''}</b>` : ''}</span></div>${ab ? X.html + T.map(fila).join('') : ''}</div>`; }).join('');
+}
+// Contable: solicitar las facturas de lo que ya tiene pago probatorio (transferencia o comprobante), complementos y facturas mensuales de honorarios
+function extraContable() {
+  const HMX = typeof hmExcluir === 'function' ? hmExcluir() : new Set();
+  const F = vivas().filter(f => porSolicitar(f) && !HMX.has(f.id)), Fv = F.filter(f => diasA(limFps(f)) < 0);
+  const C = complementosPendientes(), Cv = C.filter(x => x.d < 0);
+  const H = typeof hmGrupos === 'function' ? hmGrupos().filter(g => !g.listo) : [], Hv = H.filter(g => g.d < 0);
+  const prox = F.filter(f => diasA(limFps(f)) >= 0).map(f => limFps(f)).sort()[0];
+  const row = (n, nv, t, sub, go) => n ? `<div class="aitem ${nv ? 'r' : 'a'}" onclick="${go}"><div style="flex:1;min-width:0"><div class="at"><span class="pri pc">Facturas</span> ${t}</div><div class="am">${sub}</div></div></div>` : '';
+  const html = row(F.length, Fv.length, `Solicitar ${F.length} factura(s) de pagos con comprobante`, `${new Set(F.map(f => f.entidad_id)).size} proveedor(es) · ${$$(F.reduce((s, f) => s + num(f.monto_pagado), 0))}${Fv.length ? ` · <b style="color:var(--dg)">${Fv.length} fuera de plazo</b>` : ''}${prox ? ' · próximo límite ' + fmtD(prox) : ''}`, "VIEW.fpsB={q:'',desde:'',hasta:'',st:'pag'};goTab('fps')")
+    + row(H.length, Hv.length, `${H.length} factura(s) mensual(es) de honorarios`, H.map(g => esc(g.e.nombre.split(' ')[0]) + ': ' + g.falta[0]).join(' · '), "VIEW.fpsB={q:'',desde:'',hasta:'',st:''};goTab('fps')")
+    + row(C.length, Cv.length, `Solicitar ${C.length} complemento(s) de pago`, `facturas PPD ya pagadas${Cv.length ? ` · <b style="color:var(--dg)">${Cv.length} fuera de plazo</b>` : ''}`, "VIEW.fpsB={q:'',desde:'',hasta:'',st:'comp'};goTab('fps')");
+  return { contable: { html, n: (F.length ? 1 : 0) + (H.length ? 1 : 0) + (C.length ? 1 : 0), v: (Fv.length ? 1 : 0) + (Hv.length ? 1 : 0) + (Cv.length ? 1 : 0) } };
 }
 const esDeDir = t => t.responsable_id === cu.id || t.responsable_rol === 'direccion' || (!t.responsable_id && t.responsable_rol === cu.rol);
 VIEW.cdQuien = VIEW.cdQuien || 'conta';
@@ -3326,7 +3340,7 @@ function cajaContaPend() {
   return `<div class="dcard"><div class="ph3"><h3>Pendientes por rubro</h3><span class="cnt">${ab.length}</span><button class="btn btn-p btn-sm cdplus" title="Agregar pendiente" onclick="nuevoPendiente('${quien === 'yo' ? cu.id : U.id}')">＋ Agregar</button></div>
     <div class="seg" style="margin-bottom:8px"><button class="${quien === 'conta' ? 'on' : ''}" onclick="VIEW.cdQuien='conta';renderTab()">De la Contadora</button><button class="${quien === 'yo' ? 'on' : ''}" onclick="VIEW.cdQuien='yo';renderTab()">Míos</button></div>
     <div class="chips" style="margin-bottom:8px">${chip('abiertos', 'Abiertos', ab.length)}${chip('vencidos', 'Vencidos', ven.length)}${chip('criticos', 'Críticos', crit.length)}${chip('hoy', 'Cumplidos hoy', hoyC.length)}</div>
-    <div class="alist" style="max-height:480px;overflow:auto">${L.length ? listaPorRubro(L, fila, quien + VIEW.cdFil) : '<div class="muted">Nada en esta lista.</div>'}</div>
+    <div class="alist" style="max-height:480px;overflow:auto">${(() => { const X = quien === 'conta' && ['abiertos', 'vencidos'].includes(VIEW.cdFil) ? extraContable() : {}; if (VIEW.cdFil === 'vencidos' && X.contable && !X.contable.v) delete X.contable; return L.length || X.contable?.n ? listaPorRubro(L, fila, quien + VIEW.cdFil, X) : '<div class="muted">Nada en esta lista.</div>'; })()}</div>
     <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn btn-s btn-sm" onclick="VIEW.pAmb='${quien === 'yo' ? 'mios' : 'equipo'}';VIEW.pResp='';goTab('tar')">Ver todos</button><button class="btn btn-s btn-sm" onclick="VIEW.repPer='diario';goTab('rep')">Desempeño</button></div></div>`;
 }
 // Lo que hizo la Contadora en un día, armado solo con lo que registró en el sistema
