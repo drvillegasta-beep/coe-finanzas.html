@@ -826,6 +826,10 @@ tr.fps-prov td{background:var(--sf2)}
 .evarch{display:flex;gap:8px;flex-wrap:wrap}
 .evr{display:flex;flex-direction:column;align-items:center;padding:8px 12px;border:1px solid var(--br);border-radius:10px;cursor:pointer;min-width:84px}
 .evr b{font-size:20px}.evr span{font-size:12px}.evr small{font-size:10px;color:var(--tm)}.evr.sel{border-color:var(--pr);background:var(--sf2)}
+.fxgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.fxslot{position:relative;border:1.5px dashed var(--br);border-radius:12px;padding:16px;text-align:center;cursor:pointer;display:flex;flex-direction:column;gap:4px;text-transform:none;letter-spacing:0;font-size:13px;color:var(--tx);font-weight:400}
+.fxslot b{font-size:18px}.fxslot span{font-size:11.5px;color:var(--tm);word-break:break-all}
+.fxslot input{position:absolute;inset:0;opacity:0;cursor:pointer}.fxslot.ok{border-style:solid;border-color:var(--sc);background:rgba(34,160,107,.08)}
 </style>
 </head>
 <body>
@@ -2036,7 +2040,7 @@ function rFps() {
     <td>${fpsPagada(f) ? `<span class="bdg bdg-apr">✓ Pagado</span><div class="mini">${fmtD(f.fecha_pago)}${f.comprobante_pago_url ? ` · <a href="${esc(f.comprobante_pago_url)}" target="_blank">comprobante</a>` : ''}</div>` : '<span class="bdg bdg-pnd">Sin pago aún</span>'}</td>
     <td class="amt" style="text-align:right">${$$(fpsPagada(f) ? f.monto_pagado : f.monto_total)}</td>
     <td>${fmtD(limFps(f))}<div class="mini">${fpsDiasTxt(f)}</div></td><td class="mini">${c ? fmtDT(c.enviado_at) : '<span style="color:var(--wn)">no se ha pedido</span>'}</td>
-    <td>${puede('fps') ? `<div class="rowact"><button class="btn btn-s btn-sm" onclick="correoProveedor('${f.entidad_id}','${f.id}',null,'factura')">✉ Pedir</button><button class="btn btn-p btn-sm" onclick="openUpload('${f.id}')">⬆ XML/PDF</button></div>` : ''}</td></tr>`; };
+    <td>${puede('fps') ? `<div class="rowact"><button class="btn btn-s btn-sm" onclick="correoProveedor('${f.entidad_id}','${f.id}',null,'factura')">✉ Pedir</button><button class="btn btn-p btn-sm" onclick="fpsSubirFactura('${f.id}')">⬆ XML/PDF</button></div>` : ''}</td></tr>`; };
   const cab = '<thead><tr><th></th><th>Proveedor · concepto</th><th>Pago</th><th style="text-align:right">Monto</th><th>Límite para solicitar</th><th>Último aviso</th><th></th></tr></thead>';
   const cuerpo = fpsMesProv(L, fpsFecha, fila, cab, 7, 'f', f => num(fpsPagada(f) ? f.monto_pagado : f.monto_total), F => puede('fps') ? `<button class="btn btn-s btn-sm" onclick="correoProveedor('${F[0].entidad_id}','${F[0].id}',null,'factura')">✉ Pedir todas</button>` : '');
   const sel = (k, t) => `<option value="${k}" ${VIEW.fpsOrd === k ? 'selected' : ''}>${t}</option>`;
@@ -2099,6 +2103,62 @@ function revisarFpsDia() {
   modal('Facturas por solicitar · recordatorio del día', `<div class="${venc.length || dmin <= 3 ? 'errbox' : 'warnbox'}" style="margin-bottom:12px"><b>${L.length} factura(s) pendiente(s)</b> · ${$$(L.reduce((s, f) => s + num(f.monto_pagado || f.monto_total), 0))}${venc.length ? ` · <b>${venc.length} ya fuera de plazo</b>` : ''}${dmin !== null ? `<br>Para las de este mes ${dmin === 0 ? '<b>hoy es el último día hábil</b>' : `te quedan <b>${dmin} día(s)</b> (límite ${fmtD(limFps(hoyL[0]))}, último día hábil)`}` : ''}</div>
     <div class="alist" style="max-height:50vh;overflow:auto">${L.slice(0, 25).map(f => `<div class="aitem ${diasA(limFps(f)) < 0 ? 'r' : diasA(limFps(f)) <= 5 ? 'a' : 'i'}"><div style="flex:1"><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(f.monto_pagado || f.monto_total)}</div><div class="am">${esc(f.descripcion)} · ${fpsPagada(f) ? 'pagado ' + fmtD(f.fecha_pago) : 'sin pago aún'} · ${fpsDiasTxt(f)}</div></div><button class="btn btn-s btn-sm" onclick="correoProveedor('${f.entidad_id}','${f.id}',null,'factura')">✉ Pedir</button></div>`).join('')}${L.length > 25 ? `<div class="mini">y ${L.length - 25} más…</div>` : ''}</div>`,
     `<button class="btn btn-s" onclick="CM('mGen')">Después</button><button class="btn btn-p" onclick="CM('mGen');goTab('fps')">Ver todas</button>`, 'lg');
+}
+
+// ══ Subir la factura (XML y PDF) de un pago que ya tiene comprobante ══
+let FX = { xml: null, pdf: null, c: null };
+function fpsSubirFactura(fid) {
+  const f = FAC.find(x => x.id === fid); if (!f) return;
+  FX = { fid, xml: null, pdf: null, c: null };
+  modal('Subir factura · ' + nomEnt(f.entidad_id), `<div class="prop" style="margin-top:0"><div class="row"><span>Concepto</span><span>${esc(f.descripcion || '')}</span></div><div class="row"><span>Pagado</span><span class="amt">${$$(f.monto_pagado || f.monto_total)}${f.fecha_pago ? ' · ' + fmtD(f.fecha_pago) : ''}</span></div>${ent(f.entidad_id)?.rfc ? `<div class="row"><span>RFC proveedor</span><span>${esc(ent(f.entidad_id).rfc)}</span></div>` : ''}</div>
+    <div class="fxgrid"><label class="fxslot" id="fxX"><input type="file" accept=".xml,text/xml,application/xml"><b>XML</b><span>obligatorio · es el que vale ante el SAT</span></label>
+      <label class="fxslot" id="fxP"><input type="file" accept=".pdf,application/pdf,image/*"><b>PDF</b><span>representación impresa</span></label></div>
+    <div class="mini" style="margin-top:6px">También puedes elegir los dos archivos juntos en cualquiera de los cuadros.</div>
+    <div id="fxInfo" style="margin-top:10px"></div>`,
+    `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" id="fxGo" disabled onclick="fxGuardar()">Firmar y guardar factura</button>`);
+  document.querySelectorAll('.fxslot input').forEach(i => i.multiple = true);
+  document.querySelectorAll('.fxslot input').forEach(i => i.addEventListener('change', e => { [...e.target.files].forEach(fl => fxArchivo(/\.xml$/i.test(fl.name) || /xml/.test(fl.type) ? 'xml' : 'pdf', fl)); }));
+}
+async function fxArchivo(k, file) {
+  if (!file) return;
+  if (k === 'xml' && !(/\.xml$/i.test(file.name) || /xml/.test(file.type))) k = 'pdf';
+  FX[k] = file;
+  if (k === 'xml') { try { FX.c = parseCFDI(await file.text()); } catch { FX.c = null; } }
+  fxPintar();
+}
+function fxRevisar() {
+  const f = FAC.find(x => x.id === FX.fid), e = ent(f.entidad_id), c = FX.c, av = [], err = [];
+  if (FX.xml && !c) err.push('No pude leer el XML: verifica que sea el CFDI timbrado.');
+  if (c) {
+    if (!c.uuid) err.push('El XML no está timbrado (no tiene UUID).');
+    if (c.tipo && c.tipo !== 'I') av.push('No es una factura de ingreso (tipo ' + c.tipo + ').');
+    if (e?.rfc && c.emisorRfc && c.emisorRfc !== String(e.rfc).toUpperCase()) err.push(`El RFC del emisor (${c.emisorRfc}) no es el de ${e.nombre} (${e.rfc}).`);
+    const m = num(f.monto_pagado) || num(f.monto_total);
+    if (Math.abs(c.total - m) > 1) av.push(`El total del XML (${$$(c.total)}) no coincide con lo pagado (${$$(m)}).`);
+    if (f.fecha_pago && c.fecha && c.fecha.slice(0, 7) !== f.fecha_pago.slice(0, 7)) av.push(`La factura es del ${fmtD(c.fecha)} y el pago del ${fmtD(f.fecha_pago)} (meses distintos).`);
+    if (c.metodo === 'PPD') av.push('Es PPD: después habrá que pedir el complemento de pago.');
+  }
+  if (!FX.xml) av.push('Sin XML la cuenta sigue en Facturas por solicitar (solo el XML la comprueba).');
+  return { av, err };
+}
+function fxPintar() {
+  const c = FX.c, R = fxRevisar(), go = document.getElementById('fxGo');
+  document.getElementById('fxX')?.classList.toggle('ok', !!FX.xml); document.getElementById('fxP')?.classList.toggle('ok', !!FX.pdf);
+  if (FX.xml) document.querySelector('#fxX span').textContent = FX.xml.name; if (FX.pdf) document.querySelector('#fxP span').textContent = FX.pdf.name;
+  document.getElementById('fxInfo').innerHTML = (c ? `<div class="kv"><b>Emisor</b><div>${esc(c.emisorNombre)} · ${esc(c.emisorRfc)}</div><b>Folio · fecha</b><div>${esc((c.serie || '') + (c.folio || ''))} · ${fmtD(c.fecha)}</div><b>Total</b><div><b>${$$(c.total)}</b> · ${esc(c.metodo || '')}</div><b>UUID</b><div class="mini">${esc(c.uuid)}</div></div>` : '')
+    + R.err.map(x => `<div class="errbox" style="margin:6px 0">${esc(x)}</div>`).join('') + R.av.map(x => `<div class="warnbox" style="margin:6px 0">${esc(x)}</div>`).join('');
+  if (go) go.disabled = !(FX.xml || FX.pdf) || R.err.length > 0;
+}
+async function fxGuardar() {
+  const R = fxRevisar(); if (R.err.length) return;
+  if (R.av.length && !confirm('Revisa antes de guardar:\n\n• ' + R.av.join('\n• ') + '\n\n¿Guardar de todos modos?')) return;
+  let ux = null, up = null;
+  try { if (FX.xml) ux = await subirArchivo(FX.xml, 'facturas'); if (FX.pdf) up = await subirArchivo(FX.pdf, 'facturas'); } catch (e) { return toast(e.message, 'error'); }
+  const c = FX.c || {}, f = FAC.find(x => x.id === FX.fid);
+  const r = await rpcFirmado('fin_factura_xml', { p_factura: FX.fid, p_datos: { xml_url: ux?.url || '', xml_sha: ux?.sha || '', pdf_url: up?.url || '', pdf_sha: up?.sha || '', uuid: c.uuid || '', rfc: c.emisorRfc || '', metodo: c.metodo || '', folio: (c.serie || '') + (c.folio || '') } }, { titulo: 'Guardar factura', sub: `${nomEnt(f.entidad_id)}${c.total ? ' · ' + $$(c.total) : ''}` });
+  if (!r) return;
+  CM('mGen'); toast(ux ? 'Factura guardada · sale de Facturas por solicitar' + (c.metodo === 'PPD' ? ' · pide el complemento' : '') : 'PDF guardado · falta el XML', ux ? 'success' : 'warning');
+  await cargarTodo(true); renderTab();
 }
 
 // ══ RECURRENTES (lógica de la v2) ══════════════
