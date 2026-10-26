@@ -753,6 +753,27 @@ tr.fps-prov td{background:var(--sf2)}
 .ppprov>div b{display:block}.ppprov>.amt{flex-shrink:0}
 .wpasos{margin:0 0 4px 18px;padding:0;font-size:13px;line-height:1.5}.wpasos li{margin-bottom:6px}
 .spapl{margin-top:8px;padding:8px 10px;border:1px dashed var(--br2);border-radius:10px;background:var(--sf2)}.sptab{margin-top:6px;width:100%}.sptab td,.sptab th{padding:4px 6px;font-size:12px}
+/* Desempeño mensual de la Contadora */
+.cdhd{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.cdchart{position:relative;display:flex;align-items:flex-end;gap:10px;height:190px;padding:18px 4px 0;border-bottom:1px solid var(--br)}
+.cdcol{flex:1;display:flex;flex-direction:column;align-items:center;height:100%;cursor:pointer;border-radius:8px;padding:0 2px;min-width:0}
+.cdcol.sel{background:var(--sf2)}
+.cdpct{font-size:12px;font-weight:800;height:18px}
+.cdbar{flex:1;width:70%;max-width:46px;display:flex;flex-direction:column;justify-content:flex-end;border-radius:6px 6px 0 0;overflow:hidden}
+.cdbar>div{width:100%;min-height:3px}
+.cdlab{font-size:11px;color:var(--tm);padding:4px 0;text-transform:capitalize}
+.cdline{position:absolute;left:4px;right:4px;top:36px;bottom:24px;width:calc(100% - 8px);height:calc(100% - 60px);pointer-events:none}
+.cdley{display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;font-size:11px;color:var(--tm)}
+.cdley i,.cdgh i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:middle}
+.cdtab{width:100%;margin-top:14px;font-size:13px}.cdtab tr.sel td{background:var(--sf2)}
+.cdsub{font-weight:800;margin:14px 0 6px}
+.cdgrp{margin-bottom:10px}.cdgh{display:flex;gap:6px;align-items:center;margin-bottom:4px}
+/* Comprobante obligatorio de entradas al almacén */
+.almcomp{border:1.5px dashed var(--dg);border-radius:12px;padding:12px;margin:12px 0;background:var(--sf2)}
+.almcomp.ok{border-style:solid;border-color:var(--sc)}
+.almcomp-h{display:flex;flex-direction:column;gap:2px;margin-bottom:8px}
+.almcomp-f{position:relative;display:block;border:1px solid var(--br);border-radius:10px;padding:10px;text-align:center;cursor:pointer;text-transform:none;letter-spacing:0;font-size:13px;color:var(--tx);font-weight:400;background:var(--sf)}
+.almcomp-f input{position:absolute;inset:0;opacity:0;cursor:pointer}
 </style>
 </head>
 <body>
@@ -959,7 +980,7 @@ const ERR = {
   pin: 'PIN incorrecto', usuario: 'Usuario no válido', bloqueado: 'Usuario bloqueado 5 minutos por intentos fallidos',
   director_requerido: 'Se requiere el PIN del Director General', director_pin: 'PIN del Director incorrecto',
   comprobante: 'Falta el comprobante', monto_saldo: 'El monto excede el saldo de la cuenta (no se permite descuadrar)', ya_solicitada: 'Ya hay una solicitud de baja pendiente', cuenta: 'Cuenta no encontrada',
-  monto: 'Monto no válido', proveedor: 'Falta el proveedor', descripcion: 'Falta la descripción',
+  comprobante_entrada: 'Sube la factura, remisión, recibo o comprobante de pago de la entrada', descuento: 'Escribe el descuento', descuento_alto: 'El descuento no puede pasar del 30% de la cuenta', monto: 'Monto no válido', proveedor: 'Falta el proveedor', descripcion: 'Falta la descripción',
   solo_director: 'Solo el Director General puede hacer esto', solo_contadora: 'Solo la Contadora (o Dirección General) puede eliminar', motivo: 'Escribe el motivo', tiene_pagos: 'Tiene pagos; anula primero los pagos',
   uuid_duplicado: 'Esta factura (UUID) ya está registrada', sin_permiso: 'Tu perfil no tiene permiso para esta acción',
   estado: 'El estado actual no permite esta acción', no_autorizado: 'El pedido aún no está autorizado', sede: 'Pedido de otra sede',
@@ -1275,7 +1296,18 @@ async function tick() {
 // ══ ALERTAS ════════════════════════════════════
 let ALR = [];
 const vivas = () => FAC.filter(f => !f.anulado && f.estado !== 'cancelado' && enMiSede(f));
-const saldo = f => Math.max(0, num(f.monto_total) - num(f.monto_pagado));
+const saldo = f => Math.max(0, num(f.monto_total) - num(f.monto_pagado) - num(f.descuento_monto));
+// Descuento por pronto pago que ofrece el proveedor (o la factura): % sobre el saldo, vigente hasta captura + días de pronto pago
+function descPP(f) {
+  if (!f || f.tipo !== 'egreso' || f.anulado || num(f.descuento_monto) > 0 || saldo(f) < 1) return null;
+  const e = ent(f.entidad_id), pct = num(f.descuento_pp) || num(e?.descuento_pp);
+  if (!(pct > 0)) return null;
+  const dias = num(e?.dias_pronto_pago), base = String(f.fecha_captura || f.created_at || '').slice(0, 10);
+  const limite = dias && base ? isoD(new Date(new Date(base + 'T00:00:00').getTime() + dias * 86400000)) : null;
+  const monto = Math.round(saldo(f) * pct) / 100;
+  return { pct, monto, neto: Math.round((saldo(f) - monto) * 100) / 100, limite, dias, vig: !limite || diasA(limite) >= 0, quedan: limite ? diasA(limite) : null };
+}
+const descPPTxt = d => d ? `${d.pct}% pronto pago · ahorras ${$$(d.monto)}${d.limite ? (d.vig ? ` si pagas antes del ${fmtD(d.limite)}` : ` · venció el ${fmtD(d.limite)}`) : ''}` : '';
 // Factura por solicitar: pagada (total o parcial) sin XML, salvo proveedores que no facturan
 const tieneXML = f => !!(f.xml_url || f.uuid_cfdi || DOCS.some(d => d.registro_id === f.id && d.tipo === 'xml'));
 const finMesISO = () => isoD(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0));
@@ -1472,7 +1504,7 @@ function verCuenta(id) {
     <b>${egr ? 'Proveedor' : 'Deudor'}</b><div>${esc(e.nombre || '—')} ${e.rfc ? `<span class="mini">${esc(e.rfc)}</span>` : ''}</div>
     <b>Concepto</b><div>${esc(f.descripcion)}</div>
     <b>Factura</b><div>${esc(f.numero_factura || '—')} ${f.uuid_cfdi ? `<div class="mini">UUID ${esc(f.uuid_cfdi)}</div>` : ''}${porSolicitar(f) ? `<div class="mini" style="color:var(--or)">Factura por solicitar · límite ${fmtD(limFps(f))}</div>` : ''}</div>
-    <b>Montos</b><div>Total <span class="amt">${$$(f.monto_total)}</span> · Pagado <span class="amt">${$$(f.monto_pagado)}</span> · Saldo <span class="amt" style="font-weight:800">${$$(saldo(f))}</span></div>
+    <b>Montos</b><div>Total <span class="amt">${$$(f.monto_total)}</span> · Pagado <span class="amt">${$$(f.monto_pagado)}</span>${num(f.descuento_monto) ? ` · <span style="color:var(--sc)">Descuento pronto pago <span class="amt">${$$(f.descuento_monto)}</span></span>` : ''} · Saldo <span class="amt" style="font-weight:800">${$$(saldo(f))}</span></div>${descPP(f) ? `<div class="mini" style="color:${descPP(f).vig ? 'var(--sc)' : 'var(--sc)'}">💰 ${esc(descPPTxt(descPP(f)))}</div>` : ''}
     <b>Vencimiento</b><div>${fmtD(f.fecha_vencimiento)} ${f.fecha_pago ? ' · pagado ' + fmtD(f.fecha_pago) : ''}</div>
     <b>Categoría · sede</b><div>${esc(f.categoria || '—')} · ${esc(f.sede || 'Tacámbaro')}</div>
     <b>Pago a</b><div class="mini">${esc(e.banco || '')} ${e.clabe ? 'CLABE ' + esc(e.clabe) : ''} ${e.convenio_cie ? '· CIE ' + esc(e.convenio_cie) : ''} ${f.referencia_cie ? '· Ref ' + esc(f.referencia_cie) : ''}</div>
@@ -1511,9 +1543,20 @@ function pagarCuenta(id) {
       <div class="fgrp"><label>Fecha</label><input type="date" id="pgF" value="${isoD(new Date())}"></div>
       <div class="fgrp"><label>Referencia (opcional)</label><input type="text" id="pgR"></div>
     </div>
+    ${egr && saldo(f) >= 1 ? (() => { const dp = descPP(f); return `<div class="spapl" style="margin-top:12px"><label style="display:flex;gap:8px;align-items:center;cursor:pointer;text-transform:none;font-size:13px"><input type="checkbox" id="pgDc" style="width:auto" ${dp && dp.vig ? 'checked' : ''} onchange="pgDescCalc('${id}')"> <b>💰 Descuento por pronto pago</b></label>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap"><div class="ipfx" style="width:110px"><input type="number" id="pgDp" step="0.1" min="0" max="30" value="${dp ? dp.pct : ''}" placeholder="%" oninput="pgDescCalc('${id}')"><span>%</span></div><span class="mini" id="pgDi"></span></div>
+      <div class="mini" style="margin-top:4px">${dp ? 'El proveedor ofrece ' + esc(descPPTxt(dp)) + '.' : 'El proveedor no tiene descuento registrado; puedes capturarlo en Proveedores › Editar.'} Al firmar, la cuenta queda <b>liquidada</b> con el descuento registrado.</div></div>`; })() : ''}
     <div class="mini" style="margin-top:10px">¿Pago en efectivo sin recibo? <a href="#" onclick="event.preventDefault();reciboProvisional('${id}')" style="color:var(--pr)">Imprime el recibo provisional</a> para que lo firme el proveedor y súbelo aquí.</div>`,
     `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="confirmarPago('${id}')">Firmar ${egr ? 'pago' : 'cobro'}</button>`);
   window._pgFile = null;
+  if (document.getElementById('pgDc')) pgDescCalc(id);
+}
+// Recalcula el monto a pagar con el % de pronto pago
+function pgDescCalc(id) {
+  const f = FAC.find(x => x.id === id), c = document.getElementById('pgDc'), i = document.getElementById('pgDi'); if (!f || !c) return;
+  const pct = num(document.getElementById('pgDp').value), s = saldo(f);
+  if (c.checked && pct > 0) { const d = Math.round(s * pct) / 100; document.getElementById('pgM').value = (s - d).toFixed(2); i.innerHTML = `Descuento <b>${$$(d)}</b> · pagas <b>${$$(s - d)}</b> de ${$$(s)}`; }
+  else { document.getElementById('pgM').value = s.toFixed(2); i.textContent = ''; }
 }
 async function pgArchivo(file) {
   if (!file) return;
@@ -1534,15 +1577,19 @@ async function confirmarPago(id, extra = {}) {
   const monto = num(document.getElementById('pgM').value);
   if (monto <= 0) { toast('Monto no válido', 'warning'); return; }
   if (monto > saldo(f) + 0.01) { toast('El monto excede el saldo ' + $$(saldo(f)), 'warning'); return; }
+  const dc = document.getElementById('pgDc')?.checked && monto < saldo(f) - 0.009 ? Math.round((saldo(f) - monto) * 100) / 100 : 0;
+  if (dc > num(f.monto_total) * 0.3 + 0.01) { toast('El descuento no puede pasar del 30% de la cuenta', 'warning'); return; }
+  if (dc) { const pct = num(document.getElementById('pgDp').value), esp = Math.round(saldo(f) * pct) / 100;
+    if (Math.abs(dc - esp) > Math.max(1, saldo(f) * 0.005) && !confirm(`Con este monto el descuento sería ${$$(dc)} (${Math.round(dc / saldo(f) * 1000) / 10}%), distinto del ${pct || 0}% capturado.\n\n¿Liquidar la cuenta con ese descuento? (Cancelar si es un abono parcial: desmarca «Descuento por pronto pago»)`)) return; }
   let up;
   try { up = await subirArchivo(file, 'pagos'); } catch (e) { toast(e.message, 'error'); return; }
-  const r = await rpcFirmado('fin_pagar', {
-    p_factura: id, p_monto: monto, p_fecha: document.getElementById('pgF').value || null,
-    p_metodo: document.getElementById('pgMet').value, p_referencia: document.getElementById('pgR').value, p_comprobante_url: up.url, p_sha256: up.sha
-  }, { titulo: f.tipo === 'egreso' ? 'Firmar pago' : 'Firmar cobro', sub: `${nomEnt(f.entidad_id)} · ${$$(monto)}`, });
+  const args = { p_factura: id, p_monto: monto, p_fecha: document.getElementById('pgF').value || null,
+    p_metodo: document.getElementById('pgMet').value, p_referencia: document.getElementById('pgR').value, p_comprobante_url: up.url, p_sha256: up.sha };
+  const r = dc ? await rpcFirmado('fin_pagar_pp', { ...args, p_descuento: dc, p_nota: document.getElementById('pgDp').value + '%' }, { titulo: 'Firmar pago con descuento', sub: `${nomEnt(f.entidad_id)} · ${$$(monto)} + descuento ${$$(dc)}` })
+    : await rpcFirmado('fin_pagar', args, { titulo: f.tipo === 'egreso' ? 'Firmar pago' : 'Firmar cobro', sub: `${nomEnt(f.entidad_id)} · ${$$(monto)}`, });
   if (!r) return;
   CM('mGen');
-  toast(r.liquidada ? 'Cuenta liquidada' : 'Abono registrado', 'success');
+  toast(dc ? `Cuenta liquidada · ahorro por pronto pago ${$$(dc)}` : r.liquidada ? 'Cuenta liquidada' : 'Abono registrado', 'success');
   if (f.documento_tipo === 'sin_factura') toast('Pasa a Facturas por solicitar', 'info');
   await cargarTodo();
 }
@@ -1826,7 +1873,7 @@ function rProv() {
   const L = ENT.filter(e => e.activo !== false);
   return `<div class="ph"><div><div class="ptit">Proveedores</div><div class="psub">${L.length} activos · días de crédito, correo y datos bancarios</div></div>${puede('proveedores') ? `<button class="btn btn-p btn-sm" onclick="editarProv()">+ Proveedor</button>` : ''}</div>
   <div class="pad"><div class="tc"><table><thead><tr><th>Nombre</th><th>RFC</th><th>Crédito</th><th>Correo</th><th>Banco / CLABE</th><th style="text-align:right">Saldo</th><th></th></tr></thead><tbody>
-  ${L.map(e => { const s = abiertas('egreso').filter(f => f.entidad_id === e.id).reduce((a, f) => a + saldo(f), 0); return `<tr><td><b>${esc(e.nombre)}</b>${e.no_factura ? ' <span class="dtag">NO FACTURA</span>' : ''}<div class="mini">${esc(e.categoria || '')}</div></td><td class="mini">${esc(e.rfc || '—')}</td><td>${e.dias_credito ? e.dias_credito + ' días' : 'Contado'}</td><td class="mini">${esc(e.email || '—')}</td><td class="mini">${esc(e.banco || '')} ${esc(e.clabe || '')}</td><td class="amt" style="text-align:right">${s ? $$(s) : '—'}</td><td><div class="rowact">${puede('proveedores') ? `<button class="btn btn-s btn-sm" onclick="editarProv('${e.id}')">Editar</button>` : ''}<button class="btn btn-s btn-sm" onclick="correoProveedor('${e.id}')">✉</button></div></td></tr>`; }).join('')}
+  ${L.map(e => { const s = abiertas('egreso').filter(f => f.entidad_id === e.id).reduce((a, f) => a + saldo(f), 0); return `<tr><td><b>${esc(e.nombre)}</b>${e.no_factura ? ' <span class="dtag">NO FACTURA</span>' : ''}<div class="mini">${esc(e.categoria || '')}</div></td><td class="mini">${esc(e.rfc || '—')}</td><td>${e.dias_credito ? e.dias_credito + ' días' : 'Contado'}${num(e.descuento_pp) ? `<div class="mini" style="color:var(--sc)">💰 ${num(e.descuento_pp)}% pronto pago${num(e.dias_pronto_pago) ? ' · ' + e.dias_pronto_pago + ' d' : ''}</div>` : ''}</td><td class="mini">${esc(e.email || '—')}</td><td class="mini">${esc(e.banco || '')} ${esc(e.clabe || '')}</td><td class="amt" style="text-align:right">${s ? $$(s) : '—'}</td><td><div class="rowact">${puede('proveedores') ? `<button class="btn btn-s btn-sm" onclick="editarProv('${e.id}')">Editar</button>` : ''}<button class="btn btn-s btn-sm" onclick="correoProveedor('${e.id}')">✉</button></div></td></tr>`; }).join('')}
   </tbody></table></div></div>`;
 }
 function editarProv(id, pre = {}) {
@@ -1836,6 +1883,8 @@ function editarProv(id, pre = {}) {
     <div class="fgrp"><label>RFC</label><input type="text" id="pvR" value="${esc(e.rfc || '')}"></div>
     <div class="fgrp"><label>Días de crédito</label><select id="pvD">${[0, 7, 15, 21, 30, 45, 60, 90].map(d => `<option value="${d}" ${num(e.dias_credito) === d ? 'selected' : ''}>${d ? d + ' días' : 'Contado'}</option>`).join('')}</select></div>
     <div class="fgrp"><label>Categoría</label><select id="pvC">${catOpts(e.categoria)}</select></div>
+    <div class="fgrp"><label>Descuento pronto pago (%)</label><input type="number" id="pvDp" step="0.1" min="0" max="30" value="${num(e.descuento_pp) || ''}" placeholder="0"></div>
+    <div class="fgrp"><label>Si se paga dentro de (días)</label><select id="pvDd">${[0, 5, 7, 10, 15, 20, 30].map(d => `<option value="${d}" ${num(e.dias_pronto_pago) === d ? 'selected' : ''}>${d ? d + ' días de la factura' : 'Sin límite'}</option>`).join('')}</select></div>
     <div class="fgrp"><label>Correo</label><input type="email" id="pvE" value="${esc(e.email || '')}"></div>
     <div class="fgrp"><label>Teléfono</label><input type="tel" id="pvT" value="${esc(e.telefono || '')}"></div>
     <div class="fgrp"><label>Banco</label><input type="text" id="pvB" value="${esc(e.banco || '')}"></div>
@@ -1845,7 +1894,7 @@ function editarProv(id, pre = {}) {
     `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="guardarProv('${id || ''}')">Firmar y guardar</button>`);
 }
 async function guardarProv(id) {
-  const d = { id, nombre: pvN.value, rfc: pvR.value, dias_credito: pvD.value, categoria: pvC.value, email: pvE.value, telefono: pvT.value, banco: pvB.value, clabe: pvCl.value, convenio_cie: pvCie.value, no_factura: pvNF.checked };
+  const d = { id, nombre: pvN.value, rfc: pvR.value, dias_credito: pvD.value, categoria: pvC.value, email: pvE.value, telefono: pvT.value, banco: pvB.value, clabe: pvCl.value, convenio_cie: pvCie.value, no_factura: pvNF.checked, descuento_pp: pvDp.value || 0, dias_pronto_pago: pvDd.value };
   const r = await rpcFirmado('fin_guardar_proveedor', { p_datos: d }, { titulo: 'Firmar datos de proveedor' });
   if (r) { CM('mGen'); toast('Proveedor guardado', 'success'); await cargarTodo(); }
 }
@@ -3035,6 +3084,7 @@ function rRep() {
     ${kpi('Reprogramaciones', String(d.tar.reduce((s, t) => s + (t.reprogramaciones || 0), 0)), 'en el periodo')}
     ${kpi('Facturas no conseguidas', String(d.fpsV.length), 'pasado el límite', d.fpsV.length ? 'var(--dg)' : '')}
   </div>
+  ${cajaContaDesempeno()}
   <div class="tc" style="margin-bottom:20px;overflow-x:auto"><table><thead><tr><th>Responsable</th><th style="text-align:right">Asig.</th><th style="text-align:right">A tiempo</th><th style="text-align:right">Tarde</th><th style="text-align:right">No cumpl.</th><th style="text-align:right">Críticos</th><th style="text-align:right">Atraso</th><th style="text-align:right">Reprog.</th><th style="text-align:right">Cierres</th><th style="text-align:right">%</th></tr></thead><tbody>
     ${d.porResp.length ? d.porResp.map(r => `<tr><td><b>${esc(r.nombre)}</b></td><td style="text-align:right">${r.total}</td><td style="text-align:right">${r.aTiempo}</td><td style="text-align:right">${r.tarde}</td><td style="text-align:right;${r.noCump ? 'color:var(--dg)' : ''}">${r.noCump}</td><td style="text-align:right;${r.criticosNoCump ? 'color:var(--dg);font-weight:800' : ''}">${r.criticosNoCump}</td><td style="text-align:right">${r.prom} d</td><td style="text-align:right">${r.reprog}</td><td style="text-align:right">${String(r.k).startsWith('rol:') ? '—' : r.cierres + ' / ' + r.habiles}</td><td style="text-align:right;font-weight:800;color:${colPct(r.pct)}">${r.pct}%</td></tr>`).join('') : '<tr><td colspan="10" class="mini">Sin pendientes en el periodo</td></tr>'}
   </tbody></table></div>
@@ -3070,6 +3120,72 @@ function cajaConformidad() {
   const L = TAR.filter(t => t.requiere_conformidad && t.estado === 'cumplida' && !t.conformidad_at && puedeConformidad(t)).sort((a, b) => String(a.cumplida_at).localeCompare(String(b.cumplida_at)));
   if (!L.length) return '';
   return caja(`Informes por firmar de conformidad (${L.length})`, lista(L, t => `<div class="aitem a" onclick="verPendiente('${t.id}')"><div style="flex:1"><div class="at">${esc(t.titulo)}</div><div class="am">${esc(respNom(respKey(t)))} · entregado ${fmtDT(t.cumplida_at)}${t.cumplida_at && String(t.cumplida_at).slice(0, 10) > fOrig(t) ? ' · <b style="color:var(--dg)">tarde</b>' : ''}</div></div><div class="rowact" onclick="event.stopPropagation()">${t.evidencia_url ? `<a class="btn btn-s btn-sm" href="${esc(t.evidencia_url)}" target="_blank">Ver</a>` : ''}<button class="btn btn-p btn-sm" onclick="conformidad('${t.id}',true)">✓ Conforme</button></div></div>`));
+}
+
+// ── Desempeño mensual de la Contadora: a tiempo, tarde, no demostrable (sin evidencia), no realizado y crítico ──
+VIEW.cdMeses = VIEW.cdMeses || 6;
+const esConta = t => t.responsable_id ? USR.find(u => u.id === t.responsable_id)?.rol === 'contadora' : (t.responsable_rol || 'contadora') === 'contadora';
+const evidT = t => !!(t.evidencia_url || AVA.some(a => a.tarea_id === t.id && a.evidencia_url));
+const CD_CAT = [
+  ['tiempo', 'A tiempo', '#22a06b'], ['tarde', 'Tarde', '#e8a317'], ['nodem', 'No demostrable', '#8b5cf6'],
+  ['noreal', 'No realizado', '#ef4444'], ['crit', 'Crítico no realizado', '#7f1d1d']];
+function cdClase(t) {
+  if (t.estado === 'cancelada') return null;
+  if (t.estado === 'cumplida') return !evidT(t) || (t.conformidad_nota && !t.conformidad_at) ? 'nodem' : String(t.cumplida_at).slice(0, 10) <= fOrig(t) ? 'tiempo' : 'tarde';
+  if (diasA(fOrig(t)) < 0) return t.prioridad === 'critico' ? 'crit' : 'noreal';
+  return 'plazo';
+}
+function datosContaMes(n) {
+  const h = hoyD(), M = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(h.getFullYear(), h.getMonth() - i, 1), a = isoD(d), b = isoD(new Date(d.getFullYear(), d.getMonth() + 1, 0));
+    const L = TAR.filter(t => esConta(t) && fOrig(t) >= a && fOrig(t) <= b);
+    const C = { tiempo: [], tarde: [], nodem: [], noreal: [], crit: [], plazo: [] };
+    L.forEach(t => { const c = cdClase(t); if (c) C[c].push(t); });
+    const ev = C.tiempo.length + C.tarde.length + C.nodem.length + C.noreal.length + C.crit.length;
+    const pct = ev ? Math.round(C.tiempo.length / ev * 100) : null;
+    const critT = L.filter(t => t.prioridad === 'critico' && t.estado !== 'cancelada');
+    const nivel = pct === null ? 'sin' : C.crit.length || pct < 70 ? 'critico' : pct < 90 ? 'regular' : 'optimo';
+    M.push({ k: a.slice(0, 7), t: MESES[d.getMonth()].slice(0, 3) + ' ' + String(d.getFullYear()).slice(2), mes: MESES[d.getMonth()][0].toUpperCase() + MESES[d.getMonth()].slice(1) + ' ' + d.getFullYear(), a, b, C, ev, pct, total: L.length, critT, nivel });
+  }
+  return M;
+}
+const CD_NIV = { optimo: ['Óptimo', 'var(--sc)'], regular: ['Regular', 'var(--wn)'], critico: ['Desempeño crítico', 'var(--dg)'], sin: ['Sin pendientes', 'var(--tm)'] };
+function cajaContaDesempeno() {
+  const M = datosContaMes(VIEW.cdMeses), sel = M.find(m => m.k === VIEW.cdSel) || M[M.length - 1];
+  const max = Math.max(1, ...M.map(m => m.ev + m.C.plazo.length));
+  const barras = M.map(m => { const seg = CD_CAT.map(([k, , c]) => m.C[k].length ? `<div style="height:${m.C[k].length / max * 100}%;background:${c}" title="${m.C[k].length}"></div>` : '').reverse().join('') + (m.C.plazo.length ? `<div style="height:${m.C.plazo.length / max * 100}%;background:var(--br)" title="${m.C.plazo.length} en plazo"></div>` : '');
+    return `<div class="cdcol ${m.k === sel.k ? 'sel' : ''}" onclick="VIEW.cdSel='${m.k}';renderTab()"><div class="cdpct" style="color:${CD_NIV[m.nivel][1]}">${m.pct === null ? '—' : m.pct + '%'}</div><div class="cdbar">${seg}</div><div class="cdlab">${m.t}</div></div>`; }).join('');
+  // Línea de % a tiempo
+  const pts = M.map((m, i) => m.pct === null ? null : [(i + 0.5) / M.length * 100, 100 - m.pct]).filter(Boolean);
+  const linea = pts.length > 1 ? `<svg class="cdline" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" x2="100" y1="10" y2="10" stroke="var(--sc)" stroke-dasharray="2 2" stroke-width=".4"/><polyline fill="none" stroke="var(--pr)" stroke-width="1.2" vector-effect="non-scaling-stroke" points="${pts.map(p => p.join(',')).join(' ')}"/></svg>` : '';
+  const ley = CD_CAT.map(([, t, c]) => `<span><i style="background:${c}"></i>${t}</span>`).join('') + '<span><i style="background:var(--br)"></i>En plazo</span><span><i style="background:var(--pr);height:2px"></i>% a tiempo (meta 90%)</span>';
+  const tabla = `<table class="cdtab"><thead><tr><th>Mes</th><th style="text-align:right">Asig.</th>${CD_CAT.map(([, t]) => `<th style="text-align:right">${t}</th>`).join('')}<th style="text-align:right">% a tiempo</th><th>Calificación</th></tr></thead><tbody>
+    ${M.slice().reverse().map(m => `<tr class="${m.k === sel.k ? 'sel' : ''}" onclick="VIEW.cdSel='${m.k}';renderTab()" style="cursor:pointer"><td><b>${m.mes}</b></td><td style="text-align:right">${m.total}</td>${CD_CAT.map(([k]) => `<td style="text-align:right;${m.C[k].length && ['noreal', 'crit', 'nodem'].includes(k) ? 'color:var(--dg);font-weight:800' : ''}">${m.C[k].length}</td>`).join('')}<td style="text-align:right;font-weight:800;color:${CD_NIV[m.nivel][1]}">${m.pct === null ? '—' : m.pct + '%'}</td><td><span style="color:${CD_NIV[m.nivel][1]};font-weight:700">${CD_NIV[m.nivel][0]}</span></td></tr>`).join('')}</tbody></table>`;
+  const det = CD_CAT.filter(([k]) => k !== 'tiempo').map(([k, t, c]) => { const L = sel.C[k]; if (!L.length) return '';
+    return `<div class="cdgrp"><div class="cdgh"><i style="background:${c}"></i><b>${t}</b><span class="mini">${L.length}</span></div>${L.sort(ordenPend).map(x => `<div class="aitem ${k === 'crit' ? 'r' : k === 'tarde' ? 'a' : ''}" onclick="verPendiente('${x.id}')"><div style="flex:1"><div class="at">${priBdg(x.prioridad, x.id)} ${esc(x.titulo)}</div><div class="am">Límite ${fmtD(fOrig(x))}${k === 'tarde' ? ' · cumplido ' + fmtD(String(x.cumplida_at).slice(0, 10)) + ' (' + atraso(x) + ' d tarde)' : k === 'nodem' ? ' · cerrado sin evidencia que lo demuestre' : ' · atraso ' + atraso(x) + ' d · ' + esc(x.ultimo_avance || 'sin avance')}</div></div></div>`).join('')}</div>`; }).join('');
+  const s = sel, crit = s.critT.length;
+  return `<div class="cfg-section" style="margin-bottom:20px"><h3>Desempeño de la Contadora por mes</h3><div class="body">
+    <div class="cdhd"><div class="chips">${[3, 6, 12].map(n => `<span class="chip ${VIEW.cdMeses === n ? 'act' : ''}" onclick="VIEW.cdMeses=${n};renderTab()">${n} meses</span>`).join('')}</div><button class="btn btn-s btn-sm" onclick="imprimirContaDesempeno()">🖨 Imprimir</button></div>
+    <div class="cdchart">${linea}${barras}</div><div class="cdley">${ley}</div>
+    <div class="dg" style="margin-top:12px">
+      ${kpi(s.mes + ' · a tiempo', s.pct === null ? '—' : s.pct + '%', CD_NIV[s.nivel][0], CD_NIV[s.nivel][1])}
+      ${kpi('No realizado', String(s.C.noreal.length + s.C.crit.length), `${s.C.crit.length} crítico(s)`, s.C.noreal.length + s.C.crit.length ? 'var(--dg)' : '')}
+      ${kpi('No demostrable', String(s.C.nodem.length), 'cerrados sin evidencia', s.C.nodem.length ? 'var(--dg)' : '')}
+      ${kpi('Críticos del mes', `${crit - s.C.crit.length}/${crit}`, 'críticos cumplidos', s.C.crit.length ? 'var(--dg)' : crit ? 'var(--sc)' : '')}
+    </div>
+    <div style="overflow-x:auto">${tabla}</div>
+    <div class="mini" style="margin:8px 0">A tiempo = cumplido con evidencia en su fecha original · Tarde = cumplido con evidencia después de la fecha · No demostrable = cerrado sin evidencia (o con no conformidad) · No realizado = vencido sin cumplir · Desempeño crítico = menos de 70% a tiempo o algún crítico no realizado.</div>
+    ${det ? `<div class="cdsub">Detalle de ${s.mes}</div>${det}` : `<div class="mini verde">✓ ${s.mes}: sin pendientes tarde, no demostrables ni no realizados</div>`}
+  </div></div>`;
+}
+function imprimirContaDesempeno() {
+  const M = datosContaMes(VIEW.cdMeses);
+  imprimir(`Desempeño mensual de la Contadora · ${M[0].mes} a ${M[M.length - 1].mes}`, `
+    <table><thead><tr><th>Mes</th><th class="r">Asig.</th>${CD_CAT.map(([, t]) => `<th class="r">${t}</th>`).join('')}<th class="r">% a tiempo</th><th>Calificación</th></tr></thead><tbody>
+    ${M.map(m => `<tr><td><b>${m.mes}</b></td><td class="r">${m.total}</td>${CD_CAT.map(([k]) => `<td class="r ${m.C[k].length && ['noreal', 'crit', 'nodem'].includes(k) ? 'rojo' : ''}">${m.C[k].length}</td>`).join('')}<td class="r"><b>${m.pct === null ? '—' : m.pct + '%'}</b></td><td class="${m.nivel === 'critico' ? 'rojo' : m.nivel === 'optimo' ? 'verde' : ''}">${CD_NIV[m.nivel][0]}</td></tr>`).join('')}</tbody></table>
+    ${M.slice().reverse().map(m => { const L = [...m.C.crit, ...m.C.noreal, ...m.C.nodem, ...m.C.tarde]; return L.length ? `<table><thead><tr><th colspan="4">${m.mes} · incidencias</th></tr><tr><th>Pendiente</th><th>Clasificación</th><th>Límite</th><th class="r">Atraso</th></tr></thead><tbody>${L.map(t => `<tr><td>${esc(t.titulo)}</td><td class="${['crit', 'noreal', 'nodem'].includes(cdClase(t)) ? 'rojo' : ''}">${CD_CAT.find(c => c[0] === cdClase(t))[1]}</td><td>${fmtD(fOrig(t))}</td><td class="r">${atraso(t)} d</td></tr>`).join('')}</tbody></table>` : ''; }).join('')}
+    <div class="firmas"><div>Contadora<br>&nbsp;</div><div>Dirección General<br><b>Dr. José Antonio Villegas Ávila</b></div></div>`);
 }
 
 // ══ DOCUMENTOS IMPRIMIBLES (una página, con logo) ══
@@ -3980,13 +4096,22 @@ function spDestino(it) {
 }
 // Cuentas abiertas del proveedor, de la más antigua a la más reciente
 const spCuentasDe = eid => abiertas('egreso').filter(f => f.entidad_id === eid && !f.recurrente_id && saldo(f) > 0.01).sort((a, b) => String(a.fecha_vencimiento || '9').localeCompare(String(b.fecha_vencimiento || '9')) || String(a.created_at).localeCompare(String(b.created_at)));
-// Cómo se reparte el pago: [{ f, m }] según la opción elegida
+// Opción por defecto: descuento por pronto pago si el faltante coincide con el que ofrece el proveedor
+function spModo0(it, D, m) {
+  if (it.apl?.modo) return it.apl.modo;
+  if (!D.f) return 'fifo';
+  const s = saldo(D.f), dp = descPP(D.f);
+  if (dp && m < s - 0.5 && Math.abs((s - m) - dp.monto) <= Math.max(1, s * 0.005)) return 'desc';
+  return m > s + 0.01 && spCuentasDe(D.eid).some(f => f.id !== D.f.id) ? 'deuda' : 'factura';
+}
+// Cómo se reparte el pago: [{ f, m, desc? }] según la opción elegida
 function spReparto(it) {
   const m = num(it.monto), D = spDestino(it); if (!(m > 0)) return [];
   it.apl = it.apl || {};
   const fifo = (F, monto) => { let r = monto; const out = []; for (const f of F) { if (r <= 0.009) break; const t = Math.min(r, saldo(f)); out.push({ f, m: Math.round(t * 100) / 100 }); r -= t; } return out; };
   if (D.f) {
-    const modo = it.apl.modo || (m > saldo(D.f) + 0.01 && spCuentasDe(D.eid).some(f => f.id !== D.f.id) ? 'deuda' : 'factura');
+    const modo = spModo0(it, D, m);
+    if (modo === 'desc' && m < saldo(D.f)) return [{ f: D.f, m, desc: Math.round((saldo(D.f) - m) * 100) / 100 }];
     if (modo === 'factura' || m <= saldo(D.f) + 0.01 && modo !== 'deuda') return [{ f: D.f, m: Math.min(m, saldo(D.f)) }];
     // liquidar esta y el resto a la deuda (o aplicar todo a la deuda empezando por esta)
     return fifo([D.f].concat(spCuentasDe(D.eid).filter(f => f.id !== D.f.id)), m);
@@ -4002,13 +4127,15 @@ function spReparto(it) {
 function spPanelAplicar(it, i) {
   const D = spDestino(it), m = num(it.monto); if (!(m > 0) || !(D.f || D.deuda)) return '';
   it.apl = it.apl || {};
-  const modo0 = it.apl.modo || (D.f ? (m > saldo(D.f) + 0.01 && spCuentasDe(D.eid).some(f => f.id !== D.f.id) ? 'deuda' : 'factura') : 'fifo');
+  const modo0 = spModo0(it, D, m);
   const radio = (k, t, sub) => `<label class="opt ${(modo0 === k) ? 'sel' : ''}" style="margin:0"><input type="radio" name="apl${i}" ${(modo0 === k) ? 'checked' : ''} onchange="SP.items[${i}].apl.modo='${k}';spPintar()"><span><b>${t}</b>${sub ? `<br><span class="mini">${sub}</span>` : ''}</span></label>`;
   let ops = '';
   if (D.f) {
     const s = saldo(D.f), otras = spCuentasDe(D.eid).filter(f => f.id !== D.f.id), totO = otras.reduce((a, f) => a + saldo(f), 0);
     if (Math.abs(m - s) <= 0.5 && !otras.length) return '';
-    if (m < s - 0.5) ops = radio('factura', `Abono parcial a esta factura`, `Queda saldo de ${$$(s - m)} en esta cuenta`) + (otras.length ? radio('deuda', 'Aplicar a la deuda general del proveedor', `De la más antigua a la más reciente · deuda total ${$$(s + totO)} en ${otras.length + 1} cuentas`) : '');
+    const dp = descPP(D.f), pctR = Math.round((s - m) / s * 1000) / 10;
+    if (m < s - 0.5) ops = radio('factura', `Abono parcial a esta factura`, `Queda saldo de ${$$(s - m)} en esta cuenta`) +
+      (s - m <= num(D.f.monto_total) * 0.3 + 0.01 ? radio('desc', `💰 Liquidar con descuento por pronto pago: ${$$(s - m)} (${pctR}%)`, dp ? `El proveedor ofrece ${descPPTxt(dp)}${Math.abs((s - m) - dp.monto) > 1 ? ` · el descuento esperado era ${$$(dp.monto)}` : ' ✓ coincide'}` : 'La cuenta queda liquidada y el descuento queda registrado') : '') + (otras.length ? radio('deuda', 'Aplicar a la deuda general del proveedor', `De la más antigua a la más reciente · deuda total ${$$(s + totO)} en ${otras.length + 1} cuentas`) : '');
     else if (m > s + 0.5) ops = otras.length ? radio('deuda', `Liquidar esta factura y abonar el resto (${$$(m - s)}) a sus otras cuentas`, 'Primero las más antiguas') : '';
     else ops = radio('factura', 'Liquidar esta factura', '') + (otras.length ? radio('deuda', 'Aplicar a la deuda general del proveedor (más antiguas primero)', `Deuda total ${$$(s + totO)}`) : '');
   } else {
@@ -4018,7 +4145,7 @@ function spPanelAplicar(it, i) {
   const elegir = D.deuda && it.apl.modo === 'elegir';
   if (elegir && !it.apl.montos) { it.apl.montos = {}; let r = m; spCuentasDe(D.eid).forEach(f => { const t = Math.max(0, Math.min(r, saldo(f))); it.apl.montos[f.id] = t ? Math.round(t * 100) / 100 : ''; r -= t; }); }
   const tabla = elegir ? `<table class="sptab"><thead><tr><th>Cuenta</th><th>Vence</th><th style="text-align:right">Saldo</th><th style="text-align:right;width:120px">Aplicar</th></tr></thead><tbody>${spCuentasDe(D.eid).map(f => `<tr><td>${esc(String(f.descripcion || '').slice(0, 45))}<div class="mini">${esc(f.numero_factura || '')}</div></td><td class="mini">${fmtD(f.fecha_vencimiento)}</td><td class="amt" style="text-align:right">${$$(saldo(f))}</td><td><div class="ipfx"><span>$</span><input type="number" step="0.01" min="0" max="${saldo(f)}" value="${it.apl.montos[f.id] ?? ''}" onchange="SP.items[${i}].apl.montos['${f.id}']=this.value;spPintar()"></div></td></tr>`).join('')}</tbody></table>`
-    : R.length > 1 || (R[0] && R[0].m < saldo(R[0].f) - 0.01) ? `<div class="mini" style="margin-top:4px">${R.map(x => `${esc(String(x.f.descripcion || '').slice(0, 40))}: <b>${$$(x.m)}</b> ${x.m >= saldo(x.f) - 0.01 ? '· liquida' : '· abono, queda ' + $$(saldo(x.f) - x.m)}`).join('<br>')}</div>` : '';
+    : R.length > 1 || (R[0] && R[0].m < saldo(R[0].f) - 0.01) ? `<div class="mini" style="margin-top:4px">${R.map(x => `${esc(String(x.f.descripcion || '').slice(0, 40))}: <b>${$$(x.m)}</b> ${x.desc ? '· liquida con descuento de ' + $$(x.desc) : x.m >= saldo(x.f) - 0.01 ? '· liquida' : '· abono, queda ' + $$(saldo(x.f) - x.m)}`).join('<br>')}</div>` : '';
   return `<div class="spapl"><div class="mini" style="margin-bottom:4px"><b>¿Cómo aplico este pago de ${$$(m)}?</b></div><div style="display:grid;gap:6px">${ops}</div>${tabla}${elegir ? `<div class="mini" style="margin-top:4px">Repartido ${$$(tot)} de ${$$(m)}${Math.abs(tot - m) > 0.5 ? ` · <b style="color:var(--dg)">faltan ${$$(m - tot)}</b>` : ' ✓'}</div>` : ''}</div>`;
 }
 function spProblema(it) {
@@ -4036,8 +4163,9 @@ function spProblema(it) {
   if (D.f || D.deuda) {
     const R = spReparto(it), tot = R.reduce((a, x) => a + x.m, 0), deuda = spCuentasDe(D.eid).reduce((a, f) => a + saldo(f), 0) + (D.f && D.f.recurrente_id ? saldo(D.f) : 0);
     if (m > Math.max(deuda, D.f ? saldo(D.f) : 0) + 1) return `El monto es mayor que la deuda del proveedor (${$$(Math.max(deuda, D.f ? saldo(D.f) : 0))})`;
-    if (D.f && m > saldo(D.f) + 1 && !(it.apl?.modo || (spCuentasDe(D.eid).some(f => f.id !== D.f.id) ? 'deuda' : 'factura')).startsWith('deuda')) return `El monto es mayor que el saldo de la cuenta (${$$(saldo(D.f))}) · elige cómo aplicar el resto`;
+    if (D.f && m > saldo(D.f) + 1 && spModo0(it, D, m) !== 'deuda') return `El monto es mayor que el saldo de la cuenta (${$$(saldo(D.f))}) · elige cómo aplicar el resto`;
     if (Math.abs(tot - m) > 0.5) return `Reparte el monto completo: faltan ${$$(m - tot)}`;
+    if (R.some(x => x.desc > num(x.f.monto_total) * 0.3 + 0.01)) return 'El descuento no puede pasar del 30% de la cuenta';
   }
   return null;
 }
@@ -4104,9 +4232,10 @@ async function spAplicar() {
         const Rp = spReparto(it); nombre = nomEnt(spDestino(it).eid);
         const det = [];
         for (const x of Rp) {
-          const p = await R('fin_pagar', { p_factura: x.f.id, p_monto: x.m, p_fecha: it.fecha, p_metodo: it.metodo, p_referencia: it.ref || '', p_comprobante_url: up.url, p_sha256: up.sha });
+          const base = { p_factura: x.f.id, p_monto: x.m, p_fecha: it.fecha, p_metodo: it.metodo, p_referencia: it.ref || '', p_comprobante_url: up.url, p_sha256: up.sha };
+          const p = x.desc ? await R('fin_pagar_pp', { ...base, p_descuento: x.desc, p_nota: Math.round(x.desc / (x.m + x.desc) * 1000) / 10 + '%' }) : await R('fin_pagar', base);
           if (!p.ok) throw new Error((det.length ? 'se aplicaron ' + det.length + ' abono(s) y luego falló: ' : '') + (ERR[p.error] || p.error));
-          det.push(`${String(x.f.descripcion || '').slice(0, 30)} ${$$(x.m)}${p.liquidada ? ' (liquidada)' : ' (abono)'}`);
+          det.push(`${String(x.f.descripcion || '').slice(0, 30)} ${$$(x.m)}${x.desc ? ' (liquidada con descuento pronto pago ' + $$(x.desc) + ')' : p.liquidada ? ' (liquidada)' : ' (abono)'}`);
         }
         ok.push(`${nombre} · ${$$(m)} → ${det.join(' · ')}${spDestino(it).nf ? '' : ' · factura por solicitar si falta'}`);
         it.sel = 'nada'; it.hecho = true;
@@ -4409,6 +4538,28 @@ function almPlantilla() {
   XLSX.utils.book_append_sheet(wb, ws, 'Inventario almacén'); XLSX.writeFile(wb, 'Plantilla inventario almacen COE.xlsx');
 }
 let ALM_UP = { filas: [], modo: 'fijar', area: 'alm' };
+// ── Comprobante obligatorio de toda entrada de mercancía (factura, remisión, recibo o comprobante de pago) ──
+const ALM_DOC_T = { factura: 'Factura', remision: 'Remisión / nota de entrega', recibo: 'Recibo', comprobante_pago: 'Comprobante de pago' };
+const almCompSt = v => { const S = v === 'up' ? ALM_UP : ALM_N; return (S.comp = S.comp || { file: null, tipo: 'factura', folio: '' }); };
+function almCompHtml(v) {
+  const c = almCompSt(v);
+  return `<div class="almcomp ${c.file ? 'ok' : ''}" id="almComp_${v}">
+    <div class="almcomp-h"><b>📎 Comprobante de la entrada <span style="color:var(--dg)">(obligatorio)</span></b><span class="mini">Sin factura, remisión, recibo o comprobante de pago no se registra la entrada.</span></div>
+    <div class="fgrd"><div class="fgrp"><label>Tipo de documento</label><select onchange="almCompSt('${v}').tipo=this.value">${Object.entries(ALM_DOC_T).map(([k, t]) => `<option value="${k}" ${c.tipo === k ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+      <div class="fgrp"><label>Folio / número</label><input type="text" value="${esc(c.folio)}" placeholder="Ej. A-1234" oninput="almCompSt('${v}').folio=this.value"></div>
+      <div class="fgrp sp2"><label class="almcomp-f"><input type="file" accept="application/pdf,image/*,.xml,text/xml" onchange="almCompArchivo('${v}',this.files[0])"><span>${c.file ? `✓ <b>${esc(c.file.name)}</b> · cambiar` : '⬆ Subir foto o PDF del documento'}</span></label></div></div></div>`;
+}
+function almCompArchivo(v, file) {
+  if (!file) return; const c = almCompSt(v); c.file = file;
+  if (/fact/i.test(file.name)) c.tipo = 'factura'; else if (/remis|nota/i.test(file.name)) c.tipo = 'remision'; else if (/transf|spei|pago|compro/i.test(file.name)) c.tipo = 'comprobante_pago';
+  const el = document.getElementById('almComp_' + v); if (el) el.outerHTML = almCompHtml(v);
+  if (v === 'up') almPintarUp();
+}
+async function almCompSubir(v, filas, extra = {}) {
+  const c = almCompSt(v); if (!c.file) throw new Error('Sube el comprobante de la entrada');
+  const up = await subirArchivo(c.file, 'almacen');
+  return { tipo: c.tipo, url: up.url, sha256: up.sha, folio: c.folio || (filas.find(f => f.factura)?.factura || ''), proveedor_id: extra.proveedor_id || filas.find(f => f.proveedor_id)?.proveedor_id || '' };
+}
 function almSubir(area) {
   ALM_UP = { filas: [], modo: 'fijar', area: area || 'alm' };
   modal(ALM_UP.area === 'adm' ? 'Subir inventario de Quirófano al Almacén de Contabilidad' : 'Subir inventario del almacén', `<div class="mini" style="margin-bottom:10px">Sube un Excel o CSV con lo que hay en el almacén: medicamentos, insumos, material quirúrgico y equipos. Datos importantes: <b>nombre, tipo, lote, caducidad, cantidad</b> y, en equipos, <b>número de serie</b>. También se leen clave, presentación, unidad, marca, costo, factura, proveedor, registro sanitario, mínimo, ubicación, red fría y controlado.</div>
@@ -4418,7 +4569,7 @@ function almSubir(area) {
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><button class="btn btn-s btn-sm" onclick="almPlantilla()">⬇ Descargar plantilla de Excel</button></div>
     <div class="drop"><input type="file" multiple accept=".xlsx,.xls,.csv,application/pdf,image/*" onchange="almLeerArchivos(this.files);this.value=''"><div class="big">⬆</div><div><b>Elige el archivo o toma fotos</b></div><div class="mini">Excel o CSV (una fila por lote) · fotos o PDF de la remisión, factura o lista: el sistema lee nombre, lote, caducidad y piezas y tú lo revisas antes de cargar</div></div>
     <div style="margin-top:8px"><button class="btn btn-s btn-sm" onclick="ALM_UP.foto=true;ALM_UP.filas.push(almFilaVacia());almPintarUp()">+ Agregar renglón a mano</button></div>
-    <div id="almUpRes"></div>`, `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" id="almUpGo" onclick="almAplicarUp()" disabled>Firmar y cargar</button>`, 'xl');
+    <div id="almCompUp"></div><div id="almUpRes"></div>`, `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" id="almUpGo" onclick="almAplicarUp()" disabled>Firmar y cargar</button>`, 'xl');
 }
 async function almLeerArchivo(file) {
   if (!file) return;
@@ -4462,6 +4613,8 @@ function almRevisar(f, modo) {
 function almPintarUp() {
   const el = document.getElementById('almUpRes'); if (!el) return;
   document.querySelectorAll('input[name="almModo"]').forEach((r, i) => r.closest('.opt').classList.toggle('sel', (i === 0) === (ALM_UP.modo === 'fijar')));
+  const cb = document.getElementById('almCompUp');
+  if (cb) { if (ALM_UP.modo === 'sumar') { const c = almCompSt('up'); if (!c.file && (ALM_UP.docs || []).length) { c.file = ALM_UP.docs[0]; c.tipo = /fact/i.test(c.file.name) ? 'factura' : 'remision'; } if (!cb.firstChild) cb.innerHTML = almCompHtml('up'); else if (!document.getElementById('almComp_up') || (c.file && !document.querySelector('#almComp_up.ok'))) cb.innerHTML = almCompHtml('up'); } else cb.innerHTML = ''; }
   const F = ALM_UP.filas; if (!F.length) { el.innerHTML = ''; return; }
   const R = F.map(f => ({ f, ...almRevisar(f, ALM_UP.modo) })), ok = R.filter(x => !x.err.length), nuevos = new Set(ok.filter(x => !x.p).map(x => normTx(x.f.nombre))).size;
   const cad = ok.filter(x => x.f.caducidad && diasA(x.f.caducidad) < 0).length, xcad = ok.filter(x => x.f.caducidad && diasA(x.f.caducidad) >= 0 && diasA(x.f.caducidad) <= 90).length;
@@ -4477,17 +4630,23 @@ function almPintarUp() {
     ${ALM_UP.foto ? `<div class="mini" style="margin-top:6px">Lo leído de fotos o PDF aparece editable: corrige nombre, lote, caducidad y piezas antes de firmar. Debajo de cada renglón se ve el texto original.</div>` : ''}
     ${F.length > 400 ? `<div class="mini">Se muestran 400 de ${F.length}; se cargan todas las filas válidas.</div>` : ''}
     <div class="mini" style="margin-top:8px">${ALM_UP.modo === 'fijar' ? 'Inventario físico: cada lote del archivo queda con la cantidad contada; los lotes que no vienen en el archivo no se tocan.' : 'Entrada: cada cantidad se suma al lote correspondiente (o crea el lote).'} Los lotes caducados se cargan para que aparezcan como «retirar».</div>`;
-  const go = document.getElementById('almUpGo'); if (go) { go.disabled = !ok.length; go.textContent = `Firmar y cargar ${ok.length} lote(s)`; }
+  const sinDoc = ALM_UP.modo === 'sumar' && !almCompSt('up').file;
+  const go = document.getElementById('almUpGo'); if (go) { go.disabled = !ok.length || sinDoc; go.textContent = sinDoc && ok.length ? '📎 Falta el comprobante de la entrada' : `Firmar y cargar ${ok.length} lote(s)`; }
 }
 async function almAplicarUp() {
   const qx = ALM_UP.area === 'adm';
   const ok = ALM_UP.filas.filter(f => !almRevisar(f, ALM_UP.modo).err.length).map(f => { const p = almRevisar(f, ALM_UP.modo).p; const o = { ...f, [qx ? 'material_id' : 'producto_id']: p ? p.id : '' }; if (qx) { o.minimo = f.minimo_alm; o.categoria = QX_CAT[f.tipo_insumo]; } delete o.cadTxt; delete o.proveedor; return o; });
   if (!ok.length) return;
+  const sumar = ALM_UP.modo === 'sumar';
+  if (sumar && !almCompSt('up').file) { toast('Sube la factura, remisión, recibo o comprobante de pago de la entrada', 'warning'); document.getElementById('almComp_up')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
   let pin; try { pin = await askPin(ALM_UP.modo === 'fijar' ? 'Firmar inventario del almacén' : 'Firmar entrada al almacén', `${ok.length} lote(s)`); } catch { return; }
   const go = document.getElementById('almUpGo'); go.disabled = true; go.textContent = 'Cargando…';
+  let doc = null;
+  if (sumar) { try { doc = await almCompSubir('up', ok); } catch (e) { toast(e.message, 'error'); go.disabled = false; go.textContent = 'Firmar y cargar'; return; } }
   let lotes = 0, nuevos = 0, errores = [];
   for (let i = 0; i < ok.length; i += 150) {
-    const r = await rpcConPin(qx ? 'fin_qx_entrada' : 'fin_alm_entrada', { p_items: ok.slice(i, i + 150), p_modo: ALM_UP.modo, p_motivo: ALM_UP.modo === 'fijar' ? 'Inventario físico (archivo)' : 'Entrada (archivo)' }, pin);
+    const r = sumar ? await rpcConPin('fin_alm_entrada_doc', { p_area: qx ? 'adm' : 'alm', p_items: ok.slice(i, i + 150), p_motivo: 'Entrada (archivo)', p_pedido: null, p_doc: doc }, pin)
+      : await rpcConPin(qx ? 'fin_qx_entrada' : 'fin_alm_entrada', { p_items: ok.slice(i, i + 150), p_modo: ALM_UP.modo, p_motivo: 'Inventario físico (archivo)' }, pin);
     if (!r.ok) { toast(ERR[r.error] || r.error, 'error'); go.disabled = false; go.textContent = 'Firmar y cargar'; return; }
     lotes += r.lotes; nuevos += r.nuevos; errores = errores.concat((r.errores || []).map(e => ({ ...e, fila: e.fila + i })));
   }
@@ -4533,7 +4692,8 @@ function almVistaAgregar(A) {
     <div class="cfg-section"><h3 style="display:flex;justify-content:space-between;align-items:center">Lista por registrar (${ALM_N.filas.length})${ALM_N.filas.length ? `<button class="btn btn-s btn-sm" onclick="ALM_N.filas=[];renderTab()">Vaciar</button>` : ''}</h3><div class="body">
       ${ALM_N.filas.length ? `<div class="alist">${ALM_N.filas.map((f, i) => `<div class="aitem ${f.caducidad && diasA(f.caducidad) < 0 ? 'r' : f.caducidad && diasA(f.caducidad) <= 90 ? 'a' : 'i'}"><div style="flex:1"><div class="at">${esc(f.nombre)} · ${almNum(f.cantidad)} ${esc(f.unidad || 'pza')}</div><div class="am">${TIPO_INS[f.tipo_insumo]}${f.lote ? ' · lote ' + esc(f.lote) : ''}${f.serie ? ' · serie ' + esc(f.serie) : ''}${f.caducidad ? ' · caduca ' + fmtD(f.caducidad) : ''}${f.costo ? ' · ' + $$(f.costo) + ' c/u' : ''}${f.consignacion ? ' · <b>en consigna</b>' + (f.proveedor_id ? ' de ' + esc(nomEnt(f.proveedor_id)) : '') : ''}${f.producto_id || f.material_id ? '' : ' · <b>producto nuevo</b>'}</div></div><span class="mcls" onclick="ALM_N.filas.splice(${i},1);renderTab()">✕</span></div>`).join('')}</div>
         <div class="mini" style="margin:10px 0">Total ${$$(ALM_N.filas.reduce((s, f) => s + num(f.costo) * num(f.cantidad), 0))} a costo</div>
-        <button class="btn btn-p" style="width:100%" onclick="almGuardarManual()">Firmar y registrar entrada al almacén</button>` : `<div class="mini">Agrega uno o varios productos con su lote y caducidad. Al firmar, entran al almacén y ${qx ? 'COE Quirófano' : 'COE Farmacia'} los ve al momento.</div>`}
+        ${almCompHtml('n')}
+        <button class="btn btn-p" style="width:100%;margin-top:10px" onclick="almGuardarManual()">Firmar y registrar entrada al almacén</button>` : `<div class="mini">Agrega uno o varios productos con su lote y caducidad. Al firmar, entran al almacén y ${qx ? 'COE Quirófano' : 'COE Farmacia'} los ve al momento.</div>`}
     </div></div></div></div>`;
 }
 function almCamposTipo() {
@@ -4579,16 +4739,17 @@ function almDesdePedido(id) {
 async function almGuardarManual() {
   const falta = ALM_N.filas.filter(f => f._falta && ((almReqCad(f.tipo_insumo) && !f.caducidad) || (!f.lote && !f.serie)));
   if (falta.length) { const f = falta[0]; ALM_N.filas = ALM_N.filas.filter(x => x !== f); renderTab(); setTimeout(() => { document.getElementById('anN').value = f.nombre; almPrefill(f.nombre); document.getElementById('anQ').value = f.cantidad; if (f.costo) document.getElementById('anCo').value = f.costo; if (f.proveedor_id) document.getElementById('anPv').value = f.proveedor_id; document.getElementById('anL').focus(); }, 50); return toast(`Falta lote y caducidad de «${f.nombre}»`, 'warning'); }
+  if (!almCompSt('n').file) { toast('Sube la factura, remisión, recibo o comprobante de pago de la entrada', 'warning'); document.getElementById('almComp_n')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
   let pin; try { pin = await askPin('Firmar entrada al almacén', `${ALM_N.filas.length} producto(s)`); } catch { return; }
   const ped = PED.find(x => x.id === ALM_N.pedido);
-  const qx = ALM_N.area === 'adm';
-  const r = qx ? await rpcConPin('fin_qx_entrada', { p_items: ALM_N.filas.map(({ _falta, ...f }) => f), p_modo: 'sumar', p_motivo: ped ? 'Pedido ' + ped.folio : 'Entrada manual', p_pedido: ped ? ped.id : null }, pin)
-    : await rpcConPin('fin_alm_entrada', { p_items: ALM_N.filas.map(({ _falta, ...f }) => f), p_modo: 'sumar', p_motivo: ped ? 'Entrada del pedido ' + ped.folio : 'Entrada manual al almacén (COE Finanzas)' }, pin);
+  const qx = ALM_N.area === 'adm', items = ALM_N.filas.map(({ _falta, ...f }) => f);
+  let doc; try { doc = await almCompSubir('n', items, { proveedor_id: ped?.entidad_id }); } catch (e) { return toast(e.message, 'error'); }
+  const r = await rpcConPin('fin_alm_entrada_doc', { p_area: qx ? 'adm' : 'alm', p_items: items, p_motivo: ped ? (qx ? 'Pedido ' : 'Entrada del pedido ') + ped.folio : qx ? 'Entrada manual' : 'Entrada manual al almacén (COE Finanzas)', p_pedido: ped ? ped.id : null, p_doc: doc }, pin);
   if (!r.ok) return toast(ERR[r.error] || r.error, 'error');
   if (!qx && ped && ped.estado !== 'recibido') await rpcConPin('fin_pedido_estado', { p_pedido: ped.id, p_estado: 'recibido', p_datos: {} }, pin);
   if ((r.errores || []).length) toast(r.errores.map(e => (e.nombre || 'Fila ' + e.fila) + ': ' + e.error).join(' · '), 'warning');
   else toast(`${r.lotes} lote(s) registrados en el almacén${ped ? ' · pedido ' + ped.folio + ' recibido' : ''}`, 'success');
-  ALM_N = { filas: [], pedido: '', area: ALM_N.area }; VIEW.almV = 'tablero'; await cargarTodo();
+  ALM_N = { filas: [], pedido: '', area: ALM_N.area, comp: null }; VIEW.almV = 'tablero'; await cargarTodo();
 }
 
 // ── Traspaso almacén → farmacia mostrador ──
@@ -5104,7 +5265,7 @@ function ctlFaltantes() {
 // La Contadora arma la propuesta (cuentas por pagar + recurrentes calendarizados); el Director la ve en su pestaña del tablero y paga.
 VIEW.pp = VIEW.pp || { hz: 30, grp: 'prov', ord: 'fecha', vista: 'sem', fil: 'todo', mes: 0, dia: null, sel: {}, mon: {}, modo: 'venc', fecha: null };
 const PP_GRP = { prov: 'Proveedor', semana: 'Semana', estado: 'Estado', pri: 'Prioridad', cat: 'Categoría' };
-const PP_FIL = { todo: 'Todo', por: 'Por proponer', prop: 'Propuestos', rec: 'Recurrentes', venc: 'Vencidos' };
+const PP_FIL = { todo: 'Todo', por: 'Por proponer', prop: 'Propuestos', rec: 'Recurrentes', venc: 'Vencidos', desc: '💰 Pronto pago' };
 function ppCol() { try { return JSON.parse(localStorage.getItem('coe_pp_col') || '{}'); } catch { return {}; } }
 function ppColToggle(k) { const c = ppCol(); if (c[k]) delete c[k]; else c[k] = 1; try { localStorage.setItem('coe_pp_col', JSON.stringify(c)); } catch { } renderTab(); }
 function ppColTodos(cerrar) { const c = {}; if (cerrar) ppGrupos(ppFiltrar(ppItems())).forEach(g => c[g.k] = 1); try { localStorage.setItem('coe_pp_col', JSON.stringify(c)); } catch { } renderTab(); }
@@ -5130,7 +5291,7 @@ const ppVencido = x => x.fecha && x.fecha < hoyISO();
 const ppMonto = x => x.monto ?? num(VIEW.pp.mon[x.k] || 0);
 function ppFiltrar(I) {
   const F = VIEW.pp.fil;
-  let L = I.filter(x => F === 'todo' ? true : F === 'por' ? !x.prop : F === 'prop' ? !!x.prop : F === 'rec' ? x.rec : F === 'venc' ? ppVencido(x) : true);
+  let L = I.filter(x => F === 'todo' ? true : F === 'por' ? !x.prop : F === 'prop' ? !!x.prop : F === 'rec' ? x.rec : F === 'venc' ? ppVencido(x) : F === 'desc' ? !!(x.f && descPP(x.f)?.vig) : true);
   if (VIEW.pp.dia) L = L.filter(x => (x.prop || x.fecha) === VIEW.pp.dia || x.fecha === VIEW.pp.dia);
   return L;
 }
@@ -5160,6 +5321,7 @@ function ppCuerpo(esDirTab) {
     ${kpi('Por proponer', $$(tot(por)), `${por.length} en ${P.hz} días`, por.length ? 'var(--wn)' : 'var(--sc)', "VIEW.pp.fil='por';renderTab()")}
     ${kpi('Recurrentes calendarizados', String(recs.length), `${$$(tot(recs))}${recs.some(x => x.variable) ? ' + ' + recs.filter(x => x.variable).length + ' variables' : ''}`, '', "VIEW.pp.fil='rec';renderTab()")}
     ${kpi('Vencido sin proponer', $$(tot(venc)), `${venc.length} cuenta(s)`, venc.length ? 'var(--dg)' : 'var(--sc)', "VIEW.pp.fil='venc';renderTab()")}
+    ${(() => { const D = I.filter(x => x.f).map(x => descPP(x.f)).filter(d => d && d.vig); return D.length ? kpi('💰 Ahorro por pronto pago', $$(D.reduce((s, d) => s + d.monto, 0)), `${D.length} cuenta(s) con descuento vigente${D.some(d => d.limite) ? ' · el primero vence ' + fmtD(D.filter(d => d.limite).sort((a, b) => a.limite.localeCompare(b.limite))[0]?.limite || '') : ''}`, 'var(--sc)', "VIEW.pp.fil='desc';renderTab()") : ''; })()}
   </div>`;
   const ctl = `<div class="ppctl">
     <div class="seg">${[['sem', '▥ Por semana'], ['lista', '☰ Lista'], ['cal', '▦ Calendario']].map(([k, t]) => `<button class="${P.vista === k ? 'on' : ''}" onclick="VIEW.pp.vista='${k}';renderTab()">${t}</button>`).join('')}</div>
@@ -5190,8 +5352,13 @@ function ppFila(x, esDirTab) {
   return `<div class="pprow ${v ? 'v' : ''} ${x.prop ? 'p' : ''}" ${ir ? `onclick="${ir}"` : ''}>
     <input type="checkbox" ${P.sel[x.k] ? 'checked' : ''} onclick="event.stopPropagation()" onchange="VIEW.pp.sel['${x.k}']=this.checked;renderTab()">
     <div class="ppd"><div class="ppdt">${fmtD(x.prop || x.fecha).slice(0, 5)}</div><div class="mini">${x.prop && x.fecha && x.prop !== x.fecha ? 'vence ' + fmtD(x.fecha).slice(0, 5) : diasTxtPP(x.fecha)}</div></div>
-    <div class="ppt"><div>${VIEW.pp.grp === 'prov' ? '' : `<b>${esc(nomEnt(x.ent))}</b> · `}${esc(x.desc)} ${tag} ${est} ${x.pri && PRI[x.pri] ? priBdg(x.pri) : ''}</div><div class="mini">${esc(x.cat)}${x.f ? ' · ' + docsDe(x.f) : ' · aún sin cuenta: se crea al proponer o pagar'}</div></div>
+    <div class="ppt"><div>${VIEW.pp.grp === 'prov' ? '' : `<b>${esc(nomEnt(x.ent))}</b> · `}${esc(x.desc)} ${tag} ${est} ${x.pri && PRI[x.pri] ? priBdg(x.pri) : ''}</div><div class="mini">${esc(x.cat)}${x.f ? ' · ' + docsDe(x.f) : ' · aún sin cuenta: se crea al proponer o pagar'}</div>${ppDescChip(x)}</div>
     <div class="ppm">${monto}</div><div class="rowact" onclick="event.stopPropagation()">${acc}${x.prop && puede('cxp') && x.f ? `<button class="btn btn-s btn-sm" onclick="quitarPropuesta('${x.f.id}')" title="Quitar de la propuesta">✕</button>` : ''}</div></div>`;
+}
+// Aviso de descuento por pronto pago (vigente o vencido)
+function ppDescChip(x) {
+  const d = x.f && descPP(x.f); if (!d) return '';
+  return `<div class="mini" style="color:${d.vig ? 'var(--sc)' : 'var(--sc)'};font-weight:${d.vig ? 700 : 400}">💰 ${esc(descPPTxt(d))}${d.vig ? ' · pagas ' + $$(d.neto) : ''}${d.vig && d.quedan !== null && d.quedan <= 3 ? ' · ¡quedan ' + d.quedan + ' d!' : ''}</div>`;
 }
 function diasTxtPP(f) { const d = diasA(f); return d === null ? '' : d < 0 ? `hace ${-d} d` : d === 0 ? 'hoy' : `en ${d} d`; }
 
@@ -5347,7 +5514,7 @@ function ppSemanas(L, esDirTab) {
   const tarjeta = i => { const x = L[i], tarde = x.prop && x.fecha && x.prop > x.fecha, v = ppVencido(x) && !x.prop;
     return `<div class="ppcard ${x.prop ? 'p' : ''} ${v ? 'v' : ''} ${x.rec ? 'r' : ''}" draggable="${puede('cxp') ? 'true' : 'false'}" ondragstart="event.dataTransfer.setData('text/plain','${i}');this.classList.add('drag')" ondragend="this.classList.remove('drag')" onclick="${x.f ? `verCuenta('${x.f.id}')` : ''}">
       <div class="ppc1"><b>${esc(nomEnt(x.ent))}</b><span class="amt">${x.variable && !VIEW.pp.mon[x.k] ? '<span class="mini">variable</span>' : $$(ppMonto(x))}</span></div>
-      <div class="mini">${esc(String(x.desc || '').slice(0, 60))}</div>
+      <div class="mini">${esc(String(x.desc || '').slice(0, 60))}</div>${ppDescChip(x)}
       <div class="ppc2">${x.prop ? `<span class="bdg bdg-aut">pagar ${fmtD(x.prop).slice(0, 5)}</span>` : ''}${x.nom ? '<span class="bdg pp-rec">nómina</span>' : x.rec ? '<span class="bdg pp-rec">↻</span>' : ''}${x.fecha ? `<span class="mini" style="${v || tarde ? 'color:var(--dg);font-weight:700' : ''}">vence ${fmtD(x.fecha).slice(0, 5)}${tarde ? ' · se paga tarde' : ''}</span>` : ''}
         ${puede('cxp') ? `<button class="btn btn-s btn-sm" style="margin-left:auto;padding:2px 8px" onclick="event.stopPropagation();ppMoverDlg(${i})">Mover</button>` : ''}${x.f && puede('pagos', 3) && esDirTab ? `<button class="btn btn-p btn-sm" style="padding:2px 8px" onclick="event.stopPropagation();pagarCuenta('${x.f.id}')">Pagar</button>` : ''}</div></div>`; };
   return `<div class="mini" style="margin:0 0 8px">Cada semana viene compactada por proveedor: toca la flecha ▸ para ver sus pagos. Arrastra un pago a otra semana (o toca «Mover»). Los propuestos se pagan el día marcado; lo demás aparece en la semana en que vence. Si lo mueves después de su vencimiento te aviso.</div>
@@ -5358,7 +5525,7 @@ function ppSemanas(L, esDirTab) {
       ${(() => { if (!I2.length) return '<div class="mini" style="padding:10px;text-align:center">Sin pagos</div>';
         const G = {}; I2.forEach(i => (G[L[i].ent || '—'] = G[L[i].ent || '—'] || []).push(i));
         return Object.entries(G).map(([e, ix]) => ({ e, ix, m: ix.reduce((s, i) => s + ppMonto(L[i]), 0) })).sort((a, b) => b.m - a.m).map(g => { const kk = w.k + '|' + g.e, ab = VIEW.ppSemAbre[kk], np = g.ix.filter(i => L[i].prop).length, nv = g.ix.filter(i => ppVencido(L[i]) && !L[i].prop).length;
-          return `<div class="ppprov ${ab ? 'ab' : ''}" draggable="${puede('cxp') && g.ix.length === 1 ? 'true' : 'false'}" ondragstart="event.dataTransfer.setData('text/plain','${g.ix[0]}')" onclick="VIEW.ppSemAbre['${esc(kk)}']=!VIEW.ppSemAbre['${esc(kk)}'];renderTab()"><span class="ppar">${ab ? '▾' : '▸'}</span><div style="flex:1;min-width:0"><b>${esc(nomEnt(g.e) || 'Sin proveedor')}</b><div class="mini">${g.ix.length} pago(s)${np ? ' · ' + np + ' propuesto(s)' : ''}${nv ? ` · <b style="color:var(--dg)">${nv} vencido(s)</b>` : ''}</div></div><b class="amt">${g.m ? $$(g.m) : '<span class="mini">variable</span>'}</b></div>${ab ? g.ix.sort((a, b) => String(ppDiaPago(L[a]) || L[a].fecha || '').localeCompare(String(ppDiaPago(L[b]) || L[b].fecha || ''))).map(tarjeta).join('') : ''}`; }).join(''); })()}</div>`; }).join('')}</div>`;
+          return `<div class="ppprov ${ab ? 'ab' : ''}" draggable="${puede('cxp') && g.ix.length === 1 ? 'true' : 'false'}" ondragstart="event.dataTransfer.setData('text/plain','${g.ix[0]}')" onclick="VIEW.ppSemAbre['${esc(kk)}']=!VIEW.ppSemAbre['${esc(kk)}'];renderTab()"><span class="ppar">${ab ? '▾' : '▸'}</span><div style="flex:1;min-width:0"><b>${esc(nomEnt(g.e) || 'Sin proveedor')}</b><div class="mini">${g.ix.length} pago(s)${np ? ' · ' + np + ' propuesto(s)' : ''}${nv ? ` · <b style="color:var(--dg)">${nv} vencido(s)</b>` : ''}${g.ix.some(i => L[i].f && descPP(L[i].f)?.vig) ? ' · <b style="color:var(--sc)">💰 pronto pago</b>' : ''}</div></div><b class="amt">${g.m ? $$(g.m) : '<span class="mini">variable</span>'}</b></div>${ab ? g.ix.sort((a, b) => String(ppDiaPago(L[a]) || L[a].fecha || '').localeCompare(String(ppDiaPago(L[b]) || L[b].fecha || ''))).map(tarjeta).join('') : ''}`; }).join(''); })()}</div>`; }).join('')}</div>`;
 }
 // Día de pago al soltar en una semana: su vencimiento si cae en esa semana, si no el viernes; nunca antes de hoy
 function ppDiaEnSemana(x, l) {
