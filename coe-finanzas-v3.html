@@ -798,6 +798,16 @@ tr.fps-prov td{background:var(--sf2)}
 .hmn{width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;background:var(--sf2);flex:none}
 .hmp.ok .hmn{background:var(--sc);color:#fff}.hmp.ok b{color:var(--tm)}
 .hmfalta{margin-top:8px;font-size:12.5px;color:var(--dg)}
+/* Reporte del día sencillo + tira de días */
+.cdsim{margin:4px 0 10px}.cdsim-v{font-size:24px;font-weight:800}
+.cdd-kv.cd4{grid-template-columns:repeat(4,1fr)}.cdd-kv.cd8{grid-template-columns:repeat(4,minmax(80px,1fr))}
+.cdal{margin-top:10px;padding:8px 10px;border-radius:8px;background:rgba(239,68,68,.12);color:var(--dg);font-size:13px;font-weight:600}
+.cdtira{display:flex;gap:4px;flex-wrap:wrap}
+.cdt{width:34px;height:40px;border-radius:7px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;font-size:12px;border:2px solid transparent;color:#fff}
+.cdt span{font-size:9px;opacity:.85}.cdt.sel{border-color:var(--tx)}
+.cdt.si{background:#22a06b}.cdt.poco{background:#d4a017}.cdt.no{background:#dc4c4c}.cdt.dom{background:var(--sf2);color:var(--tm)}
+.cdley2{font-size:11px;font-weight:400;color:var(--tm);display:flex;gap:6px;align-items:center}
+.cdley2 i{display:inline-block;width:10px;height:10px;border-radius:3px}.cdley2 i.si{background:#22a06b}.cdley2 i.poco{background:#d4a017}.cdley2 i.no{background:#dc4c4c}.cdley2 i.dom{background:var(--sf2)}
 </style>
 </head>
 <body>
@@ -3140,9 +3150,12 @@ function datosCumplimiento(per) {
 }
 const colPct = p => p >= 90 ? 'var(--sc)' : p >= 70 ? 'var(--wn)' : 'var(--dg)';
 function rRep() {
-  const per = VIEW.repPer, d = datosCumplimiento(per);
+  const per = VIEW.repPer;
+  const chipsP = [['diario', 'Diario'], ['semanal', 'Semanal'], ['quincenal', 'Quincenal'], ['mensual', 'Mensual']].map(([k, l]) => `<span class="chip ${per === k ? 'act' : ''}" onclick="VIEW.repPer='${k}';renderTab()">${l}</span>`).join('');
+  if (per === 'diario') return rRepDiario(chipsP);
+  const d = datosCumplimiento(per);
   const pct = (d.aTiempo.length + d.tarde.length + d.noCump.length) ? Math.round(d.aTiempo.length / (d.aTiempo.length + d.tarde.length + d.noCump.length) * 100) : 100;
-  const chips = [['semanal', 'Semanal'], ['quincenal', 'Quincenal'], ['mensual', 'Mensual']].map(([k, l]) => `<span class="chip ${per === k ? 'act' : ''}" onclick="VIEW.repPer='${k}';renderTab()">${l}</span>`).join('');
+  const chips = chipsP;
   const lst = (arr, f) => arr.length ? arr.map(f).join('') : '<div class="mini">Ninguno</div>';
   return `<div class="ph"><div><div class="ptit">Desempeño</div><div class="psub">Del ${fmtD(d.a)} al ${fmtD(d.b)} · ${d.hab} días hábiles · a tiempo = cumplido en la fecha original</div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap"><div class="chips">${chips}</div><button class="btn btn-s btn-sm" onclick="reporteDia()">Reporte del día</button><button class="btn btn-p btn-sm" onclick="imprimirCumplimiento('${per}')">🖨 Imprimir (1 página)</button></div></div>
@@ -3286,29 +3299,76 @@ function datosContaDia(U, fecha) {
   const pts = A.cumplidos.length * 2 + A.avances.length + pagos.length + cuentas.length + xml.length + comps.length + (cierre ? 1 : 0);
   const habil = new Date(fecha + 'T12:00:00').getDay() !== 0;
   const nivel = !habil && !pts ? 'sin' : A.criticosSinAvance.length || (!pts && habil) ? 'critico' : !cierre || A.vencidos.length > 5 ? 'regular' : 'bueno';
-  return { A, pagos, cuentas, xml, comps, ped, cierre, sinEv, pts, nivel, habil };
+  // Horario real de trabajo: primera y última acción registrada ese día
+  const T = [...AVA.filter(a => a.usuario_id === U.id && del(a.created_at)).map(a => a.created_at), ...pagos.map(a => a.created_at), ...cuentas.map(f => f.created_at), ...docs.map(d => d.subido_at), ...(cierre ? [cierre.created_at] : [])].map(x => new Date(x)).sort((a, b) => a - b);
+  const hh = d => d ? d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '';
+  // ¿Trabajó? sí = cumplió algo o 5+ acciones · poco = 1 a 4 acciones · no = nada registrado
+  const trabajo = A.cumplidos.length || pts >= 5 ? 'si' : pts ? 'poco' : 'no';
+  return { A, pagos, cuentas, xml, comps, docs, ped, cierre, sinEv, pts, nivel, habil, trabajo, ini: hh(T[0]), ult: hh(T[T.length - 1]), acciones: T.length };
 }
 const CD_DIA_NIV = { bueno: ['Buen día', 'var(--sc)'], regular: ['Regular', 'var(--wn)'], critico: ['Día crítico', 'var(--dg)'], sin: ['Domingo / sin actividad', 'var(--tm)'] };
+const CD_TRAB = { si: ['✓ Sí trabajó', 'var(--sc)'], poco: ['Poca actividad', 'var(--wn)'], no: ['✕ Sin actividad', 'var(--dg)'] };
+const cdFechaDe = off => isoD(new Date(hoyD().getTime() + off * 864e5));
+const cdIrDia = off => { VIEW.cdDia = Math.min(0, off); renderTab(); };
+// Tira de días: un cuadro por día, color según si trabajó; al tocarlo abre ese día
+function cdTira(U, n, enRep) {
+  return `<div class="cdtira">${Array.from({ length: n }, (_, i) => i - n + 1).map(off => { const f = cdFechaDe(off), D = datosContaDia(U, f), dom = !D.habil;
+    const c = dom && !D.pts ? 'dom' : D.trabajo; return `<div class="cdt ${c} ${off === VIEW.cdDia ? 'sel' : ''}" title="${fmtD(f)} · ${dom && !D.pts ? 'domingo' : CD_TRAB[D.trabajo][0]}${D.pts ? ' · ' + D.acciones + ' acciones' : ''}" onclick="VIEW.cdDia=${off};${enRep ? 'renderTab()' : "VIEW.repPer='diario';goTab('rep')"}"><b>${+f.slice(8, 10)}</b><span>${['D', 'L', 'M', 'M', 'J', 'V', 'S'][new Date(f + 'T12:00:00').getDay()]}</span></div>`; }).join('')}</div>`;
+}
+// Tablero del Director: solo lo esencial para saber si está trabajando
 function cajaContaDia() {
   const U = contaU(); if (!U) return '';
-  const fecha = isoD(new Date(hoyD().getTime() + VIEW.cdDia * 864e5)), D = datosContaDia(U, fecha), A = D.A, n = CD_DIA_NIV[D.nivel];
-  const item = (ico, t, L, f) => L.length ? `<div class="cdd-g"><div class="cdd-h">${ico} <b>${t}</b> <span class="mini">${L.length}</span></div>${L.slice(0, 6).map(f).join('')}${L.length > 6 ? `<div class="mini">y ${L.length - 6} más</div>` : ''}</div>` : '';
-  const kv = [['Cumplidos', A.cumplidos.length], ['Avances', A.avances.length], ['Pagos registrados', D.pagos.length], ['XML/PDF subidos', D.xml.length], ['Complementos', D.comps.length], ['Reprogramó', A.reprog.length]];
-  const cuerpo = `<div class="cdd-top"><div><div class="cdd-niv" style="color:${n[1]}">${n[0]}</div><div class="mini">${fmtD(fecha)} · ${D.cierre ? 'cerró su día ' + fmtDT(D.cierre.created_at).slice(-5) : D.habil ? '<b style="color:var(--dg)">no ha cerrado su día</b>' : 'sin cierre'}</div></div>
-      <div class="cdd-kv">${kv.map(([k, v]) => `<div><b style="${v ? '' : 'color:var(--tm)'}">${v}</b><span>${k}</span></div>`).join('')}</div></div>
-    ${item('✓', 'Cumplió', A.cumplidos, t => `<div class="aitem i" onclick="verPendiente('${t.id}')"><div><div class="at">${priBdg(t.prioridad)} ${esc(t.titulo)}</div><div class="am">${D.sinEv.includes(t) ? '<b style="color:var(--dg)">sin evidencia</b>' : 'con evidencia'}</div></div></div>`)}
+  const fecha = cdFechaDe(VIEW.cdDia), D = datosContaDia(U, fecha), A = D.A, t = CD_TRAB[D.trabajo];
+  const num4 = [['Cumplió', A.cumplidos.length], ['Pagos', D.pagos.length], ['Documentos', D.docs.length], ['Cuentas', D.cuentas.length]];
+  const alertas = [A.criticosSinAvance.length ? `${A.criticosSinAvance.length} crítico(s) vencido(s) sin tocar` : '', D.habil && !D.cierre && VIEW.cdDia < 0 ? 'no cerró su día' : '', D.sinEv.length ? `${D.sinEv.length} cerrado(s) sin evidencia` : ''].filter(Boolean);
+  const nav = `<div class="cdd-nav"><button class="btn btn-s btn-sm" onclick="cdIrDia(VIEW.cdDia-1)">‹</button><span>${VIEW.cdDia === 0 ? 'Hoy' : VIEW.cdDia === -1 ? 'Ayer' : fmtD(fecha)}</span><button class="btn btn-s btn-sm" ${VIEW.cdDia >= 0 ? 'disabled' : ''} onclick="cdIrDia(VIEW.cdDia+1)">›</button></div>`;
+  return `<div class="dcard"><div class="ph3"><h3>Reporte del día · Contadora</h3>${nav}</div>
+    <div class="cdsim"><div class="cdsim-v" style="color:${D.habil || D.pts ? t[1] : 'var(--tm)'}">${D.habil || D.pts ? t[0] : 'Domingo'}</div>
+      <div class="mini">${D.acciones ? `trabajó de ${D.ini} a ${D.ult} · ${D.acciones} acciones registradas` : VIEW.cdDia === 0 ? 'aún no registra nada hoy' : 'no registró nada ese día'}</div></div>
+    <div class="cdd-kv cd4">${num4.map(([k, v]) => `<div><b style="${v ? '' : 'color:var(--tm)'}">${v}</b><span>${k}</span></div>`).join('')}</div>
+    ${alertas.length ? `<div class="cdal">⚠ ${alertas.join(' · ')}</div>` : ''}
+    <div class="mini" style="margin:10px 0 4px">Últimos 14 días</div>${cdTira(U, 14, false)}
+    <button class="btn btn-p btn-sm" style="margin-top:10px;width:100%" onclick="VIEW.repPer='diario';goTab('rep')">Ver el detalle completo en Desempeño ›</button></div>`;
+}
+// Desempeño › Diario: el detalle completo de un día (y navegación a días anteriores)
+function contaDiaDetalle(U, fecha) {
+  const D = datosContaDia(U, fecha), A = D.A, n = CD_DIA_NIV[D.nivel], t = CD_TRAB[D.trabajo];
+  const item = (ico, tt, L, f) => L.length ? `<div class="cdd-g"><div class="cdd-h">${ico} <b>${tt}</b> <span class="mini">${L.length}</span></div>${L.slice(0, 25).map(f).join('')}${L.length > 25 ? `<div class="mini">y ${L.length - 25} más</div>` : ''}</div>` : '';
+  const kv = [['Cumplidos', A.cumplidos.length], ['Avances', A.avances.length], ['Pagos', D.pagos.length], ['Cuentas nuevas', D.cuentas.length], ['XML/PDF', D.xml.length], ['Complementos', D.comps.length], ['Reprogramó', A.reprog.length], ['Vencidos abiertos', A.vencidos.length]];
+  window._cddTxt = textoContaDia(U, fecha, D);
+  return `<div class="cdd-top"><div><div class="cdd-niv" style="color:${D.habil || D.pts ? t[1] : 'var(--tm)'}">${D.habil || D.pts ? t[0] : 'Domingo'}</div><div class="mini">${new Date(fecha + 'T12:00:00').toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })} · calificación: <b style="color:${n[1]}">${n[0]}</b></div>
+      <div class="mini">${D.acciones ? `De ${D.ini} a ${D.ult} · ${D.acciones} acciones` : 'Sin acciones registradas'} · ${D.cierre ? 'cerró su día ' + fmtDT(D.cierre.created_at).slice(-5) : D.habil ? '<b style="color:var(--dg)">no cerró su día</b>' : 'sin cierre'}</div></div>
+      <div class="cdd-kv cd8">${kv.map(([k, v]) => `<div><b style="${v ? (k === 'Vencidos abiertos' ? 'color:var(--dg)' : '') : 'color:var(--tm)'}">${v}</b><span>${k}</span></div>`).join('')}</div></div>
+    ${item('✓', 'Cumplió', A.cumplidos, t => `<div class="aitem i" onclick="verPendiente('${t.id}')"><div><div class="at">${priBdg(t.prioridad)} ${esc(t.titulo)}</div><div class="am">${D.sinEv.includes(t) ? '<b style="color:var(--dg)">sin evidencia</b>' : 'con evidencia'}${t.cumplida_at && diaLocal(t.cumplida_at) > fOrig(t) ? ' · ' + atraso(t) + ' d tarde' : ' · a tiempo'}</div></div></div>`)}
     ${item('↗', 'Avanzó', A.avances, a => { const t = TAR.find(x => x.id === a.tarea_id); return `<div class="aitem i" ${t ? `onclick="verPendiente('${t.id}')"` : ''}><div><div class="at">${esc(t?.titulo || 'Pendiente')}</div><div class="am">${esc(a.nota || a.estado_nuevo || '')}</div></div></div>`; })}
-    ${item('$', 'Pagos que registró', D.pagos, a => { const f = FAC.find(x => x.id === a.factura_id); return `<div class="aitem i" ${f ? `onclick="verCuenta('${f.id}')"` : ''}><div><div class="at">${esc(f ? nomEnt(f.entidad_id) : 'Pago')} · ${$$(a.monto)}</div><div class="am">${esc(f?.descripcion || '')}</div></div></div>`; })}
+    ${item('$', 'Pagos que registró · ' + $$(D.pagos.reduce((s, a) => s + num(a.monto), 0)), D.pagos, a => { const f = FAC.find(x => x.id === a.factura_id); return `<div class="aitem i" ${f ? `onclick="verCuenta('${f.id}')"` : ''}><div><div class="at">${esc(f ? nomEnt(f.entidad_id) : 'Pago')} · ${$$(a.monto)}</div><div class="am">${esc(f?.descripcion || '')}</div></div></div>`; })}
+    ${item('＋', 'Cuentas que dio de alta', D.cuentas, f => `<div class="aitem i" onclick="verCuenta('${f.id}')"><div><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(f.monto_total)}</div><div class="am">${esc(f.descripcion || '')}</div></div></div>`)}
     ${item('📄', 'Facturas y documentos que subió', D.xml.concat(D.comps), d => { const f = FAC.find(x => x.id === d.registro_id); return `<div class="aitem i" ${f ? `onclick="verCuenta('${f.id}')"` : ''}><div><div class="at">${esc(f ? nomEnt(f.entidad_id) : 'Documento')} · ${esc(String(d.tipo).toUpperCase())}</div><div class="am">${esc(f?.descripcion || '')}</div></div></div>`; })}
     ${item('⏱', 'Reprogramó', A.reprog, a => { const t = TAR.find(x => x.id === a.tarea_id); return `<div class="aitem a"><div><div class="at">${esc(t?.titulo || '')}</div><div class="am">${fmtD(a.fecha_ant)} → ${fmtD(a.fecha_nueva)}${a.nota ? ' · ' + esc(a.nota) : ''}</div></div></div>`; })}
-    ${A.criticosSinAvance.length ? item('⚠', 'Críticos vencidos sin ningún avance', A.criticosSinAvance, t => `<div class="aitem r" onclick="verPendiente('${t.id}')"><div><div class="at">${esc(t.titulo)}</div><div class="am">atraso ${atraso(t)} d</div></div></div>`) : ''}
-    ${!D.pts ? `<div class="muted" style="margin:8px 0">Sin actividad registrada ${VIEW.cdDia ? 'ese día' : 'hoy'}.</div>` : ''}
-    ${D.cierre?.resumen ? `<div class="mini" style="margin-top:6px"><b>Su resumen:</b> ${esc(D.cierre.resumen)}</div>` : ''}
-    <div class="mini" style="margin-top:6px">Siguen abiertos ${A.abiertos.length} · vencidos ${A.vencidos.length}</div>`;
-  const nav = `<div class="cdd-nav"><button class="btn btn-s btn-sm" onclick="VIEW.cdDia--;renderTab()">‹</button><span>${VIEW.cdDia === 0 ? 'Hoy' : VIEW.cdDia === -1 ? 'Ayer' : fmtD(fecha)}</span><button class="btn btn-s btn-sm" ${VIEW.cdDia >= 0 ? 'disabled' : ''} onclick="VIEW.cdDia++;renderTab()">›</button></div>`;
-  window._cddTxt = textoContaDia(U, fecha, D);
-  return `<div class="dcard"><div class="ph3"><h3>Reporte del día · Contadora</h3>${nav}</div>${cuerpo}
-    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn btn-s btn-sm" onclick="imprimirContaDia('${fecha}')">🖨 Imprimir</button><button class="btn btn-s btn-sm" onclick="mailDirectivos('Reporte del día de la Contadora ${fmtD(fecha)} · COE Finanzas', _cddTxt)">✉ Enviar</button><button class="btn btn-s btn-sm" onclick="navigator.clipboard.writeText(_cddTxt).then(()=>toast('Copiado: pégalo en WhatsApp','success'))">📋 Copiar para WhatsApp</button></div></div>`;
+    ${item('⚠', 'Críticos vencidos sin ningún avance', A.criticosSinAvance, t => `<div class="aitem r" onclick="verPendiente('${t.id}')"><div><div class="at">${esc(t.titulo)}</div><div class="am">atraso ${atraso(t)} d</div></div></div>`)}
+    ${D.cierre?.resumen ? `<div class="mini" style="margin-top:6px"><b>Su resumen del día:</b> ${esc(D.cierre.resumen)}</div>` : ''}
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn btn-s btn-sm" onclick="imprimirContaDia('${fecha}')">🖨 Imprimir</button><button class="btn btn-s btn-sm" onclick="mailDirectivos('Reporte del día de la Contadora ${fmtD(fecha)} · COE Finanzas', _cddTxt)">✉ Enviar</button><button class="btn btn-s btn-sm" onclick="navigator.clipboard.writeText(_cddTxt).then(()=>toast('Copiado: pégalo en WhatsApp','success'))">📋 Copiar para WhatsApp</button></div>`;
+}
+function rRepDiario(chips) {
+  const U = contaU();
+  const fecha = cdFechaDe(VIEW.cdDia);
+  const head = `<div class="ph"><div><div class="ptit">Desempeño · Diario</div><div class="psub">Qué trabajó la Contadora cada día, según lo que registró en el sistema · toca un día para verlo</div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><div class="chips">${chips}</div><button class="btn btn-s btn-sm" onclick="reporteDia('${fecha}')">Reporte del equipo</button></div></div>`;
+  if (!U) return head + '<div class="pad"><div class="emp">No hay usuario con rol Contadora.</div></div>';
+  // Resumen de los últimos 30 días hábiles
+  const R = Array.from({ length: 30 }, (_, i) => cdFechaDe(-i)).filter(f => new Date(f + 'T12:00:00').getDay() !== 0).map(f => datosContaDia(U, f));
+  const cnt = k => R.filter(d => d.trabajo === k).length;
+  return head + `<div class="pad">
+    <div class="dg">
+      ${kpi('Días que sí trabajó', String(cnt('si')), `de ${R.length} días hábiles (30 días)`, 'var(--sc)')}
+      ${kpi('Poca actividad', String(cnt('poco')), '1 a 4 acciones', cnt('poco') ? 'var(--wn)' : '')}
+      ${kpi('Sin actividad', String(cnt('no')), 'días hábiles sin registrar nada', cnt('no') ? 'var(--dg)' : '')}
+      ${kpi('Cerró su día', `${R.filter(d => d.cierre).length}/${R.length}`, 'cierres registrados', R.some(d => d.cierre) ? '' : 'var(--dg)')}
+    </div>
+    <div class="cfg-section" style="margin-bottom:16px"><h3 style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">Últimos 30 días <span class="cdley2"><i class="si"></i>trabajó <i class="poco"></i>poca actividad <i class="no"></i>sin actividad <i class="dom"></i>domingo</span></h3><div class="body">${cdTira(U, 30, true)}</div></div>
+    <div class="cfg-section"><h3 style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">Detalle del día
+      <span class="cdd-nav"><button class="btn btn-s btn-sm" onclick="cdIrDia(VIEW.cdDia-1)">‹ Anterior</button><input type="date" value="${fecha}" max="${hoyISO()}" onchange="cdIrDia(diasA(this.value))" style="width:auto;min-height:32px;padding:4px 8px"><button class="btn btn-s btn-sm" ${VIEW.cdDia >= 0 ? 'disabled' : ''} onclick="cdIrDia(VIEW.cdDia+1)">Siguiente ›</button>${VIEW.cdDia ? `<button class="btn btn-s btn-sm" onclick="cdIrDia(0)">Hoy</button>` : ''}</span></h3>
+      <div class="body">${contaDiaDetalle(U, fecha)}</div></div></div>`;
 }
 function textoContaDia(U, fecha, D) {
   const A = D.A, L = (arr, f) => arr.length ? arr.map(f).join('\n') : '  (nada)';
