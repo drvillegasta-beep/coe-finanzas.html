@@ -1183,19 +1183,27 @@ async function entrarApp() {
 }
 
 // ══ DATOS ══════════════════════════════════════
+// Lectura con reintento: si la base tarda o falla, reintenta y conserva lo último bueno (nunca deja la lista vacía por un error).
+const _ultBueno = {}; let FALLO_CARGA = [];
 async function q(tabla, build) {
-  let qq = sb.from(tabla).select('*');
-  if (build) qq = build(qq);
-  const { data, error } = await qq;
-  if (error) {
-    if (/does not exist|schema cache|Could not find/.test(error.message)) { if (!FALTA_SQL.includes(tabla)) FALTA_SQL.push(tabla); }
-    else console.warn(tabla, error.message);
-    return [];
+  let ultimo = null;
+  for (let i = 0; i < 3; i++) {
+    let qq = sb.from(tabla).select('*');
+    if (build) qq = build(qq);
+    let res;
+    try { res = await qq; } catch (e) { res = { error: { message: e.message || 'red' } }; }
+    const { data, error } = res;
+    if (!error) { _ultBueno[tabla] = data || []; return data || []; }
+    if (/does not exist|schema cache|Could not find/.test(error.message)) { if (!FALTA_SQL.includes(tabla)) FALTA_SQL.push(tabla); return []; }
+    if (/permission|denied|JWT|401|403/i.test(error.message + (error.code || ''))) { console.warn(tabla, error.message); return _ultBueno[tabla] || []; }
+    ultimo = error; await new Promise(r => setTimeout(r, 600 * (i + 1)));
   }
-  return data || [];
+  console.warn(tabla, ultimo?.message);
+  if (!FALLO_CARGA.includes(tabla)) FALLO_CARGA.push(tabla);
+  return _ultBueno[tabla] || [];
 }
 async function cargarTodo(silencioso) {
-  FALTA_SQL = [];
+  FALTA_SQL = []; FALLO_CARGA = [];
   const r = await Promise.all([
     q('fin_entidades', x => x.order('nombre')),
     q('fin_facturas', x => x.order('fecha_vencimiento', { ascending: true, nullsFirst: false })),
@@ -1238,7 +1246,10 @@ async function cargarTodo(silencioso) {
   INV = { farProd: r[17] || [], farLotes: r[18] || [], farPed: r[19] || [], quiInv: r[20] || [], quiLotes: r[21] || [], quiLentes: r[22] || [], quiPed: r[23] || [], farSol: r[24] || [], qxMat: r[25] || [], qxLot: r[26] || [], qxLio: r[27] || [], qxUb: r[28] || [], farMov: r[29] || [], quiLio: r[30] || [], ctl: r[31] || [], farCnt: r[32] || [], qxCnt: r[33] || [] };
   r[10].forEach(c => { CFG[c.clave] = c.valor; });
   if (!RS.length) RS = [{ id: null, nombre: 'José Antonio Villegas Ávila', rfc: 'VIAA870425115' }];
-  lastSync = new Date();
+  const crit = FALLO_CARGA.filter(t => /^fin_/.test(t));
+  if (crit.length) { toast('La base tardó en responder (' + crit.join(', ') + '): se muestran los últimos datos y se reintenta en 20 s', 'warning'); clearTimeout(window._reintento); window._reintento = setTimeout(() => cargarTodo(true).then(renderTab), 20000); }
+  else lastSync = new Date();
+  if (!lastSync) lastSync = new Date();
   pintarLive();
   calcAlertas();
   if (!silencioso) renderTab();
@@ -1615,8 +1626,9 @@ async function confirmarPago(id, extra = {}) {
   if (!r) return;
   CM('mGen');
   toast(dc ? `Cuenta liquidada · ahorro por pronto pago ${$$(dc)}` : r.liquidada ? 'Cuenta liquidada' : 'Abono registrado', 'success');
-  if (f.documento_tipo === 'sin_factura') toast('Pasa a Facturas por solicitar', 'info');
-  await cargarTodo();
+  await cargarTodo(true); renderTab();
+  const fn = FAC.find(x => x.id === id);
+  if (fn && porSolicitar(fn)) toast(`Quedó en Facturas por solicitar · ${MES_TXT(fpsFecha(fn).slice(0, 7))}`, 'info');
 }
 async function anular(tabla, id) {
   const motivo = prompt('Motivo de la anulación (queda en la bitácora):');
@@ -4248,7 +4260,7 @@ async function spAplicar() {
   _spAplicando = true;
   const go = document.getElementById('spGo'); go.disabled = true; go.textContent = 'Registrando…';
   const R = (fn, a) => rpcConPin(fn, a, pin, ['fin_crear_cxp', 'fin_pagar'].includes(fn) ? null : undefined);
-  const ok = [], fallas = [], altas = {};
+  const ok = [], fallas = [], altas = {}, regs = [];
   for (const it of L) {
     try {
       const m = num(it.monto);
@@ -4270,6 +4282,7 @@ async function spAplicar() {
           const base = { p_factura: x.f.id, p_monto: x.m, p_fecha: it.fecha, p_metodo: it.metodo, p_referencia: it.ref || '', p_comprobante_url: up.url, p_sha256: up.sha };
           const p = x.desc ? await R('fin_pagar_pp', { ...base, p_descuento: x.desc, p_nota: Math.round(x.desc / (x.m + x.desc) * 1000) / 10 + '%' }) : await R('fin_pagar', base);
           if (!p.ok) throw new Error((det.length ? 'se aplicaron ' + det.length + ' abono(s) y luego falló: ' : '') + (ERR[p.error] || p.error));
+          regs.push(x.f.id);
           det.push(`${String(x.f.descripcion || '').slice(0, 30)} ${$$(x.m)}${x.desc ? ' (liquidada con descuento pronto pago ' + $$(x.desc) + ')' : p.liquidada ? ' (liquidada)' : ' (abono)'}`);
         }
         ok.push(`${nombre} · ${$$(m)} → ${det.join(' · ')}${spDestino(it).nf ? '' : ' · factura por solicitar si falta'}`);
@@ -4293,18 +4306,34 @@ async function spAplicar() {
       }
       const p = await R('fin_pagar', { p_factura: fid, p_monto: m, p_fecha: it.fecha, p_metodo: it.metodo, p_referencia: it.ref || '', p_comprobante_url: up.url, p_sha256: up.sha });
       if (!p.ok) throw new Error(ERR[p.error] || p.error);
+      regs.push(fid);
       ok.push(`${nombre} · ${$$(m)}${spDestino(it).nf ? '' : ' · factura por solicitar'}`);
       it.sel = 'nada'; it.hecho = true;
     } catch (e) { fallas.push(`${it.file.name}: ${e.message}`); if (/PIN|bloqueado/i.test(e.message)) break; }
   }
   _spAplicando = false;
-  await cargarTodo();
+  await cargarTodo(true);
+  const verif = fpsVerificar(regs);
   document.getElementById('mGenB').innerHTML = `${ok.length ? `<div class="okbox"><b>${ok.length} pago(s) registrados con su comprobante</b><br>${ok.map(esc).join('<br>')}</div>` : ''}${fallas.length ? `<div class="errbox">${fallas.map(esc).join('<br>')}</div>` : ''}
-    <div class="mini" style="margin-top:10px">Los pagos que requieren factura ya están en «Facturas por solicitar» de la Contadora, con límite el fin del mes del pago.</div>`;
+    ${verif}`;
   document.getElementById('mGenF').innerHTML = `${fallas.length ? '<button class="btn btn-w" onclick="spReabrir()">Corregir los que faltaron</button>' : ''}<button class="btn btn-s" onclick="openSubirPagos()">Subir más</button><button class="btn btn-p" onclick="CM('mGen')">Listo</button>`;
   toast(fallas.length ? 'Registrado con observaciones' : 'Pagos registrados', fallas.length ? 'warning' : 'success');
 }
 function spReabrir() { const rest = SP.items.filter(it => !it.hecho); openSubirPagos(); SP.items = rest.map(it => (it.sel === 'nada' && !it.dup ? (spSugerir(it), it) : it)); spPintar(); }
+
+// Confirma, con los datos recién leídos de la base, dónde quedó cada pago (Facturas por solicitar y su mes)
+function fpsVerificar(ids) {
+  const L = [...new Set(ids)].map(id => FAC.find(f => f.id === id) || { id, _falta: true });
+  if (!L.length) return '';
+  const fila = f => {
+    if (f._falta) return `<div class="errbox" style="margin:4px 0">⚠ Un pago no aparece al releer la base. Toca «Actualizar» o recarga; si sigue sin aparecer avísame.</div>`;
+    const n = esc(nomEnt(f.entidad_id)) + ' · ' + $$(f.monto_pagado);
+    if (porSolicitar(f)) return `<div class="okbox" style="margin:4px 0;padding:6px 10px">✓ ${n} → <b>Facturas por solicitar · ${MES_TXT(fpsFecha(f).slice(0, 7))}</b> · límite ${fmtD(limFps(f))} <a href="#" onclick="event.preventDefault();CM('mGen');VIEW.fpsB={q:'',desde:'',hasta:'',st:''};VIEW.fpsMes=VIEW.fpsMes||{};VIEW.fpsMes['f${fpsFecha(f).slice(0, 7)}']=false;goTab('fps')">ver ›</a></div>`;
+    const motivo = tieneXML(f) ? 'ya tiene su XML' : ent(f.entidad_id)?.no_factura ? 'el proveedor está marcado como «no factura»' : f.origen === 'nomina' ? 'es nómina por plantilla' : num(f.monto_pagado) <= 0.009 ? 'no quedó pagado' : 'revisar';
+    return `<div class="mini" style="margin:4px 0">${n} → no requiere solicitar factura (${motivo})</div>`;
+  };
+  return `<div class="dsec" style="margin:12px 0 4px">Dónde quedó cada pago</div>${L.map(fila).join('')}`;
+}
 
 // ══ ALMACÉN E INVENTARIOS: qué se va a terminar y qué va a caducar ══
 // Lee COE Farmacia (almacén y mostrador) y COE Quirófano v2. El pronóstico usa las salidas de las últimas 4 semanas.
