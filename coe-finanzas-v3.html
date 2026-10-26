@@ -780,6 +780,15 @@ tr.fps-prov td{background:var(--sf2)}
 .perr{min-height:18px}
 @keyframes pinShake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
 .pin-shake{animation:pinShake .35s}
+/* Tablero del Director: pendientes y día de la Contadora */
+.cdplus{margin-left:auto}
+.cdd-top{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.cdd-niv{font-size:20px;font-weight:800}
+.cdd-kv{display:grid;grid-template-columns:repeat(3,minmax(70px,1fr));gap:6px;flex:1}
+.cdd-kv div{background:var(--sf2);border-radius:8px;padding:6px 8px;display:flex;flex-direction:column}
+.cdd-kv b{font-size:18px}.cdd-kv span{font-size:11px;color:var(--tm)}
+.cdd-g{margin-top:8px}.cdd-h{margin-bottom:4px}
+.cdd-nav{display:flex;gap:6px;align-items:center;margin-left:auto;font-size:13px}
 </style>
 </head>
 <body>
@@ -2912,7 +2921,7 @@ function verPendiente(id) {
 }
 
 // ── Nuevo pendiente ──
-function nuevoPendiente() {
+function nuevoPendiente(respPre) {
   const asigna = niv('tareas') >= 3;
   const resp = USR.filter(u => u.activo !== false && niv('tareas', u) >= 2);
   window._np = 'moderado';
@@ -2922,7 +2931,7 @@ function nuevoPendiente() {
     <div class="fgrp sp2"><label>Prioridad</label>${Object.entries(PRI).map(([k, P]) => `<label class="opt ${k === 'moderado' ? 'sel' : ''}" onclick="document.querySelectorAll('.optp').forEach(e=>e.classList.remove('sel'));this.classList.add('sel');_np='${k}';npF.value=isoD(new Date(Date.now()+${P.plazo}*864e5))" style="margin-top:6px" data-k="${k}"><input type="radio" name="npP" ${k === 'moderado' ? 'checked' : ''}><span>${priBdg(k)} <span class="mini">${P.d}</span></span></label>`).join('').replace(/class="opt /g, 'class="opt optp ')}</div>
     <div class="fgrp"><label>Fecha límite</label><input type="date" id="npF" value="${isoD(new Date(Date.now() + 3 * 864e5))}"></div>
     <div class="fgrp"><label>Categoría</label><select id="npC">${CATS_PEND.filter(c => c !== 'Cronograma contable').map(c => `<option>${c}</option>`).join('')}</select></div>
-    <div class="fgrp"><label>Responsable</label><select id="npR" ${asigna ? '' : 'disabled'}>${(asigna ? resp : [USR.find(u => u.id === cu.id) || cu]).map(u => `<option value="${u.id}" ${u.id === cu.id ? 'selected' : ''}>${esc(u.nombre)}${u.rol ? ' · ' + esc(ROLES[u.rol] || u.rol) : ''}</option>`).join('')}</select></div>
+    <div class="fgrp"><label>Responsable</label><select id="npR" ${asigna ? '' : 'disabled'}>${(asigna ? resp : [USR.find(u => u.id === cu.id) || cu]).map(u => `<option value="${u.id}" ${u.id === (respPre && asigna ? respPre : cu.id) ? 'selected' : ''}>${esc(u.nombre)}${u.rol ? ' · ' + esc(ROLES[u.rol] || u.rol) : ''}</option>`).join('')}</select></div>
     <div class="fgrp"><label>Entregable (opcional)</label><input type="text" id="npE" placeholder="Ej. XML y PDF en el sistema"></div>
   </div>`, `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="guardarPendiente()">Firmar y crear</button>`);
 }
@@ -2980,8 +2989,10 @@ async function generarTareas() {
 }
 
 // ── Cierre del día ──
+// Día local (México) de una marca de tiempo: las de la tarde-noche ya son "mañana" en UTC
+const diaLocal = x => { const t = String(x || ''); return !t ? '' : t.length <= 10 ? t : isoD(new Date(t)); };
 function actividadDia(uid, fecha) {
-  const del = a => a.usuario_id === uid && String(a.created_at).slice(0, 10) === fecha;
+  const del = a => a.usuario_id === uid && diaLocal(a.created_at) === fecha;
   const mios = TAR.filter(t => t.responsable_id === uid || (!t.responsable_id && USR.find(u => u.id === uid)?.rol === t.responsable_rol));
   const avs = AVA.filter(del);
   return {
@@ -3227,6 +3238,72 @@ function imprimirContaDesempeno() {
     ${M.map(m => `<tr><td><b>${m.mes}</b></td><td class="r">${m.total}</td>${CD_CAT.map(([k]) => `<td class="r ${m.C[k].length && ['noreal', 'crit', 'nodem'].includes(k) ? 'rojo' : ''}">${m.C[k].length}</td>`).join('')}<td class="r"><b>${m.pct === null ? '—' : m.pct + '%'}</b></td><td class="${m.nivel === 'critico' ? 'rojo' : m.nivel === 'optimo' ? 'verde' : ''}">${CD_NIV[m.nivel][0]}</td></tr>`).join('')}</tbody></table>
     ${M.slice().reverse().map(m => { const L = [...m.C.crit, ...m.C.noreal, ...m.C.nodem, ...m.C.tarde]; return L.length ? `<table><thead><tr><th colspan="4">${m.mes} · incidencias</th></tr><tr><th>Pendiente</th><th>Clasificación</th><th>Límite</th><th class="r">Atraso</th></tr></thead><tbody>${L.map(t => `<tr><td>${esc(t.titulo)}</td><td class="${['crit', 'noreal', 'nodem'].includes(cdClase(t)) ? 'rojo' : ''}">${CD_CAT.find(c => c[0] === cdClase(t))[1]}</td><td>${fmtD(fOrig(t))}</td><td class="r">${atraso(t)} d</td></tr>`).join('')}</tbody></table>` : ''; }).join('')}
     <div class="firmas"><div>Contadora<br>&nbsp;</div><div>Dirección General<br><b>Dr. José Antonio Villegas Ávila</b></div></div>`);
+}
+
+
+// ══ TABLERO DEL DIRECTOR: pendientes de la Contadora (+ para asignar) y su reporte automático del día ══
+const contaU = () => USR.find(u => u.rol === 'contadora' && u.activo !== false);
+VIEW.cdDia = VIEW.cdDia || 0; VIEW.cdFil = VIEW.cdFil || 'abiertos';
+function cajaContaPend() {
+  const U = contaU(); if (!U) return '';
+  const T = TAR.filter(t => esDe(t, U) && t.estado !== 'cancelada');
+  const ab = T.filter(abiertaT).sort(ordenPend), ven = ab.filter(vencidaT), crit = ab.filter(t => t.prioridad === 'critico');
+  const L = VIEW.cdFil === 'vencidos' ? ven : VIEW.cdFil === 'criticos' ? crit : VIEW.cdFil === 'hoy' ? T.filter(t => t.estado === 'cumplida' && diaLocal(t.cumplida_at) === hoyISO()) : ab;
+  const chip = (k, t, n) => `<span class="chip ${VIEW.cdFil === k ? 'act' : ''}" onclick="VIEW.cdFil='${k}';renderTab()">${t} <b>${n}</b></span>`;
+  const fila = t => { const d = diasA(t.fecha_limite); return `<div class="aitem ${t.estado === 'cumplida' ? 'i' : d < 0 ? 'r' : d <= 1 ? 'a' : 'i'}" onclick="verPendiente('${t.id}')"><div style="flex:1;min-width:0"><div class="at">${priBdg(t.prioridad, t.id)} ${esc(t.titulo)}</div><div class="am">${t.estado === 'cumplida' ? '✓ cumplido ' + fmtDT(t.cumplida_at).slice(-5) + (t.evidencia_url ? ' · con evidencia' : ' · <b style="color:var(--dg)">sin evidencia</b>') : (d < 0 ? `<b style="color:var(--dg)">vencido hace ${-d} d</b>` : d === 0 ? '<b style="color:var(--wn)">vence hoy</b>' : 'vence ' + fmtD(t.fecha_limite)) + ' · ' + esc(t.ultimo_avance || 'sin avance')}</div></div></div>`; };
+  return `<div class="dcard"><div class="ph3"><h3>Pendientes de la Contadora</h3><span class="cnt">${ab.length}</span><button class="btn btn-p btn-sm cdplus" title="Agregar pendiente a la Contadora" onclick="nuevoPendiente('${U.id}')">＋ Agregar</button></div>
+    <div class="chips" style="margin-bottom:8px">${chip('abiertos', 'Abiertos', ab.length)}${chip('vencidos', 'Vencidos', ven.length)}${chip('criticos', 'Críticos', crit.length)}${chip('hoy', 'Cumplidos hoy', T.filter(t => t.estado === 'cumplida' && diaLocal(t.cumplida_at) === hoyISO()).length)}</div>
+    <div class="alist" style="max-height:420px;overflow:auto">${L.length ? L.map(fila).join('') : '<div class="muted">Nada en esta lista.</div>'}</div>
+    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn btn-s btn-sm" onclick="VIEW.pAmb='equipo';VIEW.pResp='';goTab('tar')">Ver todos</button><button class="btn btn-s btn-sm" onclick="goTab('rep')">Desempeño mensual</button></div></div>`;
+}
+// Lo que hizo la Contadora en un día, armado solo con lo que registró en el sistema
+function datosContaDia(U, fecha) {
+  const del = x => diaLocal(x) === fecha;
+  const A = actividadDia(U.id, fecha);
+  const pagos = ABO.filter(a => !a.anulado && a.created_by === U.id && del(a.created_at));
+  const cuentas = FAC.filter(f => f.created_by === U.id && del(f.created_at) && !f.anulado);
+  const docs = DOCS.filter(d => d.subido_por === U.id && del(d.subido_at) && d.tabla === 'fin_facturas');
+  const xml = docs.filter(d => d.tipo === 'xml' || d.tipo === 'pdf'), comps = docs.filter(d => d.tipo === 'complemento');
+  const ped = PED.filter(p => (p.solicitado_por === U.id && del(p.created_at)));
+  const cierre = yaCerre(U.id, fecha);
+  const sinEv = A.cumplidos.filter(t => !t.evidencia_url && !AVA.some(a => a.tarea_id === t.id && a.evidencia_url));
+  const pts = A.cumplidos.length * 2 + A.avances.length + pagos.length + cuentas.length + xml.length + comps.length + (cierre ? 1 : 0);
+  const habil = new Date(fecha + 'T12:00:00').getDay() !== 0;
+  const nivel = !habil && !pts ? 'sin' : A.criticosSinAvance.length || (!pts && habil) ? 'critico' : !cierre || A.vencidos.length > 5 ? 'regular' : 'bueno';
+  return { A, pagos, cuentas, xml, comps, ped, cierre, sinEv, pts, nivel, habil };
+}
+const CD_DIA_NIV = { bueno: ['Buen día', 'var(--sc)'], regular: ['Regular', 'var(--wn)'], critico: ['Día crítico', 'var(--dg)'], sin: ['Domingo / sin actividad', 'var(--tm)'] };
+function cajaContaDia() {
+  const U = contaU(); if (!U) return '';
+  const fecha = isoD(new Date(hoyD().getTime() + VIEW.cdDia * 864e5)), D = datosContaDia(U, fecha), A = D.A, n = CD_DIA_NIV[D.nivel];
+  const item = (ico, t, L, f) => L.length ? `<div class="cdd-g"><div class="cdd-h">${ico} <b>${t}</b> <span class="mini">${L.length}</span></div>${L.slice(0, 6).map(f).join('')}${L.length > 6 ? `<div class="mini">y ${L.length - 6} más</div>` : ''}</div>` : '';
+  const kv = [['Cumplidos', A.cumplidos.length], ['Avances', A.avances.length], ['Pagos registrados', D.pagos.length], ['XML/PDF subidos', D.xml.length], ['Complementos', D.comps.length], ['Reprogramó', A.reprog.length]];
+  const cuerpo = `<div class="cdd-top"><div><div class="cdd-niv" style="color:${n[1]}">${n[0]}</div><div class="mini">${fmtD(fecha)} · ${D.cierre ? 'cerró su día ' + fmtDT(D.cierre.created_at).slice(-5) : D.habil ? '<b style="color:var(--dg)">no ha cerrado su día</b>' : 'sin cierre'}</div></div>
+      <div class="cdd-kv">${kv.map(([k, v]) => `<div><b style="${v ? '' : 'color:var(--tm)'}">${v}</b><span>${k}</span></div>`).join('')}</div></div>
+    ${item('✓', 'Cumplió', A.cumplidos, t => `<div class="aitem i" onclick="verPendiente('${t.id}')"><div><div class="at">${priBdg(t.prioridad)} ${esc(t.titulo)}</div><div class="am">${D.sinEv.includes(t) ? '<b style="color:var(--dg)">sin evidencia</b>' : 'con evidencia'}</div></div></div>`)}
+    ${item('↗', 'Avanzó', A.avances, a => { const t = TAR.find(x => x.id === a.tarea_id); return `<div class="aitem i" ${t ? `onclick="verPendiente('${t.id}')"` : ''}><div><div class="at">${esc(t?.titulo || 'Pendiente')}</div><div class="am">${esc(a.nota || a.estado_nuevo || '')}</div></div></div>`; })}
+    ${item('$', 'Pagos que registró', D.pagos, a => { const f = FAC.find(x => x.id === a.factura_id); return `<div class="aitem i" ${f ? `onclick="verCuenta('${f.id}')"` : ''}><div><div class="at">${esc(f ? nomEnt(f.entidad_id) : 'Pago')} · ${$$(a.monto)}</div><div class="am">${esc(f?.descripcion || '')}</div></div></div>`; })}
+    ${item('📄', 'Facturas y documentos que subió', D.xml.concat(D.comps), d => { const f = FAC.find(x => x.id === d.registro_id); return `<div class="aitem i" ${f ? `onclick="verCuenta('${f.id}')"` : ''}><div><div class="at">${esc(f ? nomEnt(f.entidad_id) : 'Documento')} · ${esc(String(d.tipo).toUpperCase())}</div><div class="am">${esc(f?.descripcion || '')}</div></div></div>`; })}
+    ${item('⏱', 'Reprogramó', A.reprog, a => { const t = TAR.find(x => x.id === a.tarea_id); return `<div class="aitem a"><div><div class="at">${esc(t?.titulo || '')}</div><div class="am">${fmtD(a.fecha_ant)} → ${fmtD(a.fecha_nueva)}${a.nota ? ' · ' + esc(a.nota) : ''}</div></div></div>`; })}
+    ${A.criticosSinAvance.length ? item('⚠', 'Críticos vencidos sin ningún avance', A.criticosSinAvance, t => `<div class="aitem r" onclick="verPendiente('${t.id}')"><div><div class="at">${esc(t.titulo)}</div><div class="am">atraso ${atraso(t)} d</div></div></div>`) : ''}
+    ${!D.pts ? `<div class="muted" style="margin:8px 0">Sin actividad registrada ${VIEW.cdDia ? 'ese día' : 'hoy'}.</div>` : ''}
+    ${D.cierre?.resumen ? `<div class="mini" style="margin-top:6px"><b>Su resumen:</b> ${esc(D.cierre.resumen)}</div>` : ''}
+    <div class="mini" style="margin-top:6px">Siguen abiertos ${A.abiertos.length} · vencidos ${A.vencidos.length}</div>`;
+  const nav = `<div class="cdd-nav"><button class="btn btn-s btn-sm" onclick="VIEW.cdDia--;renderTab()">‹</button><span>${VIEW.cdDia === 0 ? 'Hoy' : VIEW.cdDia === -1 ? 'Ayer' : fmtD(fecha)}</span><button class="btn btn-s btn-sm" ${VIEW.cdDia >= 0 ? 'disabled' : ''} onclick="VIEW.cdDia++;renderTab()">›</button></div>`;
+  window._cddTxt = textoContaDia(U, fecha, D);
+  return `<div class="dcard"><div class="ph3"><h3>Reporte del día · Contadora</h3>${nav}</div>${cuerpo}
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn btn-s btn-sm" onclick="imprimirContaDia('${fecha}')">🖨 Imprimir</button><button class="btn btn-s btn-sm" onclick="mailDirectivos('Reporte del día de la Contadora ${fmtD(fecha)} · COE Finanzas', _cddTxt)">✉ Enviar</button><button class="btn btn-s btn-sm" onclick="navigator.clipboard.writeText(_cddTxt).then(()=>toast('Copiado: pégalo en WhatsApp','success'))">📋 Copiar para WhatsApp</button></div></div>`;
+}
+function textoContaDia(U, fecha, D) {
+  const A = D.A, L = (arr, f) => arr.length ? arr.map(f).join('\n') : '  (nada)';
+  return `REPORTE DEL DÍA · CONTADORA · ${fmtD(fecha)}\n${U.nombre} · ${CD_DIA_NIV[D.nivel][0]} · ${D.cierre ? 'cerró su día ' + fmtDT(D.cierre.created_at).slice(-5) : 'NO cerró su día'}\n\n` +
+    `Cumplidos ${A.cumplidos.length} · Avances ${A.avances.length} · Pagos registrados ${D.pagos.length} · XML/PDF ${D.xml.length} · Complementos ${D.comps.length} · Reprogramados ${A.reprog.length}\n\n` +
+    `CUMPLIÓ\n${L(A.cumplidos, t => '  ✓ ' + t.titulo + (D.sinEv.includes(t) ? ' (SIN EVIDENCIA)' : ''))}\n\nAVANZÓ\n${L(A.avances, a => '  • ' + (TAR.find(x => x.id === a.tarea_id)?.titulo || '') + (a.nota ? ' — ' + a.nota : ''))}\n\n` +
+    `PAGOS REGISTRADOS\n${L(D.pagos, a => { const f = FAC.find(x => x.id === a.factura_id); return '  $ ' + (f ? nomEnt(f.entidad_id) : '') + ' ' + $$(a.monto); })}\n\n` +
+    `CRÍTICOS VENCIDOS SIN AVANCE\n${L(A.criticosSinAvance, t => '  ⚠ ' + t.titulo + ' — ' + atraso(t) + ' d')}\n\nSiguen abiertos ${A.abiertos.length} · vencidos ${A.vencidos.length}` + (D.cierre?.resumen ? `\n\nSU RESUMEN\n${D.cierre.resumen}` : '');
+}
+function imprimirContaDia(fecha) {
+  imprimir('Reporte del día de la Contadora · ' + fmtD(fecha), `<pre style="white-space:pre-wrap;font:13px/1.5 inherit;margin:0">${esc(window._cddTxt || '')}</pre><div class="firmas"><div>Contadora<br>&nbsp;</div><div>Dirección General<br><b>Dr. José Antonio Villegas Ávila</b></div></div>`);
 }
 
 // ══ DOCUMENTOS IMPRIMIBLES (una página, con logo) ══
@@ -4051,6 +4128,7 @@ function dashPanorama(sel) {
       <div id="bxAt">${dcard('Requiere su atención', U.length ? U.slice(0, 12).map(filaU).join('') + (U.length > 12 ? `<div class="muted">y ${U.length - 12} más…</div>` : '') : '<div class="muted">Todo en orden.</div>', U.length)}</div>
       ${dcard('Ingresos de cajas vs pagos a proveedores · 8 semanas', colPares(cols, [['s-pr', 'Ingresos de cajas (Conciliación)'], ['s-neu', 'Pagado a proveedores (Finanzas)']]) + (P ? '' : `<div class="mini" style="margin-top:6px">Los ingresos de cajas aparecen al confirmar con su PIN.</div>`))}
     </div>
+    <div class="dgrid">${cajaContaPend()}${cajaContaDia()}</div>
     <div class="dgrid">
       ${dcard('De dónde viene el dinero · mes', P ? sbar('Por forma de pago', [{ t: 'Efectivo', n: num(c.efe_mes), c: 's-ok' }, { t: 'Transferencia', n: num(c.trf_mes), c: 's-warn' }, { t: 'Tarjeta', n: num(c.tar_mes), c: 's-neu' }], '', moneyK)
         + sbar('Por sede', (c.sedes || []).map((s, i) => ({ t: s.sede, n: num(s.v), c: ['s-ok', 's-warn', 's-neu', 's-ser'][i % 4] })), '', moneyK)
