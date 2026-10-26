@@ -774,6 +774,12 @@ tr.fps-prov td{background:var(--sf2)}
 .almcomp-h{display:flex;flex-direction:column;gap:2px;margin-bottom:8px}
 .almcomp-f{position:relative;display:block;border:1px solid var(--br);border-radius:10px;padding:10px;text-align:center;cursor:pointer;text-transform:none;letter-spacing:0;font-size:13px;color:var(--tx);font-weight:400;background:var(--sf)}
 .almcomp-f input{position:absolute;inset:0;opacity:0;cursor:pointer}
+/* PIN: sin retraso de toque en iPhone y aviso al equivocarse */
+.pbtn{touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none}
+.pbtn:active{transform:scale(.94)}
+.perr{min-height:18px}
+@keyframes pinShake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
+.pin-shake{animation:pinShake .35s}
 </style>
 </head>
 <body>
@@ -954,22 +960,40 @@ const miRFCs = () => RS.map(r => (r.rfc || '').toUpperCase()).filter(Boolean);
 
 // ── PIN (firma) ─────────────────────────────────
 let _pin = { buf: '', res: null, rej: null };
-function askPin(titulo, sub = '') {
+// PIN con verificación inmediata: si te equivocas, lo vuelve a pedir sin perder lo capturado.
+// Los PIN del Director (segunda firma) se validan en la operación, no aquí.
+function askPin(titulo, sub = '', { verificar } = {}) {
+  const ver = verificar ?? !/director/i.test(titulo || '');
   return new Promise((res, rej) => {
-    _pin = { buf: '', res, rej };
+    _pin = { buf: '', res, rej, ver, ocupado: false };
     document.getElementById('pinT').textContent = titulo || 'Firma con PIN';
     document.getElementById('pinSub').textContent = sub;
     document.getElementById('pinErr').textContent = '';
     pinDots(); SM('pinOv');
+    setTimeout(() => document.getElementById('pinOv')?.focus?.(), 0);
   });
 }
 function pinDots() { for (let i = 0; i < 4; i++) document.getElementById('pd' + i).classList.toggle('f', i < _pin.buf.length); }
 function pinK(k) {
-  if (_pin.buf.length >= 4) return;
+  if (_pin.ocupado || _pin.buf.length >= 4) return;
   _pin.buf += k; pinDots();
-  if (_pin.buf.length === 4) { const v = _pin.buf; setTimeout(() => { CM('pinOv'); _pin.res && _pin.res(v); }, 120); }
+  if (_pin.buf.length === 4) pinListo(_pin.buf);
 }
-function pinDel() { _pin.buf = _pin.buf.slice(0, -1); pinDots(); }
+async function pinListo(v) {
+  const P = _pin, err = document.getElementById('pinErr');
+  if (!P.ver || !cu?.id || typeof sb === 'undefined') { CM('pinOv'); P.res && P.res(v); return; }
+  P.ocupado = true; err.style.color = 'var(--tm)'; err.textContent = 'Verificando…';
+  let r = null;
+  try { const q = await Promise.race([sb.rpc('fin_verificar_pin', { p_usuario: cu.id, p_pin: v }), new Promise(ok => setTimeout(() => ok(null), 6000))]); r = q && !q.error ? q.data : null; } catch { r = null; }
+  if (_pin !== P) return;
+  P.ocupado = false; err.style.color = '';
+  if (!r || r.ok) { CM('pinOv'); P.res && P.res(v); return; }   // sin red: la operación valida el PIN
+  if (r.error === 'bloqueado') { err.textContent = ''; CM('pinOv'); toast(ERR.bloqueado, 'error'); P.rej && P.rej(new Error('bloqueado')); return; }
+  P.fallos = (P.fallos || 0) + 1; P.buf = ''; pinDots();
+  err.textContent = (ERR[r.error] || 'PIN incorrecto') + ' · vuelve a intentarlo' + (P.fallos >= 3 ? ` (al 5.º error se bloquea 5 min)` : '');
+  const box = document.querySelector('#pinOv .pinbox, #pinOv .mdl, #pinOv > div'); if (box) { box.classList.remove('pin-shake'); void box.offsetWidth; box.classList.add('pin-shake'); }
+}
+function pinDel() { if (_pin.ocupado) return; _pin.buf = _pin.buf.slice(0, -1); pinDots(); }
 function pinCancel() { CM('pinOv'); _pin.rej && _pin.rej(new Error('cancelado')); }
 document.addEventListener('keydown', e => {
   if (document.getElementById('pinOv').style.display !== 'flex') return;
@@ -1006,6 +1030,7 @@ async function rpcFirmado(fn, args, { titulo, sub, conDirector = false } = {}) {
       try { a.p_pin_director = await askPin('Firma del Director General', 'Movimiento mayor a ' + $$(limiteFirma()) + ': segunda firma'); } catch { return null; }
       continue;
     }
+    if (data?.error === 'pin' && intento < 2) { try { pin = await askPin('PIN incorrecto · vuelve a firmar', titulo || ''); a.p_pin = pin; } catch { return null; } continue; }
     toast(ERR[data?.error] || ('No se pudo: ' + (data?.error || 'error')), 'error');
     return null;
   }
@@ -3710,8 +3735,9 @@ async function upAplicar() {
   const R = (fn, a) => rpcConPin(fn, a, pin, ['fin_crear_cxp', 'fin_pagar'].includes(fn) ? pinDir : undefined);
   const adj = async (fid, it, tipo) => { const u = await subir(it, 'facturas'); if (!u) return; const r = await R('fin_adjuntar', { p_tabla: 'fin_facturas', p_registro: fid, p_tipo: tipo, p_url: u.url, p_sha256: u.sha }); if (!r.ok) throw new Error(ERR[r.error] || r.error); };
   const pagar = async (fid, it, monto, metodo, fecha, ref) => { const u = await subir(it, 'pagos'); const r = await R('fin_pagar', { p_factura: fid, p_monto: monto, p_fecha: fecha || null, p_metodo: metodo, p_referencia: ref || '', p_comprobante_url: u.url, p_sha256: u.sha }); if (!r.ok) throw new Error(ERR[r.error] || r.error); return r; };
-  const ok = [], fallas = [];
+  const ok = [], fallas = [], intentados = new Set(), fallaP = new Set();
   for (const P of UP.props) {
+    intentados.add(P);
     try {
       if (P.multi) {
         for (const o of P.opciones.filter(o => o.k === 'complemento')) {
@@ -3772,12 +3798,21 @@ async function upAplicar() {
       }
       if (P.pedido) await R('fin_pedido_estado', { p_pedido: P.pedido.id, p_estado: 'facturado', p_datos: { factura_id: fid } });
       ok.push(o.k === 'ligar' ? 'Factura ligada: ' + P.otroNom : 'Factura registrada: ' + P.otroNom + (P.pedido ? ' · pedido ' + P.pedido.folio + ' facturado' : ''));
-    } catch (e) { fallas.push((P.titulo || '') + ': ' + e.message); if (/PIN incorrecto|bloqueado/.test(e.message)) break; }
+    } catch (e) { fallaP.add(P); fallas.push((P.titulo || '') + ': ' + e.message); if (/PIN incorrecto|bloqueado/.test(e.message)) break; }
   }
   await cargarTodo();
   document.getElementById('mGenB').innerHTML = `${ok.length ? `<div class="okbox">${ok.map(esc).join('<br>')}</div>` : ''}${fallas.length ? `<div class="errbox">${fallas.map(esc).join('<br>')}</div>` : ''}`;
-  document.getElementById('mGenF').innerHTML = `<button class="btn btn-s" onclick="openUpload()">Subir más</button><button class="btn btn-p" onclick="CM('mGen')">Listo</button>`;
+  // Lo que no se aplicó se conserva para corregirlo y volver a firmar
+  const resto = UP.props.filter(P => fallaP.has(P) || !intentados.has(P));
+  window._upResto = fallas.length && resto.length ? { target: UP.target, props: resto, files: UP.files } : null;
+  document.getElementById('mGenF').innerHTML = `${window._upResto ? `<button class="btn btn-w" onclick="upReabrir()">✎ Corregir y volver a firmar (${resto.length})</button>` : ''}<button class="btn btn-s" onclick="openUpload()">Subir más</button><button class="btn btn-p" onclick="CM('mGen')">Listo</button>`;
   toast(fallas.length ? 'Aplicado con observaciones' : 'Todo aplicado y firmado', fallas.length ? 'warning' : 'success');
+}
+
+function upReabrir() {
+  const R = window._upResto; if (!R) return;
+  openUpload(R.target); UP.files = R.files; UP.props = R.props; window._upResto = null;
+  upPintarLista(); upPintarProps();
 }
 
 boot();
