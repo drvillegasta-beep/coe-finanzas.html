@@ -4,9 +4,10 @@ self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
 self.addEventListener('push', e => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch { d = { body: e.data ? e.data.text() : '' }; }
-  e.waitUntil(self.registration.showNotification(d.title || 'COE Finanzas', {
-    body: d.body || 'Tienes avisos pendientes', tag: d.tag || 'coe-fin', renotify: true, requireInteraction: true,
-    icon: 'assets/icon-192.png', badge: 'assets/icon-192.png', vibrate: [200, 100, 200],
+  // Solo el logo, el motivo (título) y de qué se trata (cuerpo)
+  e.waitUntil(self.registration.showNotification(d.title || 'Aviso pendiente', {
+    body: d.body || '', tag: d.tag || 'coe-fin', renotify: true, requireInteraction: true,
+    icon: 'assets/icon-192.png', badge: 'assets/icon-192.png', silent: false, vibrate: [200, 100, 200],
     data: { url: d.url || './coe-finanzas-v3.html#dash' }
   }));
 });

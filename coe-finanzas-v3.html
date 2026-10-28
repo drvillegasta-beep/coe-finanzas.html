@@ -983,6 +983,12 @@ function modal(title, bodyHtml, footHtml = '', size = 'lg') {
   document.getElementById('mGenBox').className = 'mdl mdl-' + size;
   SM('mGen');
 }
+// Avisos emergentes: el logo del COE junto al motivo, sin más rótulos
+function modalAviso(title, bodyHtml, footHtml = '', size = 'lg') {
+  modal(title, bodyHtml, footHtml, size);
+  const t = document.getElementById('mGenT');
+  t.innerHTML = `<img src="assets/coe-logo.png" alt="COE" class="tlogo" style="height:26px;vertical-align:middle;margin-right:10px">${esc(title)}`;
+}
 function togSb() { document.getElementById('sdb').classList.toggle('open'); document.getElementById('sbOv').classList.toggle('show'); }
 function closeSb() { document.getElementById('sdb').classList.remove('open'); document.getElementById('sbOv').classList.remove('show'); }
 
@@ -1347,8 +1353,8 @@ function onCambio(tabla, p) {
 function notificar(msg) {
   try {
     if (!document.hidden || !('Notification' in window) || Notification.permission !== 'granted') return;
-    if (typeof SWREG !== 'undefined' && SWREG) SWREG.showNotification('COE Finanzas', { body: msg, icon: 'assets/icon-192.png', tag: 'coe-fin-local', renotify: true });
-    else new Notification('COE Finanzas', { body: msg, icon: 'assets/icon-192.png' });
+    if (typeof SWREG !== 'undefined' && SWREG) SWREG.showNotification(msg, { icon: 'assets/icon-192.png', tag: 'coe-fin-local', renotify: true });
+    else new Notification(msg, { icon: 'assets/icon-192.png' });
   } catch { }
 }
 function pintarLive() {
@@ -1378,7 +1384,7 @@ async function tick() {
   let rc = null; try { rc = localStorage.getItem('coe_fin_recordar_cierre'); } catch { }
   if (puede('tareas') && !esAdmin() && !yaCerre() && rc !== isoD(ah) && ah.getDay() !== 0 && (ah.getHours() > ch || (ah.getHours() === ch && ah.getMinutes() >= cm))) {
     try { localStorage.setItem('coe_fin_recordar_cierre', isoD(ah)); } catch { }
-    notificar('Es hora de cerrar tu día'); modal('Cierre del día', '<div class="warnbox">Antes de irte, registra tus avances y cierra tu día. Dirección recibe el reporte.</div>', `<button class="btn btn-s" onclick="CM('mGen')">Más tarde</button><button class="btn btn-p" onclick="CM('mGen');cerrarDia()">Cerrar mi día</button>`, 'sm');
+    notificar('Es hora de cerrar tu día'); modalAviso('Cierre del día', '<div class="warnbox">Antes de irte, registra tus avances y cierra tu día. Dirección recibe el reporte.</div>', `<button class="btn btn-s" onclick="CM('mGen')">Más tarde</button><button class="btn btn-p" onclick="CM('mGen');cerrarDia()">Cerrar mi día</button>`, 'sm');
   }
   // Ventana emergente «Tu día»: al abrir y a las 9:00, 13:00 y 17:30
   revisarTuDia();
@@ -2103,7 +2109,7 @@ function revisarFpsDia() {
   if (!L.length) return;
   const venc = L.filter(f => diasA(limFps(f)) < 0), hoyL = L.filter(f => diasA(limFps(f)) >= 0), dmin = hoyL.length ? Math.min(...hoyL.map(f => diasA(limFps(f)))) : null;
   notificar(`Facturas por solicitar: ${L.length}${dmin !== null ? ` · te quedan ${dmin} día(s)` : ''}`);
-  modal('Facturas por solicitar · recordatorio del día', `<div class="${venc.length || dmin <= 3 ? 'errbox' : 'warnbox'}" style="margin-bottom:12px"><b>${L.length} factura(s) pendiente(s)</b> · ${$$(L.reduce((s, f) => s + num(f.monto_pagado || f.monto_total), 0))}${venc.length ? ` · <b>${venc.length} ya fuera de plazo</b>` : ''}${dmin !== null ? `<br>Para las de este mes ${dmin === 0 ? '<b>hoy es el último día hábil</b>' : `te quedan <b>${dmin} día(s)</b> (límite ${fmtD(limFps(hoyL[0]))}, último día hábil)`}` : ''}</div>
+  modalAviso('Facturas por solicitar', `<div class="${venc.length || dmin <= 3 ? 'errbox' : 'warnbox'}" style="margin-bottom:12px"><b>${L.length} factura(s) pendiente(s)</b> · ${$$(L.reduce((s, f) => s + num(f.monto_pagado || f.monto_total), 0))}${venc.length ? ` · <b>${venc.length} ya fuera de plazo</b>` : ''}${dmin !== null ? `<br>Para las de este mes ${dmin === 0 ? '<b>hoy es el último día hábil</b>' : `te quedan <b>${dmin} día(s)</b> (límite ${fmtD(limFps(hoyL[0]))}, último día hábil)`}` : ''}</div>
     <div class="alist" style="max-height:50vh;overflow:auto">${L.slice(0, 25).map(f => `<div class="aitem ${diasA(limFps(f)) < 0 ? 'r' : diasA(limFps(f)) <= 5 ? 'a' : 'i'}"><div style="flex:1"><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(f.monto_pagado || f.monto_total)}</div><div class="am">${esc(f.descripcion)} · ${fpsPagada(f) ? 'pagado ' + fmtD(f.fecha_pago) : 'sin pago aún'} · ${fpsDiasTxt(f)}</div></div><button class="btn btn-s btn-sm" onclick="correoProveedor('${f.entidad_id}','${f.id}',null,'factura')">✉ Pedir</button></div>`).join('')}${L.length > 25 ? `<div class="mini">y ${L.length - 25} más…</div>` : ''}</div>`,
     `<button class="btn btn-s" onclick="CM('mGen')">Después</button><button class="btn btn-p" onclick="CM('mGen');goTab('fps')">Ver todas</button>`, 'lg');
 }
@@ -3799,7 +3805,7 @@ function ventanaTuDia(momento, forzar) {
   const tit = { manana: 'Buenos días · tu día', mediodia: 'Revisión de mediodía', tarde: 'Antes de cerrar el día', apertura: 'Tu día', aviso: 'Tu día' }[momento] || 'Tu día';
   const cuerpo = (venc.length + hoy.length + crit.length) ? sec('⛔ Vencido', venc, 'r') + sec('📌 Para hoy', hoy, 'a') + sec('⚠ Crítico', crit, 'r') : '<div class="emp"><div class="ic">✓</div><p>Nada vencido ni pendiente para hoy</p></div>';
   const pie = `${momento === 'tarde' && puede('tareas') && !esAdmin() && !yaCerre() ? `<button class="btn btn-w" onclick="CM('mGen');cerrarDia()">Cerrar mi día</button>` : ''}<button class="btn btn-s" onclick="CM('mGen')">Entendido</button><button class="btn btn-p" onclick="CM('mGen');goTab('dash')">Ir a mi tablero</button>`;
-  modal(`${tit} · ${new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}`, cuerpo, pie, 'lg');
+  modalAviso(`${tit} · ${new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}`, cuerpo, pie, 'lg');
   if (document.hidden) notificar(`${venc.length} vencido(s) · ${hoy.length} para hoy · ${crit.length} crítico(s)`);
 }
 function revisarTuDia() {
