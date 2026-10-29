@@ -1564,7 +1564,10 @@ function docsDe(f) {
   const comps = DOCS.filter(x => x.tabla === 'fin_facturas' && x.registro_id === f.id && x.tipo === 'complemento').length;
   const compTag = f.metodo_pago === 'PPD' && pagos.length ? `<span class="dtag ${comps >= pagos.length ? 'ok' : 'no'}" title="Complementos de pago recibidos / pagos">COMP ${comps}/${pagos.length}</span>` : '';
   const baja = SOLB.find(s => s.registro_id === f.id && s.estado === 'pendiente') ? '<span class="dtag no">BAJA SOLIC.</span>' : '';
-  return `<div class="docs">${nf ? '<span class="dtag">NO FACTURA</span>' : tag('XML', tiene('xml'), !sinFac && f.tipo === 'egreso') + tag('PDF', tiene('pdf'), !sinFac && f.tipo === 'egreso')}${tag('PAGO', comp, pagos.length > 0)}${compTag}${baja}${f.propuesta_pago && f.estado !== 'pagado' ? `<span class="dtag ok" title="Propuesto para pagar el ${fmtD(f.propuesta_pago)}">PROP</span>` : ''}${f.revision === 'revisado' ? '<span class="dtag ok">REV</span>' : f.revision === 'observado' ? '<span class="dtag no">OBS</span>' : ''}</div>`;
+  const notas = d.filter(x => x.tipo === 'recibo_provisional');
+  const notaTag = notas.length ? notas.map((x, i) => `<a class="dtag ok" href="${esc(x.url)}" target="_blank" onclick="event.stopPropagation()" title="Foto del comprobante del proveedor">NOTA${notas.length > 1 ? ' ' + (i + 1) : ''}</a>`).join('') : '';
+  const notaAdd = puede(f.tipo === 'ingreso' ? 'cxc' : 'cxp') && f.tipo === 'egreso' ? `<span class="dtag no" style="cursor:pointer" title="Subir foto de la nota, recibo o ticket del proveedor" onclick="event.stopPropagation();notaFoto('${f.id}')">${notas.length ? '＋' : '📷 NOTA'}</span>` : '';
+  return `<div class="docs">${nf ? '<span class="dtag">NO FACTURA</span>' + notaTag + notaAdd : tag('XML', tiene('xml'), !sinFac && f.tipo === 'egreso') + tag('PDF', tiene('pdf'), !sinFac && f.tipo === 'egreso')}${tag('PAGO', comp, pagos.length > 0)}${compTag}${baja}${f.propuesta_pago && f.estado !== 'pagado' ? `<span class="dtag ok" title="Propuesto para pagar el ${fmtD(f.propuesta_pago)}">PROP</span>` : ''}${f.revision === 'revisado' ? '<span class="dtag ok">REV</span>' : f.revision === 'observado' ? '<span class="dtag no">OBS</span>' : ''}</div>`;
 }
 function rCuentas(tipo) {
   const egr = tipo === 'egreso';
@@ -1634,6 +1637,7 @@ function verCuenta(id) {
     f.estado !== 'pagado' && !f.anulado && puedePagar(f) ? `<button class="btn btn-p" onclick="pagarCuenta('${id}')">${egr ? 'Pagar' : 'Registrar cobro'}</button>` : '',
     egr && f.estado !== 'pagado' && !f.anulado && puede('cxp') ? (f.propuesta_pago ? `<button class="btn btn-s" onclick="quitarPropuesta('${id}')">Quitar de propuesta</button>` : `<button class="btn btn-s" onclick="proponerUna('${id}')">Proponer pago</button>`) : '',
     f.estado !== 'pagado' && !f.anulado && puede('cxp') ? `<button class="btn btn-s" onclick="cambiarFechaPago(['${id}'])">📅 Fecha de pago</button>` : '',
+    puede(mod) && egr && ent(f.entidad_id)?.no_factura ? `<button class="btn btn-s" onclick="notaFoto('${id}')">📷 Foto de la nota / recibo</button>` : '',
     puede(mod) ? `<button class="btn btn-s" onclick="openUpload('${id}')">⬆ Factura, complemento o nota de crédito</button>` : '',
     puede(mod) ? `<button class="btn btn-s" onclick="correoProveedor('${f.entidad_id}','${id}')">✉ Correo</button>` : '',
     puede('revision') ? `<button class="btn btn-s" onclick="revisar('${id}','revisado')">✓ Revisado</button><button class="btn btn-w" onclick="revisar('${id}','observado')">Observar</button>` : '',
@@ -1660,9 +1664,10 @@ function pagarCuenta(id) {
     ${egr && saldo(f) >= 1 ? (() => { const dp = descPP(f); return `<div class="spapl" style="margin-top:12px"><label style="display:flex;gap:8px;align-items:center;cursor:pointer;text-transform:none;font-size:13px"><input type="checkbox" id="pgDc" style="width:auto" ${dp && dp.vig ? 'checked' : ''} onchange="pgDescCalc('${id}')"> <b>💰 Descuento por pronto pago</b></label>
       <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap"><div class="ipfx" style="width:110px"><input type="number" id="pgDp" step="0.1" min="0" max="30" value="${dp ? dp.pct : ''}" placeholder="%" oninput="pgDescCalc('${id}')"><span>%</span></div><span class="mini" id="pgDi"></span></div>
       <div class="mini" style="margin-top:4px">${dp ? 'El proveedor ofrece ' + esc(descPPTxt(dp)) + '.' : 'El proveedor no tiene descuento registrado; puedes capturarlo en Proveedores › Editar.'} Al firmar, la cuenta queda <b>liquidada</b> con el descuento registrado.</div></div>`; })() : ''}
+    ${egr && ent(f.entidad_id)?.no_factura ? `<div class="spapl" style="margin-top:12px"><label style="display:flex;gap:8px;align-items:center;cursor:pointer;text-transform:none;font-size:13px">📷 <span style="flex:1"><b>Foto de la nota, recibo o ticket del proveedor</b> (opcional · este proveedor no da factura)</span><input type="file" accept="image/*,application/pdf" style="width:auto" onchange="window._pgNota=this.files[0]||null"></label></div>` : ''}
     <div class="mini" style="margin-top:10px">¿Pago en efectivo sin recibo? <a href="#" onclick="event.preventDefault();reciboProvisional('${id}')" style="color:var(--pr)">Imprime el recibo provisional</a> para que lo firme el proveedor y súbelo aquí.</div>`,
     `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="confirmarPago('${id}')">Firmar ${egr ? 'pago' : 'cobro'}</button>`);
-  window._pgFile = null;
+  window._pgFile = null; window._pgNota = null;
   if (document.getElementById('pgDc')) pgDescCalc(id);
 }
 // Recalcula el monto a pagar con el % de pronto pago
@@ -1703,6 +1708,8 @@ async function confirmarPago(id, extra = {}) {
     : await rpcFirmado('fin_pagar', args, { titulo: f.tipo === 'egreso' ? 'Firmar pago' : 'Firmar cobro', sub: `${nomEnt(f.entidad_id)} · ${$$(monto)}`, });
   if (!r) return;
   CM('mGen');
+  const nota = window._pgNota; window._pgNota = null;
+  if (nota) await notaSubir(id, [nota]);
   toast(dc ? `Cuenta liquidada · ahorro por pronto pago ${$$(dc)}` : r.liquidada ? 'Cuenta liquidada' : 'Abono registrado', 'success');
   await cargarTodo(true); renderTab();
   const fn = FAC.find(x => x.id === id);
@@ -3951,6 +3958,7 @@ function openUpload(targetId) {
       <div class="row"><span>Concepto</span><span>${esc(f.descripcion)}</span></div>
       <div class="row"><span>Total · pagado · saldo</span><span class="amt">${$$(f.monto_total)} · ${$$(f.monto_pagado)} · <b>${$$(saldo(f))}</b></span></div>
       <div class="row"><span>Tiene</span><span>${docsDe(f)} <span class="mini">${pagos.length} pago(s)</span></span></div></div>
+      ${ent(f.entidad_id)?.no_factura && f.tipo === 'egreso' ? `<div style="margin-bottom:10px;padding:10px 12px;border-radius:var(--rs);background:var(--sf2);border:1px solid var(--br);display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span style="flex:1">Este proveedor <b>no da factura</b>. Sube aquí la foto de su nota, recibo o ticket: queda como su comprobante y <b>no registra un pago</b>.</span><button class="btn btn-p btn-sm" onclick="notaFoto('${f.id}')">📷 Subir foto de la nota</button></div>` : ''}
       <div class="mini" style="margin-bottom:10px">Comprobante = se registra como pago o abono parcial de esta cuenta · XML/PDF = su factura · Complemento de pago = se archiva con sus pagos · Nota de crédito = se descuenta del saldo</div>`
     : `<div class="prop" style="margin-top:0;margin-bottom:14px;border-color:var(--in)"><h4 style="color:var(--in)">Registrar factura(s) de proveedor</h4>
       <div class="mini">Sube el XML y el PDF de la factura. Si ya se pagó, agrega su comprobante: se registra completa o como abono parcial y el saldo queda pendiente. Para pagar una cuenta que ya existe, usa "Pagar" en esa cuenta.</div></div>`;
@@ -4311,6 +4319,24 @@ function upReabrir() {
 }
 
 boot();
+
+// ── Proveedores que no facturan: foto de su nota / recibo / ticket ──
+function notaFoto(fid) {
+  const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*,application/pdf'; i.multiple = true;
+  i.onchange = () => notaSubir(fid, [...i.files]); i.click();
+}
+async function notaSubir(fid, files) {
+  if (!files.length) return;
+  const f = FAC.find(x => x.id === fid);
+  let pin; try { pin = await askPin('Subir comprobante del proveedor', `${nomEnt(f.entidad_id)} · ${files.length} archivo(s)`); } catch { return; }
+  toast('Subiendo…', 'info');
+  for (const file of files) {
+    let u; try { u = await subirArchivo(file, 'notas'); } catch (e) { return toast(e.message, 'error'); }
+    const r = await rpcConPin('fin_adjuntar', { p_tabla: 'fin_facturas', p_registro: fid, p_tipo: 'recibo_provisional', p_url: u.url, p_sha256: u.sha }, pin);
+    if (!r.ok) return toast(ERR[r.error] || r.error, 'error');
+  }
+  toast('Comprobante del proveedor guardado', 'success'); CM('mGen'); await cargarTodo();
+}
 
 // ══ TEMAS DE COLOR (mismos que COE Quirófano) ══
 const TEMAS = [['grafito', 'Grafito y salvia'], ['noche', 'Azul noche'], ['pizarra', 'Pizarra y champaña'], ['claro', 'Claro cálido']];
