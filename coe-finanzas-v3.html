@@ -5120,6 +5120,7 @@ function almBarra(A) {
     ${esAlmCont(A) ? `<div class="seg">${[['tablero', 'Tablero'], ['agregar', 'Agregar manualmente']].map(([k, t]) => `<button class="${VIEW.almV === k ? 'on' : ''}" onclick="VIEW.almV='${k}';renderTab()">${t}</button>`).join('')}</div>
       <button class="btn btn-p btn-sm" onclick="almSubir('${A}')">⬆ Subir inventario</button>
       ${A === 'alm' ? `<button class="btn btn-s btn-sm" onclick="almTraspaso()">⇄ Traspaso (mostrador o consultorio)${sol ? ` <span class="nbdg" style="position:static;display:inline-block">${sol}</span>` : ''}</button>` : `<button class="btn btn-s btn-sm" onclick="VIEW.envOrg=qxAdmId();almEnvio()">⇄ Traspaso (quirófano o consultorio)</button>`}` : ''}
+    ${esAdmin() && (A === 'alm' || A === 'far') ? `<button class="btn btn-p btn-sm" onclick="almNuevoProd('${A}')">＋ Medicamento que no está en la lista</button>` : ''}
     <button class="btn btn-s btn-sm" onclick="almSolicitar('${A}')">📦 Solicitar a proveedor</button>
     <button class="btn btn-s btn-sm" onclick="almAvisos('${A}')">🔔 Avisos</button>
     <button class="btn btn-s btn-sm" onclick="almMinimos('${A}')">⚙ Mínimos</button></div></div>`;
@@ -5679,6 +5680,52 @@ async function almEditLoteFirmar(area, pid, fid) {
     { titulo: 'Firmar corrección de inventario · Director', sub: `${p?.nombre || ''} · ${l ? almNum(num(l.cantidad)) + ' → ' : ''}${q}` });
   if (!r) return;
   toast('Existencia corregida', 'success'); await cargarTodo(); almDetalle(area, pid);
+}
+
+// ── Alta de un medicamento / producto que no existe en el catálogo (solo Dirección) ──
+function almNuevoProd(A) {
+  const P = (INV.farProd || []).filter(p => !p.servicio);
+  modal('Agregar medicamento o producto', `<div class="mini" style="margin-bottom:10px">Para un medicamento que no aparece en la lista. Se da de alta en el catálogo de COE Farmacia con su existencia inicial. Si escribes uno que ya existe, te lo indica.</div>
+    <div class="fgrd">
+      <div class="fgrp sp2"><label>Nombre</label><input type="text" id="npN" list="npLista" placeholder="Ej. Tobradex ungüento 3.5 g" oninput="almNuevoChk('${A}')"><datalist id="npLista">${P.map(p => `<option value="${esc(p.nombre)}">`).join('')}</datalist><div id="npInfo" class="mini" style="margin-top:4px"></div></div>
+      <div class="fgrp"><label>Tipo</label><select id="npT">${Object.entries(TIPO_INS).map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select></div>
+      <div class="fgrp"><label>Presentación</label><input type="text" id="npPr" placeholder="Frasco 5 ml, caja 10 tabs…"></div>
+      <div class="fgrp"><label>Principio activo</label><input type="text" id="npPa"></div>
+      <div class="fgrp"><label>Marca / laboratorio</label><input type="text" id="npMa"></div>
+      <div class="fgrp"><label>Clave / código de barras</label><input type="text" id="npC" placeholder="Opcional"></div>
+      <div class="fgrp"><label>Unidad</label><input type="text" id="npU" value="pza"></div>
+      <div class="fgrp"><label>Proveedor</label><select id="npPv">${optProv('')}</select></div>
+      <div class="fgrp"><label>Costo unitario</label><div class="ipfx"><span>$</span><input type="number" id="npCo" step="0.01"></div></div>
+      <div class="fgrp"><label>Precio de venta</label><div class="ipfx"><span>$</span><input type="number" id="npV" step="0.01"></div></div>
+      <div class="fgrp"><label>Mínimo en almacén</label><input type="number" id="npMi" min="0" step="1"></div>
+      <div class="fgrp sp2" style="border-top:1px solid var(--br);padding-top:10px;margin-top:4px"><b>Existencia inicial</b></div>
+      <div class="fgrp"><label>Dónde está</label><select id="npUb"><option value="almacen" ${A === 'alm' ? 'selected' : ''}>Almacén de farmacia</option><option value="farmacia" ${A === 'far' ? 'selected' : ''}>Mostrador de farmacia</option></select></div>
+      <div class="fgrp"><label>Cantidad</label><input type="number" id="npQ" min="0" step="1" placeholder="0 si solo es alta"></div>
+      <div class="fgrp"><label>Lote</label><input type="text" id="npL"></div>
+      <div class="fgrp"><label>Caducidad</label><input type="date" id="npCa"></div>
+      <div class="fgrp sp2"><label>Motivo</label><input type="text" id="npM" value="Alta de producto que no estaba en el catálogo"></div>
+    </div>`,
+  `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="almNuevoFirmar('${A}')">Firmar y dar de alta</button>`, 'lg');
+}
+function almNuevoChk(A) {
+  const n = document.getElementById('npN').value, p = (INV.farProd || []).find(x => normTx(x.nombre) === normTx(n)), i = document.getElementById('npInfo');
+  i.innerHTML = p ? `Ya existe en el catálogo. <a href="#" style="color:var(--pr)" onclick="event.preventDefault();almDetalle('${A}','${p.id}')">Abrirlo para corregir sus existencias</a> o <a href="#" style="color:var(--pr)" onclick="event.preventDefault();almEditLote('${A}','${p.id}',null)">agregarle un lote</a>.` : '';
+  i.style.color = p ? 'var(--wn)' : '';
+}
+async function almNuevoFirmar(A) {
+  const v = id => (document.getElementById(id)?.value || '').trim(), nombre = v('npN'), q = v('npQ') === '' ? 0 : Math.round(num(v('npQ')));
+  if (!nombre) return toast('Escribe el nombre', 'warning');
+  if ((INV.farProd || []).some(x => normTx(x.nombre) === normTx(nombre))) return toast('Ya existe en el catálogo: ábrelo para corregir sus existencias', 'warning');
+  if (q < 0) return toast('Cantidad no válida', 'warning');
+  if (q > 0 && !v('npL')) return toast('Escribe el lote', 'warning');
+  if (q > 0 && almReqCad(v('npT')) && !v('npCa')) return toast('Escribe la caducidad', 'warning');
+  if (!v('npM')) return toast('Escribe el motivo', 'warning');
+  const d = { nombre, tipo_insumo: v('npT'), presentacion: v('npPr'), principio: v('npPa'), marca: v('npMa'), clave: v('npC'), unidad: v('npU'), proveedor_id: v('npPv'), costo: v('npCo') || null, venta: v('npV') || null, minimo_alm: v('npMi'),
+    ubicacion: v('npUb'), cantidad: q, lote: v('npL') || 'SIN LOTE', caducidad: v('npCa') || null, motivo: v('npM') };
+  const r = await rpcFirmado('fin_alm_lote_editar', { p_datos: d }, { titulo: 'Firmar alta de producto · Director', sub: `${nombre} · ${q} ${d.unidad || 'pza'}` });
+  if (!r) return;
+  toast('Producto dado de alta en el catálogo', 'success'); CM('mGen'); await cargarTodo();
+  const p = (INV.farProd || []).find(x => normTx(x.nombre) === normTx(nombre)); if (p) almDetalle(d.ubicacion === 'almacen' ? 'alm' : 'far', p.id);
 }
 
 // ══ ELIMINAR FACTURAS O PAGOS MAL CAPTURADOS (Por pagar / Por cobrar) ══
