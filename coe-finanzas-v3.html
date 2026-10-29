@@ -1078,6 +1078,7 @@ const ERR = {
   director_requerido: 'Se requiere el PIN del Director General', director_pin: 'PIN del Director incorrecto',
   comprobante: 'Falta el comprobante', monto_saldo: 'El monto excede el saldo de la cuenta (no se permite descuadrar)', ya_solicitada: 'Ya hay una solicitud de baja pendiente', cuenta: 'Cuenta no encontrada',
   comprobante_entrada: 'Sube la factura, remisión, recibo o comprobante de pago de la entrada', descuento: 'Escribe el descuento', descuento_alto: 'El descuento no puede pasar del 30% de la cuenta', monto: 'Monto no válido', proveedor: 'Falta el proveedor', descripcion: 'Falta la descripción',
+  dividir_min: 'Asigna al menos dos proveedores', dividir_vacio: 'Hay un grupo sin productos', dividir_idx: 'Partidas inválidas', dividir_faltan: 'Faltan productos por asignar', lote_existe: 'Ese lote ya existe para este producto: corrige ese lote', producto: 'Producto no encontrado', cantidad: 'Cantidad no válida',
   solo_director: 'Solo el Director General puede hacer esto', solo_contadora: 'Solo la Contadora (o Dirección General) puede eliminar', motivo: 'Escribe el motivo', tiene_pagos: 'Tiene pagos; anula primero los pagos',
   uuid_duplicado: 'Esta factura (UUID) ya está registrada', sin_permiso: 'Tu perfil no tiene permiso para esta acción',
   estado: 'El estado actual no permite esta acción', no_autorizado: 'El pedido aún no está autorizado', sede: 'Pedido de otra sede',
@@ -1983,9 +1984,38 @@ function verPedido(id) {
     ['autorizado', 'enviado'].includes(p.estado) ? `<button class="btn btn-s" onclick="estadoPedido('${id}','recibido')">Recibido</button>` : '',
     ['enviado', 'recibido'].includes(p.estado) ? `<button class="btn btn-s" onclick="correoProveedor('${p.entidad_id}',null,'${id}','aclaracion')">✉ Aclaración</button>` : '',
     p.entidad_id ? `<button class="btn btn-s" onclick="cartaProveedor('${p.entidad_id}','devolucion','${id}')">Carta de devolución</button><button class="btn btn-s" onclick="cartaProveedor('${p.entidad_id}','garantia','${id}')">Carta de garantía</button>` : '',
+    ['solicitado', 'autorizado', 'enviado'].includes(p.estado) && pt.length > 1 && puede('pedidos') ? `<button class="btn btn-s" onclick="dividirPedido('${id}')">✂ Separar por proveedor</button>` : '',
     !['cancelado', 'rechazado', 'facturado'].includes(p.estado) ? `<button class="btn btn-d" onclick="estadoPedido('${id}','cancelado')">Cancelar</button>` : ''
   ].join('');
   modal('Pedido ' + p.folio, b + cotPanel(p), ft, 'xl');
+}
+// Un pedido con productos de varios proveedores se separa: un pedido por proveedor, cada uno se surte por su lado
+function dividirPedido(id) {
+  const p = PED.find(x => x.id === id), pt = p.partidas || [];
+  const provDe = l => { const fp = (INV.farProd || []).find(x => String(x.id) === String(l.far_producto_id)); return l.entidad_id || fp?.proveedor_id || p.entidad_id || ''; };
+  modal('Separar ' + p.folio + ' por proveedor', `<div class="mini" style="margin-bottom:10px">Elige el proveedor de cada producto. Se crea <b>un pedido por proveedor</b> con el mismo estatus${p.estado !== 'solicitado' ? ' y la misma autorización' : ''}; cada uno se envía y se recibe por separado. Los que dejes con el mismo proveedor que el primero se quedan en <b>${esc(p.folio)}</b>.${p.far_pedido_id ? ' En COE Farmacia el pedido original queda recibido hasta que llegue el último.' : ''}</div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap"><span class="mini">Asignar a los marcados:</span><select class="fsel" id="dvTodos" style="width:auto">${optProv('')}</select><button class="btn btn-s btn-sm" onclick="document.querySelectorAll('.dvck:checked').forEach(c=>{document.getElementById('dvP'+c.dataset.i).value=dvTodos.value;c.checked=false});dvResumen()">Aplicar</button></div>
+    <div class="tc" style="max-height:52vh;overflow:auto"><table><thead><tr><th></th><th>Producto</th><th style="text-align:right">Cant.</th><th>Proveedor</th></tr></thead><tbody>
+    ${pt.map((l, i) => `<tr><td><input type="checkbox" class="dvck" data-i="${i}" style="width:auto"></td><td><b>${esc(l.descripcion || '')}</b>${l.clave ? `<div class="mini">${esc(l.clave)}</div>` : ''}</td><td class="amt" style="text-align:right">${esc(String(l.cantidad))} ${esc(l.unidad || '')}</td><td><select class="fsel dvsel" id="dvP${i}" onchange="dvResumen()">${optProv(provDe(l))}</select></td></tr>`).join('')}</tbody></table></div>
+    <div id="dvR" style="margin-top:10px"></div>`,
+  `<button class="btn btn-s" onclick="verPedido('${id}')">Volver</button><button class="btn btn-p" onclick="dividirFirmar('${id}')">Firmar y separar</button>`, 'xl');
+  dvResumen();
+}
+function dvGrupos() {
+  const g = new Map(); document.querySelectorAll('.dvsel').forEach((s, i) => { const k = s.value || ''; if (!g.has(k)) g.set(k, []); g.get(k).push(i); });
+  return [...g.entries()].map(([entidad_id, idx]) => ({ entidad_id: entidad_id || null, idx }));
+}
+function dvResumen() {
+  const G = dvGrupos(), e = document.getElementById('dvR'); if (!e) return;
+  e.innerHTML = G.length < 2 ? '<div class="warnbox" style="margin:0">Todos los productos tienen el mismo proveedor: asigna otro proveedor a los que se piden aparte.</div>'
+    : `<div class="okbox" style="margin:0">Quedarán <b>${G.length} pedidos</b>: ${G.map(g => `${esc(g.entidad_id ? nomEnt(g.entidad_id) : 'sin proveedor')} (${g.idx.length})`).join(' · ')}</div>`;
+}
+async function dividirFirmar(id) {
+  const G = dvGrupos(), p = PED.find(x => x.id === id);
+  if (G.length < 2) return toast('Asigna al menos dos proveedores distintos', 'warning');
+  const r = await rpcFirmado('fin_pedido_dividir', { p_pedido: id, p_grupos: G }, { titulo: 'Firmar separación del pedido', sub: `${p.folio} → ${G.length} pedidos` });
+  if (!r) return;
+  toast('Pedido separado: ' + (r.folios || []).join(', '), 'success'); CM('mGen'); await cargarTodo(); goTab('ped');
 }
 async function autorizarPedido(id, decision) {
   const p = PED.find(x => x.id === id);
@@ -5035,7 +5065,8 @@ function almDetalle(area, id) {
       ${area === 'alm' || area === 'far' ? `<b>Salidas últimas 4 semanas</b><div>${almNum(r.c4 || 0)} (${almNum((r.c4 || 0) / 4)} por semana)</div><b>Alcanza para</b><div>${r.dias !== null ? `<b>${r.dias} días</b> · se acaba aprox. el ${fmtD(r.fin)}` : 'sin consumo registrado'}</div>` : ''}
       <b>Estado</b><div><span class="bdg ${EST_ALM[r.est][1]}">${EST_ALM[r.est][0]}</span></div>
       ${r.p ? [['Tipo', TIPO_INS[r.p.tipo_insumo] || r.cat], ['Clave', r.p.clave], ['Presentación', r.p.presentacion], ['Principio activo', r.p.principio], ['Marca', r.p.marca], ['Registro sanitario', r.p.registro_sanitario], ['Proveedor', r.p.proveedor_id ? nomEnt(r.p.proveedor_id) : ''], ['Ubicación', r.p.ubicacion_fisica], ['Cuidados', [r.p.red_fria ? 'Red fría' : '', r.p.controlado ? 'Controlado' : ''].filter(Boolean).join(' · ')]].filter(x => x[1]).map(([k, v]) => `<b>${k}</b><div>${esc(v)}</div>`).join('') : ''}</div>
-    <div class="tc"><table><thead><tr><th>Lote</th><th style="text-align:right">Cantidad</th><th>Caducidad</th><th></th></tr></thead><tbody>${r.lotes.length ? r.lotes.sort((a, b) => String(a.cad || '9') < String(b.cad || '9') ? -1 : 1).map(l => `<tr><td>${esc(l.lote || '—')}${l.serie && l.serie !== l.lote ? `<div class="mini">serie ${esc(l.serie)}</div>` : ''}${l.factura ? `<div class="mini">factura ${esc(l.factura)}</div>` : ''}${l.gar ? `<div class="mini">garantía ${fmtD(l.gar)}</div>` : ''}${l.cons ? `<div class="mini"><b>en consigna</b>${l.prov ? ' · ' + esc(nomEnt(l.prov)) : ''}</div>` : ''}</td><td class="amt" style="text-align:right">${almNum(l.q)}</td><td>${l.cad ? fmtD(l.cad) : '—'}</td><td class="mini">${l.cad && diasA(l.cad) < 0 ? '<b style="color:var(--dg)">caducado · retirar</b>' : l.cad && diasA(l.cad) <= DIAS_CADUCAR ? `caduca en ${diasA(l.cad)} d${l.sobra ? ` · <b>${l.sobra} no se alcanzan a vender</b>` : ''}` : ''}</td></tr>`).join('') : '<tr><td colspan="4" class="mini">Sin lotes en existencia</td></tr>'}</tbody></table></div>`,
+    <div class="tc"><table><thead><tr><th>Lote</th><th style="text-align:right">Cantidad</th><th>Caducidad</th><th></th></tr></thead><tbody>${r.lotes.length ? r.lotes.sort((a, b) => String(a.cad || '9') < String(b.cad || '9') ? -1 : 1).map(l => `<tr><td>${esc(l.lote || '—')}${l.serie && l.serie !== l.lote ? `<div class="mini">serie ${esc(l.serie)}</div>` : ''}${l.factura ? `<div class="mini">factura ${esc(l.factura)}</div>` : ''}${l.gar ? `<div class="mini">garantía ${fmtD(l.gar)}</div>` : ''}${l.cons ? `<div class="mini"><b>en consigna</b>${l.prov ? ' · ' + esc(nomEnt(l.prov)) : ''}</div>` : ''}</td><td class="amt" style="text-align:right">${almNum(l.q)}</td><td>${l.cad ? fmtD(l.cad) : '—'}</td><td class="mini">${l.cad && diasA(l.cad) < 0 ? '<b style="color:var(--dg)">caducado · retirar</b>' : l.cad && diasA(l.cad) <= DIAS_CADUCAR ? `caduca en ${diasA(l.cad)} d${l.sobra ? ` · <b>${l.sobra} no se alcanzan a vender</b>` : ''}` : ''}${esAdmin() && l.fid && (area === 'alm' || area === 'far') ? ` <button class="btn btn-s btn-sm" onclick="almEditLote('${area}','${r.id}',${l.fid})">✎ Corregir</button>` : ''}</td></tr>`).join('') : '<tr><td colspan="4" class="mini">Sin lotes en existencia</td></tr>'}</tbody></table></div>
+    ${esAdmin() && (area === 'alm' || area === 'far') ? `<div style="margin-top:8px"><button class="btn btn-s btn-sm" onclick="almEditLote('${area}','${r.id}',null)">＋ Agregar lote ${area === 'alm' ? 'al almacén' : 'al mostrador'}</button> <span class="mini">Solo Dirección · corrige existencias con motivo; queda en la bitácora de COE Farmacia</span></div>` : ''}`,
     `${area !== 'qui' && puede('pedidos') ? `<button class="btn btn-s" onclick="CM('mGen');almSolicitar('${area}',['${r.id}'])">📦 Solicitar</button>${area === 'alm' && r.ex > 0 ? `<button class="btn btn-s" onclick="CM('mGen');almTraspaso({${r.id}:1})">⇄ Traspasar</button>` : area === 'adm' && r.ex > 0 ? `<button class="btn btn-s" onclick="CM('mGen');almEnvio({'${r.id}':1},qxAdmId())">⇄ Enviar a quirófano</button>` : ''}` : ''}<button class="btn btn-p" onclick="CM('mGen')">Cerrar</button>`, 'sm');
 }
 // Prellena un pedido con lo que está acabado, crítico, bajo mínimo o por terminarse
@@ -5621,6 +5652,33 @@ async function almMinGuardar(A) {
   const r = await rpcFirmado('fin_inv_minimos', { p_area: A, p_items: items }, { titulo: 'Guardar mínimos', sub: `${items.length} insumo(s)` });
   if (!r) return;
   CM('mGen'); toast(`Mínimos actualizados en ${r.cambios} insumo(s)`, 'success'); await cargarTodo(); renderTab();
+}
+
+// ── Corrección de existencias (solo Dirección) ──
+function almEditLote(area, pid, fid) {
+  const p = (INV.farProd || []).find(x => String(x.id) === String(pid)); if (!p) return;
+  const l = fid ? (INV.farLotes || []).find(x => x.id === fid) : null;
+  const ub = area === 'alm' ? 'almacén' : 'mostrador';
+  modal((l ? 'Corregir lote · ' : 'Agregar lote · ') + p.nombre, `<div class="mini" style="margin-bottom:10px">${l ? `Existencia actual en ${ub}: <b>${almNum(num(l.cantidad))}</b> · lote <b>${esc(String(l.lote || '').replace(' ·ALM', ''))}</b>${l.caducidad ? ' · caduca ' + fmtD(l.caducidad) : ''}. Pon la cantidad <b>real</b> que hay; 0 lo retira.` : `Nuevo lote en ${ub}.`}</div>
+    <div class="fgrd">
+      <div class="fgrp"><label>Cantidad real</label><input type="number" id="elQ" min="0" step="1" value="${l ? num(l.cantidad) : ''}"></div>
+      <div class="fgrp"><label>Lote</label><input type="text" id="elL" value="${l ? esc(String(l.lote || '').replace(' ·ALM', '')) : ''}" placeholder="Ej. A1234"></div>
+      <div class="fgrp"><label>Caducidad</label><input type="date" id="elC" value="${l?.caducidad || ''}"></div>
+      <div class="fgrp"><label>Costo c/u (opcional)</label><div class="ipfx"><span>$</span><input type="number" step="0.01" id="elCo" value="${l && num(l.costo) ? num(l.costo) : ''}"></div></div>
+      <div class="fgrp sp2"><label>Motivo de la corrección</label><input type="text" id="elM" placeholder="Ej. Error de captura: se registraron 20 en vez de 2"></div>
+    </div>`,
+  `<button class="btn btn-s" onclick="almDetalle('${area}','${pid}')">Volver</button><button class="btn btn-p" onclick="almEditLoteFirmar('${area}','${pid}',${fid || 'null'})">Firmar corrección</button>`);
+}
+async function almEditLoteFirmar(area, pid, fid) {
+  const q = elQ.value === '' ? NaN : Math.round(num(elQ.value)), m = elM.value.trim();
+  if (!(q >= 0)) return toast('Escribe la cantidad real', 'warning');
+  if (!m) return toast('Escribe el motivo', 'warning');
+  if (!fid && !elL.value.trim()) return toast('Escribe el lote', 'warning');
+  const p = (INV.farProd || []).find(x => String(x.id) === String(pid)), l = fid ? (INV.farLotes || []).find(x => x.id === fid) : null;
+  const r = await rpcFirmado('fin_alm_lote_editar', { p_datos: { lote_id: fid, producto_id: pid, ubicacion: area === 'alm' ? 'almacen' : 'farmacia', cantidad: q, lote: elL.value.trim(), caducidad: elC.value || null, costo: elCo.value || null, motivo: m } },
+    { titulo: 'Firmar corrección de inventario · Director', sub: `${p?.nombre || ''} · ${l ? almNum(num(l.cantidad)) + ' → ' : ''}${q}` });
+  if (!r) return;
+  toast('Existencia corregida', 'success'); await cargarTodo(); almDetalle(area, pid);
 }
 
 // ══ ELIMINAR FACTURAS O PAGOS MAL CAPTURADOS (Por pagar / Por cobrar) ══
