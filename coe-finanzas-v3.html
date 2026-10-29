@@ -1009,6 +1009,7 @@ function closeSb() { document.getElementById('sdb').classList.remove('open'); do
 // ── Estado ──────────────────────────────────────
 let sb = null, cu = null, tab = 'dash';
 let FM = [], RECSOL = [];
+function sinRevisar(f) { return !f.revision || f.revision === 'pendiente'; }
 let USR = [], ENT = [], FAC = [], ABO = [], REC = [], PED = [], TAR = [], DOCS = [], RS = [], CIE = [], SUC = [], CORR = [], NOM = [], NOM_EMP = [], INV = {};
 let CFG = { monto_doble_firma: 3000, correo_alertas: 'drvillegas.ta@gmail.com', hora_alertas: '09:00', dias_aviso: 3 };
 let FALTA_SQL = [];
@@ -1484,7 +1485,7 @@ function calcAlertas() {
   bdg('nb-ped', PED.filter(p => p.estado === 'solicitado' && enMiSede(p)).length);
   bdg('nb-fps', fps.length);
   bdg('nb-alm', almBadge());
-  bdg('nb-rev', vivas().filter(f => !f.revision && String(f.created_at || '').slice(0, 10) >= isoD(new Date(Date.now() - 60 * 86400000))).length);
+  bdg('nb-rev', vivas().filter(f => sinRevisar(f) && String(f.created_at || '').slice(0, 10) >= isoD(new Date(Date.now() - 60 * 86400000))).length);
   bdg('nb-tar', TAR.filter(t => esMia(t) && vencidaT(t) && t.prioridad !== 'no_critico').length);
   bdg('nb-rec', buildRecOcurrencias(aviso).filter(o => o.estado === 'vencido').length);
   document.title = (urg ? `(${urg}) ` : '') + 'COE Finanzas';
@@ -1623,7 +1624,7 @@ function verCuenta(id) {
     <b>Pago a</b><div class="mini">${esc(e.banco || '')} ${e.clabe ? 'CLABE ' + esc(e.clabe) : ''} ${e.convenio_cie ? '· CIE ' + esc(e.convenio_cie) : ''} ${f.referencia_cie ? '· Ref ' + esc(f.referencia_cie) : ''}</div>
     <b>Firmas</b><div class="mini">Registró ${esc(nomUsr(f.firma1_por || f.created_by))} ${fmtDT(f.firma1_at || f.created_at)}${f.firma2_por ? ' · 2ª firma ' + esc(nomUsr(f.firma2_por)) : ''}</div>
     ${f.propuesta_pago ? `<b>Propuesta</b><div class="mini">Pagar el ${fmtD(f.propuesta_pago)} · propuso ${esc(nomUsr(f.propuesta_por))}</div>` : ''}
-    <b>Revisión</b><div class="mini">${f.revision ? esc(f.revision) + ' por ' + esc(nomUsr(f.revision_por)) + ' ' + fmtDT(f.revision_at) + (f.revision_nota ? ' — ' + esc(f.revision_nota) : '') : 'Sin revisar'}</div>
+    <b>Revisión</b><div class="mini">${!sinRevisar(f) ? esc(f.revision) + ' por ' + esc(nomUsr(f.revision_por)) + ' ' + fmtDT(f.revision_at) + (f.revision_nota ? ' — ' + esc(f.revision_nota) : '') : 'Sin revisar'}</div>
   </div>
   <h4 style="margin:18px 0 8px">Documentos probatorios</h4>
   ${docs.length || f.xml_url || f.pdf_url ? `<div class="flist">${docs.map(d => `<div class="fitem"><span class="fk">${esc(d.tipo.toUpperCase())}</span><a class="fn" href="${esc(d.url)}" target="_blank">${esc(d.url.split('/').pop())}</a><span class="mini">${esc(nomUsr(d.subido_por))} · ${fmtDT(d.subido_at)}</span><span class="mini" title="Huella SHA-256">#${esc((d.sha256 || '').slice(0, 8))}</span></div>`).join('')}</div>` : '<div class="mini">Sin documentos</div>'}
@@ -1823,14 +1824,68 @@ function rIngDiario() {
 }
 
 // ══ PAGOS ══════════════════════════════════════
+// Estatus documental de cada pago
+function pagoInfo(a) {
+  const f = FAC.find(x => x.id === a.factura_id) || {}, e = ent(f.entidad_id) || {};
+  const comp = a.comprobante_url || f.comprobante_pago_url || '';
+  const xml = tieneXML(f), noReq = f.tipo === 'ingreso' || e.no_factura || f.origen === 'nomina';
+  const fac = xml ? 'fac' : noReq ? 'noreq' : 'sinfac';
+  const est = a.anulado ? 'anul' : comp && (xml || noReq) ? 'comp' : !comp ? 'sincomp' : 'sinfac';
+  return { a, f, comp, fac, est, liq: saldo(f) <= 0.5 };
+}
+VIEW.pgB = VIEW.pgB || { q: '', st: '', tipo: 'egreso', forma: '', de: '', a: '' }; VIEW.pgMes = VIEW.pgMes || {}; VIEW.pgProv = VIEW.pgProv || {};
+let _pgBT = null;
+function pgBusca(k, v, ya) { VIEW.pgB[k] = v; clearTimeout(_pgBT); _pgBT = setTimeout(() => { renderTab(); const e = document.getElementById('pgB_' + k); if (e && e.type === 'text') { e.focus(); e.setSelectionRange(v.length, v.length); } }, ya ? 0 : 280); }
+const PG_EST = { comp: ['✓ Completo', 'bdg-apr', 'Comprobante y factura (o no requiere)'], sinfac: ['Sin factura', 'bdg-ven', 'Pagado, falta XML'], sincomp: ['Sin comprobante', 'bdg-pnd', 'Falta el comprobante del pago'], anul: ['Anulado', 'bdg-can', ''] };
+function pgFiltrados() {
+  const B = VIEW.pgB, qq = String(B.q || '').trim().toLowerCase();
+  return ABO.map(pagoInfo).filter(x => {
+    const { a, f } = x;
+    if (B.tipo && (f.tipo || 'egreso') !== B.tipo) return false;
+    if (B.st === 'confac') { if (x.est !== 'comp' || x.fac !== 'fac') return false; }
+    else if (B.st) { if (x.est !== B.st) return false; }
+    else if (x.est === 'anul') return false;
+    if (B.forma && String(a.metodo || '').toLowerCase() !== B.forma) return false;
+    const d = String(a.fecha_pago || '').slice(0, 10);
+    if (B.de && d < B.de) return false; if (B.a && d > B.a) return false;
+    if (qq) { const h = [nomEnt(f.entidad_id), f.descripcion, f.numero_factura, f.uuid_cfdi, f.categoria, a.referencia, a.metodo, a.notas, String(a.monto), num(a.monto).toFixed(2), fmtD(a.fecha_pago), PG_EST[x.est][0], nomUsr(a.firma1_por || a.created_by)].join(' ').toLowerCase(); if (!qq.split(/\s+/).every(w => h.includes(w))) return false; }
+    return true;
+  });
+}
 function rPagos() {
-  const L = ABO.slice(0, 400);
-  return `<div class="ph"><div><div class="ptit">Pagos y cobros</div><div class="psub">Últimos ${L.length} movimientos con su comprobante y firmas</div></div><button class="btn btn-s btn-sm" onclick="expPagos()">Excel</button></div>
-  <div class="pad"><div class="tc">${L.length ? `<table><thead><tr><th>Fecha</th><th>Tipo</th><th>Proveedor / deudor</th><th>Concepto</th><th>Forma</th><th style="text-align:right">Monto</th><th>Comprobante</th><th>Firmó</th></tr></thead><tbody>
-  ${L.map(a => { const f = FAC.find(x => x.id === a.factura_id) || {}; return `<tr style="cursor:pointer;${a.anulado ? 'opacity:.45;text-decoration:line-through' : ''}" onclick="verCuenta('${f.id}')"><td>${fmtD(a.fecha_pago)}</td><td><span class="bdg ${f.tipo === 'ingreso' ? 'bdg-ing' : 'bdg-egr'}">${f.tipo === 'ingreso' ? 'Cobro' : 'Pago'}</span></td><td>${esc(nomEnt(f.entidad_id))}</td><td class="mini">${esc(f.descripcion || '')}</td><td class="mini">${esc(a.metodo || '')}</td><td class="amt" style="text-align:right">${$$(a.monto)}</td><td onclick="event.stopPropagation()">${a.comprobante_url ? `<a class="docprev" href="${esc(a.comprobante_url)}" target="_blank">Ver</a>` : '<span class="dtag no">SIN</span>'}</td><td class="mini">${esc(nomUsr(a.firma1_por || a.created_by))}${a.firma2_por ? ' + ' + esc(nomUsr(a.firma2_por)) : ''}</td></tr>`; }).join('')}</tbody></table>` : '<div class="emp">Sin pagos</div>'}</div></div>`;
+  const B = VIEW.pgB, L = pgFiltrados(), buscando = !!(String(B.q || '').trim() || B.de || B.a);
+  const base = ABO.map(pagoInfo).filter(x => !B.tipo || (x.f.tipo || 'egreso') === B.tipo), cnt = k => k === 'confac' ? base.filter(x => x.est === 'comp' && x.fac === 'fac').length : base.filter(x => k ? x.est === k : x.est !== 'anul').length;
+  const tot = L.filter(x => !x.a.anulado).reduce((s, x) => s + num(x.a.monto), 0);
+  const formas = [...new Set(ABO.map(a => String(a.metodo || '').toLowerCase()).filter(Boolean))].sort();
+  const chipE = (k, t) => `<span class="chip ${B.st === k ? 'act' : ''}" onclick="pgBusca('st','${k}',1)">${t} <b>${cnt(k)}</b></span>`;
+  const M = {}; L.forEach(x => { const k = String(x.a.fecha_pago || '').slice(0, 7) || 'sin-fecha'; (M[k] = M[k] || []).push(x); });
+  const ks = Object.keys(M).sort((a, b) => b.localeCompare(a));
+  const fila = x => { const { a, f } = x, E = PG_EST[x.est]; return `<tr style="cursor:pointer;${a.anulado ? 'opacity:.45;text-decoration:line-through' : ''}" onclick="verCuenta('${f.id}')">
+    <td style="padding-left:34px">${fmtD(a.fecha_pago)}</td>
+    <td><div>${esc(f.descripcion || '')}</div><div class="mini">${f.numero_factura ? 'Folio ' + esc(f.numero_factura) + ' · ' : ''}${esc(a.metodo || '')}${a.referencia ? ' · ref ' + esc(a.referencia) : ''}${x.liq ? '' : ' · <span style="color:var(--wn)">abono parcial · saldo ' + $$(saldo(f)) + '</span>'}</div></td>
+    <td class="amt" style="text-align:right">${$$(a.monto)}</td>
+    <td><span class="bdg ${E[1]}" style="white-space:nowrap" title="${E[2]}">${E[0]}</span></td>
+    <td onclick="event.stopPropagation()">${docsDe(f)}${a.comprobante_url && a.comprobante_url !== f.comprobante_pago_url ? `<a class="dtag ok" href="${esc(a.comprobante_url)}" target="_blank">COMPROBANTE</a>` : ''}</td>
+    <td class="mini">${esc(nomUsr(a.firma1_por || a.created_by))}${a.firma2_por ? ' + ' + esc(nomUsr(a.firma2_por)) : ''}</td></tr>`; };
+  const cuerpo = ks.map((k, i) => { const F = M[k], vivos = F.filter(x => !x.a.anulado), tm = vivos.reduce((s, x) => s + num(x.a.monto), 0);
+    const abM = VIEW.pgMes[k] ?? (buscando || i === 0), sf = vivos.filter(x => x.est === 'sinfac').length, sc = vivos.filter(x => x.est === 'sincomp').length, ok = vivos.filter(x => x.est === 'comp').length;
+    const G = {}; F.forEach(x => (G[x.f.entidad_id] = G[x.f.entidad_id] || []).push(x));
+    const P = Object.entries(G).map(([eid, F2]) => ({ eid, F: F2.sort((a, b) => String(b.a.fecha_pago).localeCompare(String(a.a.fecha_pago))), n: nomEnt(eid), m: F2.filter(x => !x.a.anulado).reduce((s, x) => s + num(x.a.monto), 0) })).sort((a, b) => b.m - a.m);
+    return `<tr class="grp-hdr" style="cursor:pointer" onclick="VIEW.pgMes['${k}']=!${abM};renderTab()"><td colspan="2"><div class="grp-name">${abM ? '▾' : '▸'} ${k === 'sin-fecha' ? 'Sin fecha' : MES_TXT(k)} <span class="mini">${vivos.length} pago(s) · ${P.length} proveedor(es)</span></div></td><td class="amt" style="text-align:right">${$$(tm)}</td><td colspan="3" class="mini">✓ ${ok} completos${sf ? ` · <b style="color:var(--dg)">${sf} sin factura</b>` : ''}${sc ? ` · <b style="color:var(--wn)">${sc} sin comprobante</b>` : ''}</td></tr>` + (!abM ? '' : P.map(p => { const pk = k + '|' + p.eid, ab = VIEW.pgProv[pk] ?? (buscando && L.length <= 60), v2 = p.F.filter(x => !x.a.anulado), sf2 = v2.filter(x => x.est === 'sinfac').length, sc2 = v2.filter(x => x.est === 'sincomp').length;
+      return `<tr style="cursor:pointer" onclick="VIEW.pgProv['${pk}']=!${ab};renderTab()"><td colspan="2" style="padding-left:18px">${ab ? '▾' : '▸'} <b>${esc(p.n)}</b> <span class="mini">${v2.length} pago(s)${sf2 ? ` · <b style="color:var(--dg)">${sf2} sin factura</b>` : ''}${sc2 ? ` · <b style="color:var(--wn)">${sc2} sin comprobante</b>` : ''}${!sf2 && !sc2 && v2.length ? ' · ✓ completos' : ''}</span></td><td class="amt" style="text-align:right">${$$(p.m)}</td><td colspan="3"></td></tr>${ab ? p.F.map(fila).join('') : ''}`; }).join('')); }).join('');
+  return `<div class="ph"><div><div class="ptit">Pagos y cobros</div><div class="psub">Por mes y proveedor · toca un mes o un proveedor para desplegarlo</div></div><button class="btn btn-s btn-sm" onclick="expPagos()">Excel (lo filtrado)</button></div>
+  <div class="pad"><div class="tc"><div class="ttb" style="gap:10px;flex-wrap:wrap">
+    <div class="chips">${[['egreso', 'Pagos realizados'], ['ingreso', 'Cobros'], ['', 'Todos']].map(([k, t]) => `<span class="chip ${B.tipo === k ? 'act' : ''}" onclick="pgBusca('tipo','${k}',1)">${t}</span>`).join('')}</div>
+    <input class="sbox" id="pgB_q" type="text" placeholder="Buscar proveedor, concepto, folio, monto, referencia…" value="${esc(B.q || '')}" oninput="pgBusca('q',this.value)" style="min-width:240px;flex:1">
+    <select class="fsel" style="width:auto" onchange="pgBusca('forma',this.value,1)"><option value="">Toda forma de pago</option>${formas.map(f => `<option value="${esc(f)}" ${B.forma === f ? 'selected' : ''}>${esc(f)}</option>`).join('')}</select>
+    <span class="mini" style="display:inline-flex;gap:6px;align-items:center">Del <input type="date" class="fsel" style="width:auto" value="${B.de || ''}" onchange="pgBusca('de',this.value,1)"> al <input type="date" class="fsel" style="width:auto" value="${B.a || ''}" onchange="pgBusca('a',this.value,1)"></span>
+    <div class="chips" style="flex-basis:100%"><span class="chip ${!B.st ? 'act' : ''}" onclick="pgBusca('st','',1)">Todos <b>${cnt('')}</b></span>${chipE('confac', '✓ Completos con factura')}${chipE('comp', '✓ Completos (incluye los que no llevan factura)')}${chipE('sinfac', 'Sin factura')}${chipE('sincomp', 'Sin comprobante')}${chipE('anul', 'Anulados')}</div>
+  </div>
+  ${B.st || buscando || B.forma ? `<div class="warnbox" style="margin:0 0 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span>${L.length} pago(s) coinciden · ${$$(tot)}</span><button class="btn btn-s btn-sm" onclick="VIEW.pgB={q:'',st:'',tipo:VIEW.pgB.tipo,forma:'',de:'',a:''};renderTab()">Quitar filtros</button></div>` : ''}
+  ${L.length ? `<table><thead><tr><th>Fecha</th><th>Concepto · folio · forma</th><th style="text-align:right">Monto</th><th>Estatus</th><th>Documentos</th><th>Firmó</th></tr></thead><tbody>${cuerpo}</tbody></table>` : '<div class="emp"><p>Ningún pago coincide</p></div>'}</div></div>`;
 }
 function expPagos() {
-  xls(ABO.map(a => { const f = FAC.find(x => x.id === a.factura_id) || {}; return { Fecha: a.fecha_pago, Tipo: f.tipo, Proveedor: nomEnt(f.entidad_id), Concepto: f.descripcion, Forma: a.metodo, Monto: num(a.monto), Referencia: a.referencia || '', Comprobante: a.comprobante_url || '', Anulado: a.anulado ? 'Sí' : '' }; }), 'Pagos_' + isoD(new Date()));
+  xls(pgFiltrados().map(x => { const { a, f } = x; return { Fecha: a.fecha_pago, Tipo: f.tipo, Proveedor: nomEnt(f.entidad_id), Concepto: f.descripcion, Folio: f.numero_factura || '', Forma: a.metodo, Monto: num(a.monto), Referencia: a.referencia || '', Estatus: PG_EST[x.est][0], Factura: x.fac === 'fac' ? 'Sí' : x.fac === 'noreq' ? 'No requiere' : 'Falta', Comprobante: x.comp || '', Anulado: a.anulado ? 'Sí' : '' }; }), 'Pagos_' + isoD(new Date()));
 }
 
 // ══ CALENDARIO ═════════════════════════════════
@@ -2851,9 +2906,9 @@ function dashContadora(sel) {
 // ── Pestañas separadas: Propuesta de pagos y Por revisar ──
 function rRevisar() {
   const hace60 = isoD(new Date(Date.now() - 60 * 86400000));
-  const L = vivas().filter(f => !f.revision && String(f.created_at || '').slice(0, 10) >= hace60).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
-  return `<div class="ph"><div><div class="ptit">Por revisar</div><div class="psub">Movimientos de los últimos 60 días sin revisión contable</div></div></div>
-  <div class="pad"><div class="tc">${L.length ? `<table><thead><tr><th>Fecha</th><th>Proveedor / cliente</th><th>Concepto</th><th style="text-align:right">Monto</th><th>Documentos</th><th></th></tr></thead><tbody>${L.map(f => `<tr style="cursor:pointer" onclick="verCuenta('${f.id}')"><td>${fmtD(String(f.created_at).slice(0, 10))}</td><td>${esc(nomEnt(f.entidad_id))}</td><td>${esc(f.descripcion)}</td><td class="amt" style="text-align:right">${$$(f.monto_total)}</td><td>${docsDe(f)}</td><td onclick="event.stopPropagation()">${puede('revision') ? `<div class="rowact"><button class="btn btn-p btn-sm" onclick="revisar('${f.id}','revisado')">✓ Revisado</button><button class="btn btn-s btn-sm" onclick="revisar('${f.id}','observado')">Observar</button></div>` : ''}</td></tr>`).join('')}</tbody></table>` : '<div class="emp"><div class="ic">✓</div><p>Todo revisado</p></div>'}</div></div>`;
+  const L = vivas().filter(f => sinRevisar(f) && String(f.created_at || '').slice(0, 10) >= hace60).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  return `<div class="ph"><div><div class="ptit">Por revisar</div><div class="psub">Cuentas y facturas capturadas en los últimos 60 días que la Contadora aún no revisa contra su XML, PDF y comprobante. Al marcar <b>✓ Revisado</b> salen de aquí; con <b>Observar</b> quedan como observación pendiente en avisos.</div></div></div>
+  <div class="pad"><div class="tc">${L.length ? `<table><thead><tr><th>Fecha</th><th>Proveedor / cliente</th><th>Concepto</th><th style="text-align:right">Monto</th><th>Estatus</th><th>Documentos</th><th></th></tr></thead><tbody>${L.map(f => `<tr style="cursor:pointer" onclick="verCuenta('${f.id}')"><td>${fmtD(String(f.created_at).slice(0, 10))}</td><td>${esc(nomEnt(f.entidad_id))}</td><td>${esc(f.descripcion)}</td><td class="amt" style="text-align:right">${$$(f.monto_total)}</td><td class="mini">${saldo(f) <= 0.5 ? 'Pagada' : num(f.monto_pagado) > 0 ? 'Abonada · saldo ' + $$(saldo(f)) : 'Por pagar'}</td><td>${docsDe(f)}</td><td onclick="event.stopPropagation()">${puede('revision') ? `<div class="rowact"><button class="btn btn-p btn-sm" onclick="revisar('${f.id}','revisado')">✓ Revisado</button><button class="btn btn-s btn-sm" onclick="revisar('${f.id}','observado')">Observar</button></div>` : ''}</td></tr>`).join('')}</tbody></table>` : '<div class="emp"><div class="ic">✓</div><p>Todo revisado</p></div>'}</div></div>`;
 }
 async function proponer() {
   const ids = [..._pp];
@@ -3097,8 +3152,8 @@ function verPendiente(id) {
   const t = TAR.find(x => x.id === id); if (!t) return;
   const av = AVA.filter(a => a.tarea_id === id).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
   const linea = a => {
-    const txt = { creacion: 'Creado', avance: 'Avance', estado: `Estatus: ${(EST_T[a.estado_ant] || [a.estado_ant || '—'])[0]} → ${(EST_T[a.estado_nuevo] || [a.estado_nuevo])[0]}`, reprogramacion: `Reprogramado: ${fmtD(a.fecha_ant)} → ${fmtD(a.fecha_nueva)}`, cumplida: t.requiere_conformidad ? 'Entregado' : 'Cumplido', prioridad: 'Prioridad', conformidad: '✓ Firma de conformidad', no_conforme: '✕ No conforme · regresado' }[a.tipo] || a.tipo;
-    const cls = a.tipo === 'cumplida' || a.tipo === 'conformidad' ? 'done' : a.tipo === 'no_conforme' ? 'fail' : a.tipo === 'reprogramacion' ? 'warn' : a.estado_nuevo === 'bloqueado' ? 'fail' : 'act';
+    const txt = { creacion: 'Creado', avance: 'Avance', estado: `Estatus: ${(EST_T[a.estado_ant] || [a.estado_ant || '—'])[0]} → ${(EST_T[a.estado_nuevo] || [a.estado_nuevo])[0]}`, reprogramacion: `Reprogramado: ${fmtD(a.fecha_ant)} → ${fmtD(a.fecha_nueva)}`, cumplida: t.requiere_conformidad ? 'Entregado' : 'Cumplido', prioridad: 'Prioridad', conformidad: '✓ Firma de conformidad', no_conforme: '✕ No conforme · regresado', editada: '✎ Editado por Dirección', eliminada: '🗑 Eliminado por Dirección' }[a.tipo] || a.tipo;
+    const cls = a.tipo === 'cumplida' || a.tipo === 'conformidad' ? 'done' : a.tipo === 'no_conforme' || a.tipo === 'eliminada' ? 'fail' : a.tipo === 'reprogramacion' ? 'warn' : a.estado_nuevo === 'bloqueado' ? 'fail' : 'act';
     return `<div class="tl-row ${cls}"><div class="tl-lbl">${esc(txt)}</div><div class="tl-meta">${fmtDT(a.created_at)} · ${esc(nomUsr(a.usuario_id))}${a.nota ? ' — ' + esc(a.nota) : ''}${a.evidencia_url ? ` · <a href="${esc(a.evidencia_url)}" target="_blank" style="color:var(--pr)">evidencia</a>` : ''}</div></div>`;
   };
   const b = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">${priBdg(t.prioridad, t.id)} ${estBdgT(t)} ${atrasoBdg(t)}</div>
@@ -3116,7 +3171,57 @@ function verPendiente(id) {
   ${av.length ? `<div class="tl-vert">${av.map(linea).join('')}</div>` : '<div class="mini">Sin movimientos registrados</div>'}`;
   const ft = abiertaT(t) && puede('tareas') ? `<button class="btn btn-s" onclick="avancePendiente('${id}')">Registrar avance</button><button class="btn btn-s" onclick="avancePendiente('${id}','reprogramar')">Reprogramar</button><button class="btn btn-p" onclick="cumplirTarea('${id}')">Cumplir</button>` : '';
   const fc = t.requiere_conformidad && t.estado === 'cumplida' && !t.conformidad_at && puedeConformidad(t) ? `<button class="btn btn-d" onclick="conformidad('${id}',false)">✕ No conforme</button><button class="btn btn-p" onclick="conformidad('${id}',true)">✓ Firmar conformidad</button>` : '';
-  modal('Pendiente', b, ft + fc, 'lg');
+  const fa = esAdmin() && t.estado !== 'cancelada' ? `<button class="btn btn-s" onclick="editarPendiente('${id}')">✎ Editar</button><button class="btn btn-d" onclick="eliminarPendiente('${id}')">🗑 Eliminar</button>` : '';
+  modal('Pendiente', b, fa + ft + fc, 'lg');
+}
+
+// ── Solo Director: editar / eliminar ──
+function editarPendiente(id) {
+  const t = TAR.find(x => x.id === id); if (!t) return;
+  const resp = USR.filter(u => u.activo !== false && niv('tareas', u) >= 2);
+  window._ep = t.prioridad || 'moderado';
+  modal('Editar pendiente', `<div class="fgrd">
+    <div class="fgrp sp2"><label>Pendiente</label><input type="text" id="epT" value="${esc(t.titulo)}"></div>
+    <div class="fgrp sp2"><label>Detalle</label><textarea id="epD" style="min-height:56px">${esc(t.descripcion || '')}</textarea></div>
+    <div class="fgrp"><label>Prioridad</label><select id="epP">${Object.entries(PRI).map(([k, P]) => `<option value="${k}" ${k === t.prioridad ? 'selected' : ''}>${P.t}</option>`).join('')}</select></div>
+    <div class="fgrp"><label>Fecha límite</label><input type="date" id="epF" value="${t.fecha_limite || ''}"></div>
+    <div class="fgrp"><label>Rubro</label><select id="epC">${RUBROS.map(r => `<option value="${r[2]}" ${r[0] === rubroDe(t) ? 'selected' : ''}>${r[1]} ${r[2]}</option>`).join('')}</select></div>
+    <div class="fgrp"><label>Responsable</label><select id="epR">${resp.map(u => `<option value="${u.id}" data-rol="${esc(u.rol || '')}" ${u.id === t.responsable_id ? 'selected' : ''}>${esc(u.nombre)}${u.rol ? ' · ' + esc(ROLES[u.rol] || u.rol) : ''}</option>`).join('')}${t.responsable_id ? '' : '<option value="" selected>— ' + esc(respNom(respKey(t))) + ' —</option>'}</select></div>
+    <div class="fgrp sp2"><label>Entregable</label><input type="text" id="epE" value="${esc(t.entregable || '')}"></div>
+  </div><div class="mini" style="margin-top:8px">El cambio queda registrado en el seguimiento del pendiente. Si cambias la fecha, la fecha original se conserva para medir el atraso.</div>`,
+  `<button class="btn btn-s" onclick="verPendiente('${id}')">Volver</button><button class="btn btn-p" onclick="guardarEdicionPend('${id}')">Firmar cambios</button>`);
+}
+async function guardarEdicionPend(id) {
+  const t = TAR.find(x => x.id === id);
+  const d = { titulo: epT.value.trim(), descripcion: epD.value.trim(), prioridad: epP.value, fecha_limite: epF.value || t.fecha_limite, categoria: epC.value, entregable: epE.value.trim() };
+  if (epR.value) { d.responsable_id = epR.value; const o = epR.selectedOptions[0]; if (o && o.dataset.rol) d.responsable_rol = o.dataset.rol; }
+  if (!d.titulo) { toast('Escribe el pendiente', 'warning'); return; }
+  const r = await rpcFirmado('fin_tarea_editar', { p_tarea: id, p_datos: d }, { titulo: 'Firmar edición · Director', sub: t.titulo });
+  if (r) { toast(r.sin_cambios ? 'Sin cambios' : 'Pendiente actualizado', 'success'); await cargarTodo(); verPendiente(id); }
+}
+function eliminarPendiente(id) {
+  const t = TAR.find(x => x.id === id); if (!t) return;
+  const av = AVA.filter(a => a.tarea_id === id && a.tipo !== 'creacion');
+  const evs = AVA.filter(a => a.tarea_id === id && a.evidencia_url).map(a => a.evidencia_url);
+  if (t.evidencia_url && !evs.includes(t.evidencia_url)) evs.unshift(t.evidencia_url);
+  const cump = t.estado === 'cumplida';
+  const caja = cump
+    ? `<div style="margin-bottom:10px;padding:10px 12px;border-radius:var(--rs);background:var(--wd);border:1px solid var(--wn)"><b>✓ La Contadora ya lo cumplió</b> el ${fmtDT(t.cumplida_at)}${t.cumplida_por ? ' (' + esc(nomUsr(t.cumplida_por)) + ')' : ''}.${t.nota ? '<br>Nota: ' + esc(t.nota) : ''}<br>Si lo eliminas, deja de contar como cumplido en su evaluación. Normalmente no se elimina un pendiente cumplido.</div>`
+    : av.length
+      ? `<div style="margin-bottom:10px;padding:10px 12px;border-radius:var(--rs);background:var(--wd);border:1px solid var(--wn)"><b>No está cumplido</b>, pero tiene ${av.length} movimiento(s) de seguimiento. Último: ${esc(String(t.ultimo_avance || '').slice(0, 90))} · ${t.ultimo_avance_at ? fmtDT(t.ultimo_avance_at) : ''}</div>`
+      : `<div style="margin-bottom:10px;padding:10px 12px;border-radius:var(--rs);background:var(--sf2);border:1px solid var(--br)"><b>No está cumplido</b> y no tiene avances registrados.</div>`;
+  modal('Eliminar pendiente', `<div style="margin-bottom:10px"><b>${esc(t.titulo)}</b><div class="mini">${esc(respNom(respKey(t)))} · vence ${fmtD(t.fecha_limite)} · ${(EST_T[t.estado] || [t.estado])[0]}</div></div>
+    ${caja}
+    ${evs.length ? `<div style="margin-bottom:10px"><b>Evidencia subida:</b> ${evs.map((u, i) => `<a class="docprev" href="${esc(u)}" target="_blank">Ver ${evs.length > 1 ? i + 1 : ''}</a>`).join(' ')}</div>` : '<div class="mini" style="margin-bottom:10px">Sin evidencia subida.</div>'}
+    <div class="fld"><label>Motivo de la eliminación</label><textarea id="elM" style="min-height:56px" placeholder="Ej. Ya no aplica / duplicado"></textarea></div>
+    <div class="mini">No se borra del registro: queda como <b>cancelado por Dirección</b> con tu firma y el motivo, y no cuenta en la evaluación de la Contadora.</div>`,
+  `<button class="btn btn-s" onclick="verPendiente('${id}')">Volver</button><button class="btn btn-d" onclick="confEliminarPend('${id}')">Firmar y eliminar</button>`);
+}
+async function confEliminarPend(id) {
+  const m = elM.value.trim(); if (!m) { toast('Escribe el motivo', 'warning'); return; }
+  const t = TAR.find(x => x.id === id);
+  const r = await rpcFirmado('fin_tarea_eliminar', { p_tarea: id, p_motivo: m }, { titulo: 'Firmar eliminación · Director', sub: t.titulo });
+  if (r) { CM('mGen'); toast('Pendiente eliminado', 'success'); await cargarTodo(); }
 }
 
 // ── Nuevo pendiente ──
@@ -3300,7 +3405,7 @@ function datosCumplimiento(per) {
   const enPlazo = tar.filter(t => abiertaT(t) && diasA(fOrig(t)) >= 0);
   const fpsV = vivas().filter(f => porSolicitar(f) && diasA(limFps(f)) < 0);
   const cxpV = abiertas('egreso').filter(f => semaforo(f) === 'r');
-  const sinRev = vivas().filter(f => en(String(f.created_at)) && !f.revision);
+  const sinRev = vivas().filter(f => en(String(f.created_at)) && sinRevisar(f));
   const pag = ABO.filter(x => !x.anulado && en(x.fecha_pago));
   const hab = diasHabiles(a, b);
   const grupo = (lista, key) => { const o = {}; lista.forEach(t => { (o[key(t)] = o[key(t)] || []).push(t); }); return o; };
