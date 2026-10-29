@@ -1427,7 +1427,7 @@ const finMesISO = () => isoD(new Date(new Date().getFullYear(), new Date().getMo
 // Los pagos de COE Nómina solo piden factura cuando Nómina la marca (honorarios activos con pago comprobado)
 // Facturas por solicitar = SOLO lo ya pagado (hay transferencia/comprobante) sin factura probatoria.
 // Una factura que no se ha liquidado va en Por pagar, no aquí.
-const porSolicitar = f => f.tipo === 'egreso' && !f.anulado && f.estado !== 'cancelado' && num(f.monto_pagado) > 0.009 && !tieneXML(f) && (f.factura_pendiente || (f.origen !== 'nomina' && !ent(f.entidad_id)?.no_factura));
+const porSolicitar = f => f.tipo === 'egreso' && !f.anulado && f.estado !== 'cancelado' && num(f.monto_pagado) > 0.009 && !tieneXML(f) && !f.sin_factura_nota && !ent(f.entidad_id)?.no_factura && (f.factura_pendiente || f.origen !== 'nomina');
 // Último día hábil (lunes a viernes) del mes de la fecha dada
 const ultHabil = iso => { const b = new Date(String(iso || isoD(new Date())).slice(0, 10) + 'T12:00:00'), d = new Date(b.getFullYear(), b.getMonth() + 1, 0, 12); while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() - 1); return isoD(d); };
 const limFps = f => ultHabil(f.factura_limite || finMesISO());
@@ -1560,14 +1560,14 @@ function docsDe(f) {
   const comp = f.comprobante_pago_url || pagos.find(a => a.comprobante_url)?.comprobante_url;
   const tag = (lbl, url, req) => url ? `<a class="dtag ok" href="${esc(url)}" target="_blank" onclick="event.stopPropagation()">${lbl}</a>` : `<span class="dtag ${req ? 'no' : ''}">${lbl}</span>`;
   const sinFac = f.documento_tipo === 'sin_factura' && f.factura_pendiente;
-  const nf = ent(f.entidad_id)?.no_factura;
+  const nf = ent(f.entidad_id)?.no_factura || f.sin_factura_nota;
   const comps = DOCS.filter(x => x.tabla === 'fin_facturas' && x.registro_id === f.id && x.tipo === 'complemento').length;
   const compTag = f.metodo_pago === 'PPD' && pagos.length ? `<span class="dtag ${comps >= pagos.length ? 'ok' : 'no'}" title="Complementos de pago recibidos / pagos">COMP ${comps}/${pagos.length}</span>` : '';
   const baja = SOLB.find(s => s.registro_id === f.id && s.estado === 'pendiente') ? '<span class="dtag no">BAJA SOLIC.</span>' : '';
   const notas = d.filter(x => x.tipo === 'recibo_provisional');
   const notaTag = notas.length ? notas.map((x, i) => `<a class="dtag ok" href="${esc(x.url)}" target="_blank" onclick="event.stopPropagation()" title="Foto del comprobante del proveedor">NOTA${notas.length > 1 ? ' ' + (i + 1) : ''}</a>`).join('') : '';
   const notaAdd = puede(f.tipo === 'ingreso' ? 'cxc' : 'cxp') && f.tipo === 'egreso' ? `<span class="dtag no" style="cursor:pointer" title="Subir foto de la nota, recibo o ticket del proveedor" onclick="event.stopPropagation();notaFoto('${f.id}')">${notas.length ? '＋' : '📷 NOTA'}</span>` : '';
-  return `<div class="docs">${nf ? '<span class="dtag">NO FACTURA</span>' + notaTag + notaAdd : tag('XML', tiene('xml'), !sinFac && f.tipo === 'egreso') + tag('PDF', tiene('pdf'), !sinFac && f.tipo === 'egreso')}${tag('PAGO', comp, pagos.length > 0)}${compTag}${baja}${f.propuesta_pago && f.estado !== 'pagado' ? `<span class="dtag ok" title="Propuesto para pagar el ${fmtD(f.propuesta_pago)}">PROP</span>` : ''}${f.revision === 'revisado' ? '<span class="dtag ok">REV</span>' : f.revision === 'observado' ? '<span class="dtag no">OBS</span>' : ''}</div>`;
+  return `<div class="docs">${nf ? `<span class="dtag" title="${f.sin_factura_nota && !ent(f.entidad_id)?.no_factura ? 'Pagada sin factura con nota del proveedor' : 'Proveedor que no da factura'}">SIN FACTURA</span>` + notaTag + notaAdd : tag('XML', tiene('xml'), !sinFac && f.tipo === 'egreso') + tag('PDF', tiene('pdf'), !sinFac && f.tipo === 'egreso')}${tag('PAGO', comp, pagos.length > 0)}${compTag}${baja}${f.propuesta_pago && f.estado !== 'pagado' ? `<span class="dtag ok" title="Propuesto para pagar el ${fmtD(f.propuesta_pago)}">PROP</span>` : ''}${f.revision === 'revisado' ? '<span class="dtag ok">REV</span>' : f.revision === 'observado' ? '<span class="dtag no">OBS</span>' : ''}</div>`;
 }
 function rCuentas(tipo) {
   const egr = tipo === 'egreso';
@@ -1637,7 +1637,7 @@ function verCuenta(id) {
     f.estado !== 'pagado' && !f.anulado && puedePagar(f) ? `<button class="btn btn-p" onclick="pagarCuenta('${id}')">${egr ? 'Pagar' : 'Registrar cobro'}</button>` : '',
     egr && f.estado !== 'pagado' && !f.anulado && puede('cxp') ? (f.propuesta_pago ? `<button class="btn btn-s" onclick="quitarPropuesta('${id}')">Quitar de propuesta</button>` : `<button class="btn btn-s" onclick="proponerUna('${id}')">Proponer pago</button>`) : '',
     f.estado !== 'pagado' && !f.anulado && puede('cxp') ? `<button class="btn btn-s" onclick="cambiarFechaPago(['${id}'])">📅 Fecha de pago</button>` : '',
-    puede(mod) && egr && ent(f.entidad_id)?.no_factura ? `<button class="btn btn-s" onclick="notaFoto('${id}')">📷 Foto de la nota / recibo</button>` : '',
+    puede(mod) && egr && !tieneXML(f) ? `<button class="btn btn-s" onclick="notaFoto('${id}')">📷 Foto de la nota / recibo</button>` : '',
     puede(mod) ? `<button class="btn btn-s" onclick="openUpload('${id}')">⬆ Factura, complemento o nota de crédito</button>` : '',
     puede(mod) ? `<button class="btn btn-s" onclick="correoProveedor('${f.entidad_id}','${id}')">✉ Correo</button>` : '',
     puede('revision') ? `<button class="btn btn-s" onclick="revisar('${id}','revisado')">✓ Revisado</button><button class="btn btn-w" onclick="revisar('${id}','observado')">Observar</button>` : '',
@@ -1835,7 +1835,7 @@ function rIngDiario() {
 function pagoInfo(a) {
   const f = FAC.find(x => x.id === a.factura_id) || {}, e = ent(f.entidad_id) || {};
   const comp = a.comprobante_url || f.comprobante_pago_url || '';
-  const xml = tieneXML(f), noReq = f.tipo === 'ingreso' || e.no_factura || f.origen === 'nomina';
+  const xml = tieneXML(f), noReq = f.tipo === 'ingreso' || e.no_factura || f.sin_factura_nota || f.origen === 'nomina';
   const fac = xml ? 'fac' : noReq ? 'noreq' : 'sinfac';
   const est = a.anulado ? 'anul' : comp && (xml || noReq) ? 'comp' : !comp ? 'sincomp' : 'sinfac';
   return { a, f, comp, fac, est, liq: saldo(f) <= 0.5 };
@@ -2125,7 +2125,7 @@ function rFps() {
     <td>${fpsPagada(f) ? `<span class="bdg bdg-apr">✓ Pagado</span><div class="mini">${fmtD(f.fecha_pago)}${f.comprobante_pago_url ? ` · <a href="${esc(f.comprobante_pago_url)}" target="_blank">comprobante</a>` : ''}</div>` : '<span class="bdg bdg-pnd">Sin pago aún</span>'}</td>
     <td class="amt" style="text-align:right">${$$(fpsPagada(f) ? f.monto_pagado : f.monto_total)}</td>
     <td>${fmtD(limFps(f))}<div class="mini">${fpsDiasTxt(f)}</div></td><td class="mini">${c ? fmtDT(c.enviado_at) : '<span style="color:var(--wn)">no se ha pedido</span>'}</td>
-    <td>${puede('fps') ? `<div class="rowact"><button class="btn btn-s btn-sm" onclick="correoProveedor('${f.entidad_id}','${f.id}',null,'factura')">✉ Pedir</button><button class="btn btn-p btn-sm" onclick="fpsSubirFactura('${f.id}')">⬆ XML/PDF</button></div>` : ''}</td></tr>`; };
+    <td>${puede('fps') ? `<div class="rowact"><button class="btn btn-s btn-sm" onclick="correoProveedor('${f.entidad_id}','${f.id}',null,'factura')">✉ Pedir</button><button class="btn btn-p btn-sm" onclick="fpsSubirFactura('${f.id}')">⬆ XML/PDF</button><button class="btn btn-s btn-sm" title="El proveedor no da factura: sube la foto de su nota y sale de esta lista" onclick="notaFoto('${f.id}')">📷 No da factura</button></div>` : ''}</td></tr>`; };
   const cab = '<thead><tr><th></th><th>Proveedor · concepto</th><th>Pago</th><th style="text-align:right">Monto</th><th>Límite para solicitar</th><th>Último aviso</th><th></th></tr></thead>';
   const cuerpo = fpsMesProv(L, fpsFecha, fila, cab, 7, 'f', f => num(fpsPagada(f) ? f.monto_pagado : f.monto_total), F => puede('fps') ? `<button class="btn btn-s btn-sm" onclick="correoProveedor('${F[0].entidad_id}','${F[0].id}',null,'factura')">✉ Pedir todas</button>` : '');
   const sel = (k, t) => `<option value="${k}" ${VIEW.fpsOrd === k ? 'selected' : ''}>${t}</option>`;
@@ -4321,21 +4321,37 @@ function upReabrir() {
 boot();
 
 // ── Proveedores que no facturan: foto de su nota / recibo / ticket ──
+// La cuenta queda pagada SIN factura y sale de Facturas por solicitar
 function notaFoto(fid) {
-  const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*,application/pdf'; i.multiple = true;
-  i.onchange = () => notaSubir(fid, [...i.files]); i.click();
+  const f = FAC.find(x => x.id === fid); if (!f) return;
+  const e = ent(f.entidad_id) || {}, otras = vivas().filter(x => x.entidad_id === f.entidad_id && x.id !== fid && porSolicitar(x)).length;
+  window._ntF = [];
+  modal('Comprobante sin factura · ' + nomEnt(f.entidad_id), `
+    <div class="prop" style="margin-top:0"><div class="row"><span>Concepto</span><span>${esc(f.descripcion || '')}</span></div><div class="row"><span>Total · pagado</span><span class="amt">${$$(f.monto_total)} · ${$$(f.monto_pagado)}</span></div></div>
+    <div class="drop" style="margin-top:14px"><input type="file" multiple accept="image/*,application/pdf" onchange="window._ntF=[...this.files];document.getElementById('ntL').innerHTML=window._ntF.map(x=>'<div class=&quot;fitem&quot;><span class=&quot;fk&quot;>NOTA</span><span class=&quot;fn&quot;>'+esc(x.name)+'</span></div>').join('')"><div class="big">📷</div><div><b>Foto de la nota, recibo o ticket del proveedor</b></div><div class="mini">Foto o PDF · puedes tomarla con la cámara</div></div>
+    <div id="ntL" class="flist"></div>
+    ${f.tipo === 'egreso' ? `<label style="display:flex;gap:8px;align-items:flex-start;margin-top:12px;cursor:pointer;text-transform:none;font-size:13px"><input type="checkbox" id="ntP" style="width:auto;margin-top:3px" ${e.no_factura ? 'checked disabled' : ''}><span><b>Este proveedor nunca da factura</b>${e.no_factura ? ' (ya está marcado)' : ''}<div class="mini">Sus pagos futuros ya no se pedirán como factura${otras ? ` y salen también sus <b>${otras}</b> cuenta(s) que hoy están en Facturas por solicitar` : ''}.</div></span></label>` : ''}
+    <div class="mini" style="margin-top:10px">La cuenta queda como <b>pagada sin factura</b>, con la nota como comprobante, y <b>sale de Facturas por solicitar</b>. No registra un pago nuevo.</div>`,
+  `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="notaGuardar('${fid}')">Firmar y guardar</button>`);
 }
-async function notaSubir(fid, files) {
-  if (!files.length) return;
+async function notaGuardar(fid) {
+  const p = document.getElementById('ntP'), prov = !!(p && p.checked && !p.disabled);
+  if (!window._ntF.length && !prov) return toast('Sube la foto de la nota (o marca que el proveedor nunca da factura)', 'warning');
+  await notaSubir(fid, window._ntF, prov);
+}
+async function notaSubir(fid, files, prov = false) {
   const f = FAC.find(x => x.id === fid);
-  let pin; try { pin = await askPin('Subir comprobante del proveedor', `${nomEnt(f.entidad_id)} · ${files.length} archivo(s)`); } catch { return; }
-  toast('Subiendo…', 'info');
-  for (const file of files) {
-    let u; try { u = await subirArchivo(file, 'notas'); } catch (e) { return toast(e.message, 'error'); }
-    const r = await rpcConPin('fin_adjuntar', { p_tabla: 'fin_facturas', p_registro: fid, p_tipo: 'recibo_provisional', p_url: u.url, p_sha256: u.sha }, pin);
+  let pin; try { pin = await askPin('Firmar comprobante sin factura', `${nomEnt(f.entidad_id)} · ${files.length} archivo(s)`); } catch { return; }
+  toast('Guardando…', 'info');
+  const L = files.length ? files : [null]; let otras = 0;
+  for (let k = 0; k < L.length; k++) {
+    let u = { url: '', sha: '' };
+    if (L[k]) { try { u = await subirArchivo(L[k], 'notas'); } catch (e) { return toast(e.message, 'error'); } }
+    const r = await rpcConPin('fin_nota_sin_factura', { p_factura: fid, p_url: u.url, p_sha256: u.sha, p_proveedor: prov && k === 0 }, pin);
     if (!r.ok) return toast(ERR[r.error] || r.error, 'error');
+    otras += num(r.otras);
   }
-  toast('Comprobante del proveedor guardado', 'success'); CM('mGen'); await cargarTodo();
+  toast(`Pagada sin factura · salió de Facturas por solicitar${otras ? ` (y ${otras} cuenta(s) más del proveedor)` : ''}`, 'success'); CM('mGen'); await cargarTodo();
 }
 
 // ══ TEMAS DE COLOR (mismos que COE Quirófano) ══
