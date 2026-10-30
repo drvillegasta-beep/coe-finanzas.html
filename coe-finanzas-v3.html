@@ -1918,13 +1918,56 @@ function rPedidos() {
   else if (VIEW.pedF !== 'todos') L = L.filter(p => p.estado === VIEW.pedF);
   const chips = [['activos', 'Activos'], ['solicitado', 'Por autorizar'], ['autorizado', 'Autorizados'], ['enviado', 'Enviados'], ['recibido', 'Recibidos'], ['todos', 'Todos']]
     .map(([k, l]) => `<span class="chip ${VIEW.pedF === k ? 'act' : ''}" onclick="VIEW.pedF='${k}';renderTab()">${l}</span>`).join('');
+  VIEW.pedV = VIEW.pedV || 'prov';
+  const vista = `<div class="seg">${[['prov', 'Por proveedor'], ['ped', 'Por pedido']].map(([k, t]) => `<button class="${VIEW.pedV === k ? 'on' : ''}" onclick="VIEW.pedV='${k}';renderTab()">${t}</button>`).join('')}</div>`;
   return `<div class="ph"><div><div class="ptit">Pedidos y órdenes de compra</div><div class="psub">El área solicita · Dirección o Administración autoriza · arriba de ${$$(limiteFirma())} firma el Director General · urgentes con autorización exprés</div></div>
     ${puede('pedidos') ? `<button class="btn btn-p btn-sm" onclick="nuevoPedido()">+ Nuevo pedido</button>` : ''}</div>
-  <div class="pad"><div class="tc"><div class="ttb"><div class="chips">${chips}</div></div>
-  ${L.length ? `<table><thead><tr><th>Folio</th><th>Área</th><th>Proveedor</th><th>Descripción</th><th style="text-align:right">Estimado</th><th>Estado</th><th>Solicitó</th><th></th></tr></thead><tbody>
+  <div class="pad"><div class="tc"><div class="ttb" style="gap:10px">${vista}<div class="chips">${chips}</div></div>
+  ${VIEW.pedV === 'prov' ? pedPorProveedor(L) : L.length ? `<table><thead><tr><th>Folio</th><th>Área</th><th>Proveedor</th><th>Descripción</th><th style="text-align:right">Estimado</th><th>Estado</th><th>Solicitó</th><th></th></tr></thead><tbody>
   ${L.map(p => `<tr style="cursor:pointer" onclick="verPedido('${p.id}')"><td><b>${esc(p.folio)}</b>${p.urgente ? ' <span class="bdg bdg-rt-r">URGENTE</span>' : ''}</td><td>${esc(p.area)}<div class="mini">${esc(p.sede || '')}</div></td><td>${esc(nomEnt(p.entidad_id))}</td><td>${esc(p.descripcion)}</td><td class="amt" style="text-align:right">${$$(p.monto_estimado)}</td><td><span class="bdg ${PED_EST[p.estado]?.[1] || ''}">${PED_EST[p.estado]?.[0] || esc(p.estado)}</span></td><td class="mini">${esc(nomUsr(p.solicitado_por))}<br>${fmtDT(p.solicitado_at)}</td>
     <td onclick="event.stopPropagation()">${p.estado === 'solicitado' && puede('pedidos', 3) ? `<button class="btn btn-p btn-sm" onclick="autorizarPedido('${p.id}','autorizar')">Autorizar</button>` : p.estado === 'autorizado' && puede('pedidos') ? `<button class="btn btn-s btn-sm" onclick="enviarPedido('${p.id}')">✉ Enviar</button>` : ''}</td></tr>`).join('')}</tbody></table>`
       : `<div class="emp"><div class="ic">⬡</div><p>Sin pedidos en este filtro</p></div>`}</div></div>`;
+}
+// Productos de todos los pedidos del filtro, englobados por proveedor
+function pedProvDe(p, l) { if (p.entidad_id) return p.entidad_id; const fp = (INV.farProd || []).find(x => String(x.id) === String(l.far_producto_id)); return l.entidad_id || fp?.proveedor_id || ''; }
+function pedLineas(L) {
+  const out = [];
+  L.forEach(p => { const pt = Array.isArray(p.partidas) && p.partidas.length ? p.partidas : [{ cantidad: 1, descripcion: p.descripcion, precio: p.monto_estimado, unidad: '' }];
+    pt.forEach(l => out.push({ p, l, prov: pedProvDe(p, l), k: l.far_producto_id ? 'f' + l.far_producto_id : l.material_id ? 'm' + l.material_id : 'd' + normTx(l.descripcion), pr: num(l.precio ?? l.costo) })); });
+  return out;
+}
+VIEW.pedAbre = VIEW.pedAbre || {};
+function pedPorProveedor(L) {
+  if (!L.length) return `<div class="emp"><div class="ic">⬡</div><p>Sin pedidos en este filtro</p></div>`;
+  const X = pedLineas(L), G = {};
+  X.forEach(x => (G[x.prov] = G[x.prov] || []).push(x));
+  const P = Object.entries(G).map(([eid, Y]) => ({ eid, Y, n: eid ? nomEnt(eid) : 'Sin proveedor asignado', tot: Y.reduce((s, x) => s + num(x.l.cantidad) * x.pr, 0), peds: [...new Set(Y.map(x => x.p))] })).sort((a, b) => (!a.eid) - (!b.eid) || b.tot - a.tot || a.n.localeCompare(b.n));
+  const ord = { solicitado: 0, autorizado: 1, enviado: 2, recibido: 3, facturado: 4 };
+  return `<table><thead><tr><th>Proveedor · producto</th><th style="text-align:right">Cantidad</th><th style="text-align:right">Precio</th><th style="text-align:right">Importe</th><th>Pedidos</th><th></th></tr></thead><tbody>${P.map(g => {
+    const ab = VIEW.pedAbre[g.eid || '_'] ?? P.length <= 3, est = {}; g.peds.forEach(p => est[p.estado] = (est[p.estado] || 0) + 1);
+    const S = {}; g.Y.forEach(x => { const s = S[x.k] = S[x.k] || { d: x.l.descripcion, u: x.l.unidad || 'pza', q: 0, imp: 0, pr: x.pr, peds: [] }; s.q += num(x.l.cantidad); s.imp += num(x.l.cantidad) * x.pr; if (x.pr) s.pr = x.pr; s.peds.push({ p: x.p, q: num(x.l.cantidad) }); });
+    const mixtos = g.peds.filter(p => !p.entidad_id && new Set(pedLineas([p]).map(x => x.prov)).size > 1);
+    return `<tr class="grp-hdr" style="cursor:pointer" onclick="VIEW.pedAbre['${g.eid || '_'}']=!${ab};renderTab()"><td colspan="3"><div class="grp-name">${ab ? '▾' : '▸'} ${esc(g.n)} <span class="mini">${Object.keys(S).length} producto(s) · ${g.peds.length} pedido(s) · ${Object.entries(est).sort((a, b) => (ord[a[0]] ?? 9) - (ord[b[0]] ?? 9)).map(([k, n]) => `${n} ${(PED_EST[k]?.[0] || k).toLowerCase()}`).join(' · ')}</span></div></td><td class="amt" style="text-align:right">${g.tot ? $$(g.tot) : '—'}</td><td colspan="2" style="text-align:right" onclick="event.stopPropagation()">${g.eid ? `<button class="btn btn-s btn-sm" onclick="imprimirOCProv('${g.eid}')">🖨 Orden consolidada</button>` : ''}</td></tr>`
+      + (!ab ? '' : Object.values(S).sort((a, b) => a.d.localeCompare(b.d)).map(s => `<tr><td style="padding-left:30px">${esc(s.d)}</td><td class="amt" style="text-align:right">${almNum(s.q)} ${esc(s.u)}</td><td class="amt" style="text-align:right">${s.pr ? $$(s.pr) : '—'}</td><td class="amt" style="text-align:right">${s.imp ? $$(s.imp) : '—'}</td><td>${s.peds.map(z => `<span class="chip" style="cursor:pointer;font-size:11px;padding:2px 8px" title="${esc(PED_EST[z.p.estado]?.[0] || z.p.estado)}" onclick="verPedido('${z.p.id}')">${esc(z.p.folio)}${s.peds.length > 1 ? ' ×' + almNum(z.q) : ''} <span class="mini">${esc((PED_EST[z.p.estado]?.[0] || z.p.estado).toLowerCase())}</span></span>`).join(' ')}</td><td></td></tr>`).join('')
+      + (ab && mixtos.length && puede('pedidos') ? `<tr><td colspan="6" class="mini" style="padding-left:30px;color:var(--wn)">${mixtos.map(p => `${esc(p.folio)} trae productos de varios proveedores · <a href="#" style="color:var(--pr)" onclick="event.preventDefault();dividirPedido('${p.id}')">separarlo por proveedor</a>`).join(' · ')}</td></tr>` : ''));
+  }).join('')}</tbody></table>`;
+}
+// Orden de compra consolidada: todo lo autorizado/enviado de un proveedor en una sola hoja
+async function imprimirOCProv(eid) {
+  const L = PED.filter(p => enMiSede(p) && ['autorizado', 'enviado'].includes(p.estado)), X = pedLineas(L).filter(x => x.prov === eid);
+  if (!X.length) return toast('Este proveedor no tiene pedidos autorizados o enviados por surtir', 'info');
+  const e = ent(eid) || {}, S = {};
+  X.forEach(x => { const s = S[x.k] = S[x.k] || { d: x.l.descripcion, u: x.l.unidad || 'pza', q: 0, pr: x.pr, f: new Set() }; s.q += num(x.l.cantidad); if (x.pr) s.pr = x.pr; s.f.add(x.p.folio); });
+  const filas = Object.values(S).sort((a, b) => a.d.localeCompare(b.d)), tot = filas.reduce((s, l) => s + l.q * l.pr, 0), folios = [...new Set(X.map(x => x.p.folio))];
+  imprimir('Orden de compra · ' + (e.nombre || ''), `
+    <div class="kv"><b>Proveedor</b><div>${esc(e.nombre || '—')}${e.rfc ? ' · RFC ' + esc(e.rfc) : ''}${e.telefono ? '<br>Tel. ' + esc(e.telefono) : ''}${e.email ? ' · ' + esc(e.email) : ''}</div>
+      <b>Fecha</b><div>${fmtD(hoyISO())}</div><b>Folios incluidos</b><div><b>${folios.map(esc).join(', ')}</b></div>
+      <b>Entregar</b><div>Av. Luis Donaldo Colosio 151, Col. La Purísima, Tacámbaro, Mich.</div></div>
+    <table><thead><tr><th>Cant.</th><th>Unidad</th><th>Descripción</th><th>Folio(s)</th><th class="r">Precio unitario</th><th class="r">Importe</th></tr></thead><tbody>
+    ${filas.map(l => `<tr><td>${almNum(l.q)}</td><td>${esc(l.u)}</td><td>${esc(l.d)}</td><td>${[...l.f].map(esc).join(', ')}</td><td class="r">${l.pr ? $$(l.pr) : ''}</td><td class="r">${l.pr ? $$(l.q * l.pr) : ''}</td></tr>`).join('')}
+    <tr class="tot"><td colspan="5">Total estimado (IVA incluido)</td><td class="r">${$$(tot)}</td></tr></tbody></table>
+    <div class="p"><b>Facturar a:</b> ${esc(RS[0]?.nombre || '')} · RFC ${esc(RS[0]?.rfc || '')}. Enviar XML y PDF a ${esc(CFG.correo_alertas || '')}. Favor de citar los folios <b>${folios.map(esc).join(', ')}</b> en la factura, la remisión y la entrega. En medicamentos y material indicar lote y caducidad.</div>
+    <div class="firmas"><div>Elaboró<br><b>${esc(cu.nombre || '')}</b></div><div>Autorizó<br>&nbsp;</div><div>Recibió (proveedor)<br>&nbsp;</div></div>`);
 }
 function nuevoPedido() {
   window._lineas = [{ c: 1, d: '', p: '' }];
