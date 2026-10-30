@@ -1589,7 +1589,7 @@ function rCuentas(tipo) {
     .map(([k, l]) => `<span class="chip ${F === k ? 'act' : ''}" onclick="VIEW.cxpF='${k}';renderTab()">${l}</span>`).join('');
   return `<div class="ph"><div><div class="ptit">${egr ? 'Por pagar' : 'Por cobrar'}</div><div class="psub">${L.length} cuentas · saldo ${$$(tot)} · agrupado por ${egr ? 'proveedor' : 'deudor'}</div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">${puede(egr ? 'cxp' : 'cxc') ? `<button class="btn btn-s btn-sm" onclick="nuevaCuenta('${tipo}')">${egr ? '+ Captura manual' : '+ Cuenta por cobrar'}</button>` : ''}
-    <button class="btn btn-s btn-sm" onclick="cxTodos('${tipo}',true)">▸ Colapsar todos</button><button class="btn btn-s btn-sm" onclick="cxTodos('${tipo}',false)">▾ Expandir todos</button><button class="btn btn-s btn-sm" onclick="expCuentas('${tipo}')">Excel</button>${puede(egr ? 'cxp' : 'cxc') ? `<button class="btn btn-d btn-sm" onclick="openEliminar('${tipo}')">🗑 Eliminar mal capturados</button>` : ''}${puede(egr ? 'cxp' : 'cxc') ? `<button class="btn btn-p btn-sm" onclick="openUpload()">⬆ ${egr ? 'Subir factura de proveedor' : 'Subir factura emitida'}</button>` : ''}</div></div>
+    <button class="btn btn-s btn-sm" onclick="cxTodos('${tipo}',true)">▸ Colapsar todos</button><button class="btn btn-s btn-sm" onclick="cxTodos('${tipo}',false)">▾ Expandir todos</button><button class="btn btn-s btn-sm" onclick="expCuentas('${tipo}')">Excel</button>${egr && puede('cxp') ? `<button class="btn btn-s btn-sm" onclick="nomCxp()">＋ Nómina COE por persona</button>` : ''}${puede(egr ? 'cxp' : 'cxc') ? `<button class="btn btn-d btn-sm" onclick="openEliminar('${tipo}')">🗑 Eliminar mal capturados</button>` : ''}${puede(egr ? 'cxp' : 'cxc') ? `<button class="btn btn-p btn-sm" onclick="openUpload()">⬆ ${egr ? 'Subir factura de proveedor' : 'Subir factura emitida'}</button>` : ''}</div></div>
   <div class="pad"><div class="tc">
     <div class="ttb"><input class="sbox" placeholder="Buscar proveedor, concepto, folio, UUID o monto" value="${esc(egr ? VIEW.cxpQ : VIEW.cxcQ)}" oninput="VIEW.${egr ? 'cxpQ' : 'cxcQ'}=this.value;clearTimeout(window._bq);window._bq=setTimeout(()=>{renderTab();const s=document.querySelector('.sbox');s.focus();s.setSelectionRange(s.value.length,s.value.length)},350)"><div class="chips">${chips}</div></div>
     ${L.length ? `<table><thead><tr><th>Estatus</th><th>Concepto</th><th>Factura</th><th>Vence</th><th style="text-align:right">Total</th><th style="text-align:right">Saldo</th><th>Documentos</th><th></th></tr></thead><tbody>
@@ -2313,7 +2313,7 @@ function buildRecOcurrencias(diasFuturo) {
     const alta = r.fecha_inicio ? new Date(r.fecha_inicio + 'T00:00:00') : r.created_at ? (d => (d.setHours(0, 0, 0, 0), d))(new Date(r.created_at)) : null;
     const fin = r.fecha_fin ? new Date(r.fecha_fin + 'T00:00:00') : null;
     calcOcurrencias(r, diasFuturo).filter(d => (!alta || d >= alta) && (!fin || d <= fin)).forEach(d => {
-      const per = isoD(d), pag = FAC.find(f => f.recurrente_id === r.id && f.recurrente_periodo === per && !f.anulado) || cuentaNomina(r, per)
+      const per = isoD(d), pag = nomGrupoCuenta(r, per) || FAC.find(f => f.recurrente_id === r.id && f.recurrente_periodo === per && !f.anulado) || cuentaNomina(r, per)
         || (!nomRef(r) && FAC.find(f => f.entidad_id === r.entidad_id && f.tipo === 'egreso' && !f.anulado && f.estado !== 'cancelado' && !f.recurrente_id && f.fecha_vencimiento && Math.abs(diasEntre(f.fecha_vencimiento, per)) <= 10));
       const diff = Math.floor((d - hoy) / 86400000);
       items.push({ rec: r, fecha: d, factura: pag, diasDiff: diff, estado: pag && pag.estado === 'pagado' ? 'pagado' : diff < 0 ? 'vencido' : diff <= (r.dias_alerta || 3) ? 'proximo' : 'futuro' });
@@ -2390,9 +2390,10 @@ function openTransferencias() {
   const celda = o => {
     if (!o) return '<td class="mini">—</td>';
     const i = oc.indexOf(o), k = isoD(o.fecha), f = o.factura;
+    if (f && f._grupo) { const G = f._grupo, pg = G.filter(x => saldo(x) <= 0.5).length; return `<td><div class="${pg === G.length ? 'trok' : ''}" style="cursor:pointer" onclick="nomGrupoVer('${o.rec.id}','${k}')">${pg === G.length ? '✓ ' : ''}${$$(f.monto_total)} <span class="mini">· ${G.length} cuenta(s) por persona</span><div class="mini">${pg} de ${G.length} pagadas${pg < G.length ? ' · pendiente ' + $$(f.monto_total - f.monto_pagado) : ''} · ver ›</div></div></td>`; }
     if (f && num(f.monto_pagado) > 0.009) return `<td>${nomRef(o.rec) === 'fijo' && puede('recurrentes') ? `<button class="btn btn-s btn-sm" style="float:right;padding:1px 7px;margin-left:4px" title="Desglose por empleado y concepto" onclick="event.stopPropagation();nomDesglose('${f.id}')">${f.desglose?.length ? '☰ ' + f.desglose.length : '☰ Desglosar'}</button>` : ''}${esAdmin() ? `<button class="btn btn-s btn-sm" style="float:right;padding:1px 7px" title="Corregir monto o fecha" onclick="event.stopPropagation();corregirPagoNom('${f.id}')">✎</button>` : ''}<div class="trok" onclick="verCuenta('${f.id}')">✓ ${$$(f.monto_pagado)}<div class="mini">pagado ${fmtD(f.fecha_pago)}${f.comprobante_pago_url ? ' · <a href="' + esc(f.comprobante_pago_url) + '" target="_blank" onclick="event.stopPropagation()">comprobante</a>' : ''}</div></div></td>`;
     const est = f ? saldo(f) : num(o.rec.monto) || montoNomina(o.rec, k);
-    return `<td>${puede('recurrentes') ? `<button class="btn ${diasA(k) <= 0 ? 'btn-p' : 'btn-s'} btn-sm" onclick="pagarRecurrente(${i})">⬆ Subir transferencia</button>` : '<span class="mini">pendiente</span>'}<div class="mini" style="margin-top:3px">${est !== null && est !== undefined ? $$(est) + ' según COE Nómina' : 'monto por capturar'} · ${fmtD(k)}</div></td>`;
+    return `<td>${puede('recurrentes') ? `<button class="btn ${diasA(k) <= 0 ? 'btn-p' : 'btn-s'} btn-sm" onclick="pagarRecurrente(${i})">⬆ Subir transferencia</button>` : '<span class="mini">pendiente</span>'}${nomRef(o.rec) === 'fijo' && !f && puede('cxp') ? `<button class="btn btn-s btn-sm" style="margin-left:4px" title="Separar por persona en Por pagar" onclick="nomCxp('${o.rec.id}','${k}')">☰ Por persona</button>` : ''}<div class="mini" style="margin-top:3px">${est !== null && est !== undefined ? $$(est) + ' según COE Nómina' : 'monto por capturar'} · ${fmtD(k)}</div></td>`;
   };
   const filas = recs.map(r => {
     const O = oc.filter(o => o.rec.id === r.id).sort((a, b) => a.fecha - b.fecha), q1 = O.find(o => o.fecha.getDate() <= 15), q2 = O.find(o => o.fecha.getDate() > 15), fijo = nomRef(r) === 'fijo';
@@ -2608,8 +2609,9 @@ async function nomDesgGuardar() {
 function nomDesgMes() {
   const base = new Date(); base.setDate(1); base.setMonth(base.getMonth() + VIEW.trOff);
   const ym = isoD(base).slice(0, 7);
-  const F = FAC.filter(f => !f.anulado && esNomFijo(f) && String(f.recurrente_periodo || f.fecha_pago || '').slice(0, 7) === ym && num(f.monto_pagado) > 0.009);
-  const L = F.flatMap(f => (f.desglose || []).map(x => ({ ...x, q: String(f.recurrente_periodo || '').slice(8, 10) <= '15' ? 'q1' : 'q2' })));
+  const perDe = f => f.recurrente_periodo || String(f.nomina_grupo || '').split('|')[1] || f.fecha_vencimiento || f.fecha_pago || '';
+  const F = FAC.filter(f => !f.anulado && esNomFijo(f) && String(perDe(f)).slice(0, 7) === ym && num(f.monto_pagado) > 0.009);
+  const L = F.flatMap(f => (f.desglose || []).map(x => ({ ...x, q: String(perDe(f)).slice(8, 10) <= '15' ? 'q1' : 'q2' })));
   const E = {}; L.forEach(x => { const k = x.empleado; (E[k] = E[k] || { q1: 0, q2: 0, c: {} }); E[k][x.q] += num(x.monto); E[k].c[x.concepto || '—'] = (E[k].c[x.concepto || '—'] || 0) + num(x.monto); });
   const sin = F.filter(f => !(f.desglose || []).length), tot = F.reduce((s, f) => s + num(f.monto_pagado), 0), td = L.reduce((s, x) => s + num(x.monto), 0);
   window._ndX = L.map(x => ({ Mes: ym, Quincena: x.q === 'q1' ? '15' : 'Fin de mes', Empleado: x.empleado, Concepto: x.concepto, Monto: num(x.monto) }));
@@ -2618,6 +2620,54 @@ function nomDesgMes() {
     ${Object.entries(E).sort((a, b) => a[0].localeCompare(b[0])).map(([n, e]) => `<tr><td><b>${esc(n)}</b></td><td class="mini">${Object.entries(e.c).map(([c, m]) => esc(c) + ' ' + $$(m)).join(' · ')}</td><td class="amt" style="text-align:right">${$$(e.q1)}</td><td class="amt" style="text-align:right">${$$(e.q2)}</td><td class="amt" style="text-align:right"><b>${$$(e.q1 + e.q2)}</b></td></tr>`).join('')}
     <tr><td colspan="4"><b>Total desglosado</b> <span class="mini">· transferido ${$$(tot)}</span></td><td class="amt" style="text-align:right"><b>${$$(td)}</b></td></tr></tbody></table></div>` : '<div class="emp"><p>Sin desglose capturado este mes</p></div>'}`,
   `<button class="btn btn-s" onclick="openTransferencias()">Volver</button>${L.length ? `<button class="btn btn-s" onclick="xls(window._ndX,'Nomina_COE_${ym}')">Excel</button>` : ''}<button class="btn btn-p" onclick="CM('mGen')">Cerrar</button>`, 'lg');
+}
+
+// ── Nómina COE separada por persona: cada línea es una cuenta en Por pagar ──
+function nomGrupoCuenta(r, per) {
+  if (nomRef(r) !== 'fijo') return null;
+  const G = FAC.filter(f => f.nomina_grupo === r.id + '|' + per && !f.anulado && f.estado !== 'cancelado'); if (!G.length) return null;
+  const tot = G.reduce((s, f) => s + num(f.monto_total), 0), pag = G.reduce((s, f) => s + num(f.monto_pagado) + num(f.descuento_monto), 0);
+  return { id: G[0].id, _grupo: G, entidad_id: r.entidad_id, monto_total: tot, monto_pagado: pag, descuento_monto: 0, estado: G.every(f => saldo(f) <= 0.5) ? 'pagado' : 'pendiente', fecha_pago: G.map(f => f.fecha_pago).filter(Boolean).sort().pop() || null, recurrente_id: r.id, recurrente_periodo: per, descripcion: r.descripcion, tipo: 'egreso' };
+}
+function nomCxp(rid, per) {
+  const r = REC.find(x => x.id === rid) || REC.find(x => nomRef(x) === 'fijo');
+  if (!per) { const h = hoyD(), d = h.getDate() <= 15 ? new Date(h.getFullYear(), h.getMonth(), 15) : new Date(h.getFullYear(), h.getMonth() + 1, 0); per = isoD(d); }
+  const ya = r ? FAC.filter(f => f.nomina_grupo === r.id + '|' + per && !f.anulado) : [];
+  const base = ya.length ? [] : (r?.desglose?.length ? r.desglose : NOM_EMP.filter(e => e.activo !== false && e.esquema === 'fijo').map(e => ({ empleado: e.nombre, empleado_id: e.id, concepto: 'Sueldo quincenal', monto: '' })));
+  window._nc = { rid: r?.id || null, per, L: (base.length ? base : [{ empleado: '', concepto: 'Sueldo quincenal', monto: '' }]).map(x => ({ ...x, fecha: per })) };
+  modal('Nómina COE por persona', `<div class="mini" style="margin-bottom:10px">Cada línea se agrega como una <b>cuenta por pagar</b> separada (nombre, concepto, monto y fecha de pago). Se pagan una por una con su comprobante y ya no se cuentan como un solo pago de "Nómina COE".${ya.length ? ` <b>Esta quincena ya tiene ${ya.length} cuenta(s) por persona</b>; lo que agregues se suma.` : ''}</div>
+    <div class="fgrd" style="margin-bottom:8px"><div class="fgrp"><label>Quincena</label><input type="date" id="ncPer" value="${per}" onchange="_nc.per=this.value"></div></div>
+    <datalist id="ncEmp">${[...new Set(NOM_EMP.filter(e => e.activo !== false).map(e => e.nombre).concat(FAC.flatMap(x => (x.desglose || []).map(l => l.empleado))))].map(n => `<option value="${esc(n)}">`).join('')}</datalist>
+    <datalist id="ncCon">${NOM_CONCEPTOS.map(c => `<option value="${c}">`).join('')}</datalist>
+    <div id="ncB"></div>
+    <button class="btn btn-s btn-sm" style="margin-top:8px" onclick="_nc.L.push({empleado:'',concepto:'Sueldo quincenal',monto:'',fecha:_nc.per});ncPintar()">＋ Persona / concepto</button>`,
+  `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="nomCxpGuardar()">Firmar y agregar a Por pagar</button>`, 'xl');
+  ncPintar();
+}
+function ncPintar() {
+  const d = window._nc, s = d.L.reduce((a, x) => a + num(x.monto), 0);
+  document.getElementById('ncB').innerHTML = `<div class="tc"><table><thead><tr><th>Nombre del personal</th><th>Concepto</th><th style="width:140px;text-align:right">Monto</th><th style="width:150px">Fecha de pago</th><th></th></tr></thead><tbody>
+    ${d.L.map((x, i) => `<tr><td><input type="text" list="ncEmp" value="${esc(x.empleado || '')}" onchange="_nc.L[${i}].empleado=this.value"></td><td><input type="text" list="ncCon" value="${esc(x.concepto || '')}" onchange="_nc.L[${i}].concepto=this.value"></td><td><div class="ipfx"><span>$</span><input type="number" step="0.01" min="0" value="${x.monto === '' ? '' : num(x.monto)}" style="text-align:right" onchange="_nc.L[${i}].monto=this.value;ncPintar()"></div></td><td><input type="date" value="${x.fecha || ''}" onchange="_nc.L[${i}].fecha=this.value"></td><td><span class="mcls" title="Quitar" onclick="_nc.L.splice(${i},1);ncPintar()">✕</span></td></tr>`).join('')}
+    <tr><td colspan="2"><b>Total</b> <span class="mini">${d.L.length} cuenta(s)</span></td><td class="amt" style="text-align:right"><b>${$$(s)}</b></td><td colspan="2"></td></tr></tbody></table></div>`;
+}
+async function nomCxpGuardar() {
+  const d = window._nc; document.activeElement?.blur?.();
+  const L = d.L.filter(x => String(x.empleado || '').trim() || num(x.monto) > 0);
+  if (!L.length) return toast('Agrega al menos una persona', 'warning');
+  const mal = L.find(x => !String(x.empleado || '').trim() || !(num(x.monto) > 0) || !x.fecha);
+  if (mal) return toast('Cada línea necesita nombre, monto y fecha de pago', 'warning');
+  const per = document.getElementById('ncPer').value || d.per;
+  const lin = L.map(x => ({ empleado: x.empleado.trim(), empleado_id: x.empleado_id || NOM_EMP.find(e => normTx(e.nombre) === normTx(x.empleado))?.id || '', concepto: x.concepto || '', monto: num(x.monto), fecha: x.fecha }));
+  const r = await rpcFirmado('fin_nomina_cxp', { p_rec: d.rid, p_periodo: per, p_lineas: lin }, { titulo: 'Firmar nómina por persona', sub: `${lin.length} cuenta(s) · ${$$(lin.reduce((s, x) => s + x.monto, 0))}` });
+  if (!r) return;
+  toast(`${r.cuentas} cuenta(s) agregadas a Por pagar`, 'success'); CM('mGen'); await cargarTodo(true); renderTab();
+}
+function nomGrupoVer(rid, per) {
+  const G = FAC.filter(f => f.nomina_grupo === rid + '|' + per && !f.anulado && f.estado !== 'cancelado').sort((a, b) => String(a.fecha_vencimiento).localeCompare(String(b.fecha_vencimiento)) || a.descripcion.localeCompare(b.descripcion));
+  modal('Nómina COE por persona · ' + fmtD(per), `<div class="tc"><table><thead><tr><th>Personal · concepto</th><th>Fecha de pago</th><th style="text-align:right">Monto</th><th>Estatus</th><th></th></tr></thead><tbody>
+    ${G.map(f => { const x = (f.desglose || [])[0] || {}; return `<tr style="cursor:pointer" onclick="verCuenta('${f.id}')"><td><b>${esc(x.empleado || f.descripcion)}</b><div class="mini">${esc(x.concepto || '')}</div></td><td>${fmtD(f.fecha_vencimiento)}</td><td class="amt" style="text-align:right">${$$(f.monto_total)}</td><td>${saldo(f) <= 0.5 ? `<span class="bdg bdg-apr">✓ Pagado ${fmtD(f.fecha_pago)}</span>` : '<span class="bdg bdg-pnd">Por pagar</span>'}</td><td onclick="event.stopPropagation()">${saldo(f) > 0.5 && puede('cxp') ? `<button class="btn btn-p btn-sm" onclick="pagarCuenta('${f.id}')">Pagar</button>` : ''}</td></tr>`; }).join('')}
+    <tr><td colspan="2"><b>Total</b></td><td class="amt" style="text-align:right"><b>${$$(G.reduce((s, f) => s + num(f.monto_total), 0))}</b></td><td colspan="2"></td></tr></tbody></table></div>`,
+  `<button class="btn btn-s" onclick="openTransferencias()">Volver</button>${puede('cxp') ? `<button class="btn btn-s" onclick="nomCxp('${rid}','${per}')">＋ Agregar persona</button>` : ''}<button class="btn btn-p" onclick="CM('mGen')">Cerrar</button>`, 'lg');
 }
 
 // ══ PERFILES Y PERMISOS ════════════════════════
