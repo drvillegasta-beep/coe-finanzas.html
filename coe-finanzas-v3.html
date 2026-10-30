@@ -600,18 +600,25 @@ tr.trsep td{background:var(--dd);color:var(--dg);font-size:11px;font-weight:800;
 .pcol{background:var(--sf2);border:1px solid var(--br);border-radius:var(--rd);display:flex;flex-direction:column;max-height:78vh;min-width:0}
 .pcol-h{padding:9px 10px;font-size:13px;border-bottom:1px solid var(--br);position:sticky;top:0}
 .pcol-n{display:inline-block;min-width:22px;text-align:center;font-size:11px;font-weight:700;background:var(--sf3);border-radius:10px;padding:1px 7px;margin-left:4px}
-.pcol-b{padding:8px;overflow-y:auto;display:flex;flex-direction:column;gap:6px}
+.pcol-b{padding:6px;overflow-y:auto;display:flex;flex-direction:column;gap:3px}
 .pcol-sep{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--tm);margin:6px 2px 0;display:flex;justify-content:space-between}
-.pcard{position:relative;background:var(--sf);border:1px solid var(--br);border-left:3px solid var(--br2);border-radius:var(--rs);padding:8px 10px;cursor:pointer}
+.pcard{position:relative;background:var(--sf);border:1px solid var(--br);border-left:3px solid var(--br2);border-radius:var(--rs);padding:5px 8px;cursor:pointer}
 .pcard:hover{border-color:var(--pr)}
-.pcard.ven{border-left-color:var(--dg);background:linear-gradient(90deg,var(--dd),var(--sf) 40%)}
-.pcard.pv{border-left-color:var(--wn);background:linear-gradient(90deg,var(--wd),var(--sf) 40%)}
-.pcard-t{font-size:12.5px;font-weight:600;line-height:1.3;display:flex;gap:6px;align-items:flex-start}
+.pcard.ven{border-left-color:var(--dg)}
+.pcard.pv{border-left-color:var(--wn)}
+.pcard-t{font-size:12.5px;font-weight:600;line-height:1.3;display:flex;gap:6px;align-items:center}
+.pcard-n{flex:1;min-width:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.pcard.ab .pcard-n{-webkit-line-clamp:unset;display:block}
+.pcard-d{font-size:11px;font-weight:700;white-space:nowrap;font-family:var(--mo)}
+.pcard-x{font-size:11.5px;color:var(--tm);margin-top:6px;padding-top:6px;border-top:1px solid var(--br);display:flex;flex-direction:column;gap:3px;cursor:default}
+.pcard-x b{color:var(--tx)}
+.pcard-btn{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
+.pcard.ab{border-color:var(--pr)}
 .pcard-m{font-size:11px;color:var(--tm);margin-top:3px}
 .pcard-a{position:absolute;top:6px;right:6px;display:none;gap:2px}
 .pcard:hover .pcard-a{display:flex}
 .pcard-a button{background:var(--sf3);border:1px solid var(--br);color:var(--tx);border-radius:4px;font-size:11px;padding:1px 5px;cursor:pointer}
-.pdot{width:8px;height:8px;border-radius:50%;flex:none;margin-top:5px;background:var(--td)}
+.pdot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--td)}
 .pdot.critico{background:var(--dg)}.pdot.moderado{background:var(--wn)}.pdot.no_critico{background:var(--sc)}
 @media (hover:none){.pcard-a{display:flex}}
 
@@ -3927,20 +3934,29 @@ const PCOLS = [
   ['inv', '✚', 'Inventarios y compras', 'Quirófano · farmacia · óptica · pedidos', t => ['inv_qui', 'inv_far', 'optica', 'compras'].includes(rubroDe(t))],
   ['adm', '📊', 'Informes y administración', 'Informes · campañas · mantenimiento', () => true]];
 function pendCol(t) { if (t.origen === 'manual') return 'ev'; return (PCOLS.slice(1).find(c => c[4](t)) || PCOLS[4])[0]; }
+// Tarjeta compacta: solo lo necesario para reconocerlo; al tocarla se despliega la información completa
+VIEW.pAbre = VIEW.pAbre || {};
 function pendTarjeta(t) {
-  const dv = t.fecha_limite ? diasA(t.fecha_limite) : null, ven = vencidaT(t), pv = porVencerT(t), ss = sinSeguimiento(t);
+  const dv = t.fecha_limite ? diasA(t.fecha_limite) : null, ven = vencidaT(t), pv = porVencerT(t), ab = VIEW.pAbre[t.id];
   const col = ven ? 'var(--dg)' : pv ? 'var(--wn)' : 'var(--tx)';
-  return `<div class="pcard ${ven ? 'ven' : pv ? 'pv' : ''}" onclick="verPendiente('${t.id}')">
-    <div class="pcard-t" style="color:${col}"><span class="pdot ${t.prioridad || ''}" title="${esc(PRI[t.prioridad]?.t || 'Sin prioridad')}"></span>${esc(t.titulo)}</div>
-    <div class="pcard-m">${esc(respNom(respKey(t)))} · ${t.estado === 'cumplida' ? '✓ ' + fmtD(String(t.cumplida_at || '').slice(0, 10)) : dv === null ? 'sin fecha' : ven ? `<b style="color:var(--dg)">venció hace ${-dv} d</b>` : dv === 0 ? '<b style="color:var(--wn)">vence hoy</b>' : pv ? `<b style="color:var(--wn)">vence en ${dv} d</b>` : 'vence ' + fmtD(t.fecha_limite)}${t.estado === 'bloqueado' ? ' · <b style="color:var(--dg)">bloqueado</b>' : ''}</div>
-    <div class="pcard-m">${RUB_LBL[rubroDe(t)][1]} ${esc(RUB_LBL[rubroDe(t)][2])}${t.reprogramaciones ? ' · reprog. ' + t.reprogramaciones + '×' : ''}${abiertaT(t) && ss >= 3 ? ` · <span style="color:var(--or)">sin seguimiento ${ss} d</span>` : ''}</div>
-    ${esAdmin() && t.estado !== 'cancelada' ? `<div class="pcard-a" onclick="event.stopPropagation()"><button title="Modificar" onclick="editarPendiente('${t.id}')">✎</button><button title="Eliminar" onclick="eliminarPendiente('${t.id}')">🗑</button></div>` : ''}</div>`;
+  const dias = t.estado === 'cumplida' ? '✓' : dv === null ? '' : ven ? -dv + ' d' : dv === 0 ? 'hoy' : pv ? dv + ' d' : fmtD(t.fecha_limite).slice(0, 5);
+  const ss = sinSeguimiento(t);
+  return `<div class="pcard ${ven ? 'ven' : pv ? 'pv' : ''} ${ab ? 'ab' : ''}" onclick="VIEW.pAbre['${t.id}']=!VIEW.pAbre['${t.id}'];renderTab()">
+    <div class="pcard-t"><span class="pdot ${t.prioridad || ''}" title="${esc(PRI[t.prioridad]?.t || 'Sin prioridad')}"></span><span class="pcard-n" style="color:${col}">${esc(t.titulo)}</span><span class="pcard-d" style="color:${ven ? 'var(--dg)' : pv ? 'var(--wn)' : 'var(--tm)'}" title="${ven ? 'Vencido' : 'Vence'} ${fmtD(t.fecha_limite)}">${dias}</span></div>
+    ${ab ? `<div class="pcard-x" onclick="event.stopPropagation()">
+      ${t.descripcion ? `<div style="margin-bottom:4px">${esc(t.descripcion)}</div>` : ''}
+      <div><b>${esc(respNom(respKey(t)))}</b> · ${PRI[t.prioridad]?.t || 'sin prioridad'} · ${estBdgT(t)}</div>
+      <div>${ven ? `<b style="color:var(--dg)">Venció hace ${-dv} d</b> (${fmtD(t.fecha_limite)})` : dv === null ? 'Sin fecha' : `Vence ${fmtD(t.fecha_limite)}${dv <= 3 ? ` · <b style="color:var(--wn)">${dv === 0 ? 'hoy' : 'en ' + dv + ' d'}</b>` : ''}`}${t.reprogramaciones ? ` · reprogramado ${t.reprogramaciones}×` : ''}</div>
+      <div>${RUB_LBL[rubroDe(t)][1]} ${esc(RUB_LBL[rubroDe(t)][2])}${t.entregable ? ' · entrega: ' + esc(t.entregable) : ''}</div>
+      ${t.ultimo_avance ? `<div>Último avance: ${esc(String(t.ultimo_avance).slice(0, 120))} <span style="color:var(--td)">${t.ultimo_avance_at ? fmtDT(t.ultimo_avance_at) : ''}</span></div>` : abiertaT(t) && ss >= 3 ? `<div style="color:var(--or)">Sin seguimiento hace ${ss} d</div>` : ''}
+      <div class="pcard-btn"><button class="btn btn-s btn-sm" onclick="verPendiente('${t.id}')">Ver todo</button>${abiertaT(t) && puede('tareas') ? `<button class="btn btn-s btn-sm" onclick="avancePendiente('${t.id}')">Avance</button><button class="btn btn-p btn-sm" onclick="cumplirTarea('${t.id}')">Cumplir</button>` : ''}${esAdmin() && t.estado !== 'cancelada' ? `<button class="btn btn-s btn-sm" title="Modificar" onclick="editarPendiente('${t.id}')">✎</button><button class="btn btn-s btn-sm" title="Eliminar" onclick="eliminarPendiente('${t.id}')">🗑</button>` : ''}</div>
+    </div>` : ''}</div>`;
 }
 VIEW.pColAb = VIEW.pColAb || {};
 function pendTablero(L) {
   const C = PCOLS.map(c => ({ c, T: L.filter(t => pendCol(t) === c[0]).sort(ordenPend) }));
   return `<div class="pboard">${C.map(({ c, T }) => {
-    const v = T.filter(vencidaT).length, pv = T.filter(porVencerT).length, max = 12, ab = VIEW.pColAb[c[0]];
+    const v = T.filter(vencidaT).length, pv = T.filter(porVencerT).length, max = 30, ab = VIEW.pColAb[c[0]];
     // Dentro de la columna: separador por rubro
     const G = {}; T.forEach(t => { const k = c[0] === 'ev' ? '_' : rubroDe(t); (G[k] = G[k] || []).push(t); });
     let n = 0; const cuerpo = Object.entries(G).map(([k, ts]) => { const vis = ab ? ts : ts.filter(() => n++ < max); if (!vis.length) return ''; return (k !== '_' && Object.keys(G).length > 1 ? `<div class="pcol-sep">${RUB_LBL[k][1]} ${esc(RUB_LBL[k][2])} <b>${ts.length}</b></div>` : '') + vis.map(pendTarjeta).join(''); }).join('');
