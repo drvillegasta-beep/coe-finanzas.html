@@ -595,6 +595,26 @@ tr.trsep td{background:var(--dd);color:var(--dg);font-size:11px;font-weight:800;
 .avbanner{display:flex;gap:12px;align-items:center;margin:0 28px 4px;padding:12px 16px;border-radius:12px;background:rgba(0,201,167,.1);border:1px solid var(--pr)}
 @media(max-width:700px){.avbanner{margin:0 12px 4px;flex-wrap:wrap}}
 
+.pboard{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;padding:10px;align-items:start}
+@media (max-width:1100px){.pboard{grid-template-columns:repeat(5,230px);overflow-x:auto}}
+.pcol{background:var(--sf2);border:1px solid var(--br);border-radius:var(--rd);display:flex;flex-direction:column;max-height:78vh;min-width:0}
+.pcol-h{padding:9px 10px;font-size:13px;border-bottom:1px solid var(--br);position:sticky;top:0}
+.pcol-n{display:inline-block;min-width:22px;text-align:center;font-size:11px;font-weight:700;background:var(--sf3);border-radius:10px;padding:1px 7px;margin-left:4px}
+.pcol-b{padding:8px;overflow-y:auto;display:flex;flex-direction:column;gap:6px}
+.pcol-sep{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--tm);margin:6px 2px 0;display:flex;justify-content:space-between}
+.pcard{position:relative;background:var(--sf);border:1px solid var(--br);border-left:3px solid var(--br2);border-radius:var(--rs);padding:8px 10px;cursor:pointer}
+.pcard:hover{border-color:var(--pr)}
+.pcard.ven{border-left-color:var(--dg);background:linear-gradient(90deg,var(--dd),var(--sf) 40%)}
+.pcard.pv{border-left-color:var(--wn);background:linear-gradient(90deg,var(--wd),var(--sf) 40%)}
+.pcard-t{font-size:12.5px;font-weight:600;line-height:1.3;display:flex;gap:6px;align-items:flex-start}
+.pcard-m{font-size:11px;color:var(--tm);margin-top:3px}
+.pcard-a{position:absolute;top:6px;right:6px;display:none;gap:2px}
+.pcard:hover .pcard-a{display:flex}
+.pcard-a button{background:var(--sf3);border:1px solid var(--br);color:var(--tx);border-radius:4px;font-size:11px;padding:1px 5px;cursor:pointer}
+.pdot{width:8px;height:8px;border-radius:50%;flex:none;margin-top:5px;background:var(--td)}
+.pdot.critico{background:var(--dg)}.pdot.moderado{background:var(--wn)}.pdot.no_critico{background:var(--sc)}
+@media (hover:none){.pcard-a{display:flex}}
+
 /* ===== Temas COE (mismo sistema que COE Quirófano): colores sobrios; el semáforo se reserva para alertas reales ===== */
 :root,[data-tema="grafito"]{--bg:#141517;--sf:#1B1D20;--sf2:#202327;--sf3:#272A2F;--br:#2F3338;--br2:#454A52;--tx:#E7E5E0;--tm:#9A9C9F;--td:#74777B;
  --pr:#8DB8A5;--pd:rgba(141,184,165,.13);--on-pr:#0F1A15;--in:#A9B7C6;--id:rgba(169,183,198,.12);--pu:#B9AFC9;--pud:rgba(185,175,201,.12);
@@ -3223,6 +3243,7 @@ function atraso(t) {
   return Math.max(0, -diasA(fOrig(t)));
 }
 const vencidaT = t => abiertaT(t) && diasA(t.fecha_limite) < 0;
+const porVencerT = t => abiertaT(t) && t.fecha_limite && diasA(t.fecha_limite) >= 0 && diasA(t.fecha_limite) <= 3;
 const sinSeguimiento = t => abiertaT(t) ? Math.floor((Date.now() - new Date(t.ultimo_avance_at || t.created_at || Date.now())) / 86400000) : 0;
 const respKey = t => t.responsable_id || 'rol:' + (t.responsable_rol || 'contadora');
 function respNom(k) {
@@ -3282,7 +3303,7 @@ const hoyISO = () => isoD(new Date());
 const yaCerre = (uid = cu.id, f = hoyISO()) => CJ.find(c => c.usuario_id === uid && c.fecha === f);
 
 // ── Lista ──
-VIEW.pAmb = 'mios'; VIEW.pEst = 'abiertos'; VIEW.pPri = ''; VIEW.pResp = ''; VIEW.pQ = ''; VIEW.pRub = '';
+VIEW.pAmb = 'mios'; VIEW.pVista = 'tablero'; VIEW.pEst = 'abiertos'; VIEW.pPri = ''; VIEW.pResp = ''; VIEW.pQ = ''; VIEW.pRub = '';
 function rTareas() {
   if (!veEquipo()) VIEW.pAmb = 'mios';
   let L = TAR.slice();
@@ -3291,10 +3312,11 @@ function rTareas() {
   const base = L;
   if (VIEW.pEst === 'abiertos') L = L.filter(abiertaT);
   else if (VIEW.pEst === 'vencidos') L = L.filter(vencidaT);
+  else if (VIEW.pEst === 'porvencer') L = L.filter(porVencerT);
   else if (VIEW.pEst === 'bloqueado') L = L.filter(t => t.estado === 'bloqueado');
   else if (VIEW.pEst === 'cumplida') L = L.filter(t => t.estado === 'cumplida').sort((a, b) => String(b.cumplida_at).localeCompare(String(a.cumplida_at))).slice(0, 150);
   const preRub = L;
-  if (VIEW.pRub) L = L.filter(t => rubroDe(t) === VIEW.pRub);
+  if (VIEW.pRub && VIEW.pVista !== 'tablero') L = L.filter(t => rubroDe(t) === VIEW.pRub);
   if (VIEW.pPri) L = L.filter(t => t.prioridad === VIEW.pPri);
   const qq = normTx(VIEW.pQ); if (qq) L = L.filter(t => normTx(t.titulo + ' ' + (t.descripcion || '') + ' ' + (t.categoria || '') + ' ' + respNom(respKey(t))).includes(qq));
   if (VIEW.pEst !== 'cumplida') L.sort(ordenPend);
@@ -3315,14 +3337,15 @@ function rTareas() {
       ${kpi('Cumplidos hoy', String(cumpHoy.length), base.filter(t => t.estado === 'bloqueado').length + ' bloqueados', '', "VIEW.pEst='cumplida';renderTab()")}
     </div>
     <div class="tc"><div class="ttb" style="gap:10px">
+      <div class="seg">${[['tablero', '▦ Tablero'], ['lista', '☰ Lista']].map(([k, t]) => `<button class="${VIEW.pVista === k ? 'on' : ''}" onclick="VIEW.pVista='${k}';renderTab()">${t}</button>`).join('')}</div>
       ${veEquipo() ? `<div class="chips">${chip('pAmb', 'mios', 'Mis pendientes')}${chip('pAmb', 'equipo', 'Equipo')}</div>` : ''}
-      ${VIEW.pAmb === 'equipo' ? `<select class="fsel" onchange="VIEW.pResp=this.value;renderTab()"><option value="">Todos los responsables</option>${resps.map(k => `<option value="${k}" ${VIEW.pResp === k ? 'selected' : ''}>${esc(respNom(k))}</option>`).join('')}</select>` : ''}
-      <div class="chips">${chip('pEst', 'abiertos', 'Abiertos')}${chip('pEst', 'vencidos', 'Vencidos')}${chip('pEst', 'bloqueado', 'Bloqueados')}${chip('pEst', 'cumplida', 'Cumplidos')}${chip('pEst', 'todos', 'Todos')}</div>
+      ${VIEW.pAmb === 'equipo' ? `<select class="fsel" style="width:auto" onchange="VIEW.pResp=this.value;renderTab()"><option value="">Todos los responsables</option>${resps.map(k => `<option value="${k}" ${VIEW.pResp === k ? 'selected' : ''}>${esc(respNom(k))}</option>`).join('')}</select>` : ''}
+      <div class="chips">${chip('pEst', 'abiertos', 'Abiertos')}${chip('pEst', 'vencidos', '<span style="color:var(--dg)">● Vencidos</span>')}${chip('pEst', 'porvencer', '<span style="color:var(--wn)">● Por vencer</span>')}${chip('pEst', 'bloqueado', 'Bloqueados')}${chip('pEst', 'cumplida', 'Cumplidos')}${chip('pEst', 'todos', 'Todos')}</div>
       <div class="chips">${chip('pPri', '', 'Toda prioridad')}${chip('pPri', 'critico', '● Crítico')}${chip('pPri', 'moderado', '● Moderado')}${chip('pPri', 'no_critico', '● No crítico')}</div>
-      <input class="sbox" placeholder="Buscar" value="${esc(VIEW.pQ)}" onchange="VIEW.pQ=this.value;renderTab()" style="max-width:220px">
-      <div class="chips" style="flex-basis:100%">${chip('pRub', '', 'Todos los rubros')}${RUBROS.filter(r => preRub.some(t => rubroDe(t) === r[0])).map(r => { const n = preRub.filter(t => rubroDe(t) === r[0]), v = n.filter(vencidaT).length; return `<span class="chip ${VIEW.pRub === r[0] ? 'act' : ''}" onclick="VIEW.pRub='${r[0]}';renderTab()">${r[1]} ${r[2]} <b>${n.length}</b>${v ? ` <b style="color:var(--dg)">· ${v}</b>` : ''}</span>`; }).join('')}</div>
+      <input class="sbox" placeholder="🔎 Buscar pendiente, responsable o rubro" value="${esc(VIEW.pQ)}" onchange="VIEW.pQ=this.value;renderTab()" style="max-width:300px">
+      <div class="chips" style="flex-basis:100%;${VIEW.pVista === 'tablero' ? 'display:none' : ''}">${chip('pRub', '', 'Todos los rubros')}${RUBROS.filter(r => preRub.some(t => rubroDe(t) === r[0])).map(r => { const n = preRub.filter(t => rubroDe(t) === r[0]), v = n.filter(vencidaT).length; return `<span class="chip ${VIEW.pRub === r[0] ? 'act' : ''}" onclick="VIEW.pRub='${r[0]}';renderTab()">${r[1]} ${r[2]} <b>${n.length}</b>${v ? ` <b style="color:var(--dg)">· ${v}</b>` : ''}</span>`; }).join('')}</div>
     </div>
-    ${L.length ? `<table><thead><tr><th>Prioridad</th><th>Pendiente</th>${VIEW.pAmb === 'equipo' ? '<th>Responsable</th>' : ''}<th>Vence</th><th>Atraso</th><th>Estatus</th><th>Último avance</th><th></th></tr></thead><tbody>
+    ${VIEW.pVista === 'tablero' ? pendTablero(L) : L.length ? `<table><thead><tr><th>Prioridad</th><th>Pendiente</th>${VIEW.pAmb === 'equipo' ? '<th>Responsable</th>' : ''}<th>Vence</th><th>Atraso</th><th>Estatus</th><th>Último avance</th><th></th></tr></thead><tbody>
     ${L.map(t => { const ss = sinSeguimiento(t), dv = diasA(t.fecha_limite); return `<tr style="cursor:pointer" onclick="verPendiente('${t.id}')">
       <td>${priBdg(t.prioridad, t.id)}</td>
       <td><b>${esc(t.titulo)}</b><div class="mini">${esc(t.categoria || '')}${t.reprogramaciones ? ` · reprogramado ${t.reprogramaciones}×` : ''}${t.origen === 'cronograma' ? ' · cronograma' : ''}</div></td>
@@ -3377,14 +3400,14 @@ function editarPendiente(id) {
     <div class="fgrp"><label>Responsable</label><select id="epR">${resp.map(u => `<option value="${u.id}" data-rol="${esc(u.rol || '')}" ${u.id === t.responsable_id ? 'selected' : ''}>${esc(u.nombre)}${u.rol ? ' · ' + esc(ROLES[u.rol] || u.rol) : ''}</option>`).join('')}${t.responsable_id ? '' : '<option value="" selected>— ' + esc(respNom(respKey(t))) + ' —</option>'}</select></div>
     <div class="fgrp sp2"><label>Entregable</label><input type="text" id="epE" value="${esc(t.entregable || '')}"></div>
   </div><div class="mini" style="margin-top:8px">El cambio queda registrado en el seguimiento del pendiente. Si cambias la fecha, la fecha original se conserva para medir el atraso.</div>`,
-  `<button class="btn btn-s" onclick="verPendiente('${id}')">Volver</button><button class="btn btn-p" onclick="guardarEdicionPend('${id}')">Firmar cambios</button>`);
+  `<button class="btn btn-s" onclick="verPendiente('${id}')">Volver</button><button class="btn btn-p" onclick="guardarEdicionPend('${id}')">Guardar cambios</button>`);
 }
 async function guardarEdicionPend(id) {
   const t = TAR.find(x => x.id === id);
   const d = { titulo: epT.value.trim(), descripcion: epD.value.trim(), prioridad: epP.value, fecha_limite: epF.value || t.fecha_limite, categoria: epC.value, entregable: epE.value.trim() };
   if (epR.value) { d.responsable_id = epR.value; const o = epR.selectedOptions[0]; if (o && o.dataset.rol) d.responsable_rol = o.dataset.rol; }
   if (!d.titulo) { toast('Escribe el pendiente', 'warning'); return; }
-  const r = await rpcFirmado('fin_tarea_editar', { p_tarea: id, p_datos: d }, { titulo: 'Firmar edición · Director', sub: t.titulo });
+  const r = await rpcDirector('fin_tarea_editar', { p_tarea: id, p_datos: d }, { titulo: 'Firmar edición · Director', sub: t.titulo });
   if (r) { toast(r.sin_cambios ? 'Sin cambios' : 'Pendiente actualizado', 'success'); await cargarTodo(); verPendiente(id); }
 }
 function eliminarPendiente(id) {
@@ -3401,14 +3424,14 @@ function eliminarPendiente(id) {
   modal('Eliminar pendiente', `<div style="margin-bottom:10px"><b>${esc(t.titulo)}</b><div class="mini">${esc(respNom(respKey(t)))} · vence ${fmtD(t.fecha_limite)} · ${(EST_T[t.estado] || [t.estado])[0]}</div></div>
     ${caja}
     ${evs.length ? `<div style="margin-bottom:10px"><b>Evidencia subida:</b> ${evs.map((u, i) => `<a class="docprev" href="${esc(u)}" target="_blank">Ver ${evs.length > 1 ? i + 1 : ''}</a>`).join(' ')}</div>` : '<div class="mini" style="margin-bottom:10px">Sin evidencia subida.</div>'}
-    <div class="fld"><label>Motivo de la eliminación</label><textarea id="elM" style="min-height:56px" placeholder="Ej. Ya no aplica / duplicado"></textarea></div>
+    <div class="fld"><label>Motivo de la eliminación</label><textarea id="elM" style="min-height:56px" placeholder="Ej. Ya no aplica / duplicado">${cump ? '' : 'Ya no aplica'}</textarea></div>
     <div class="mini">No se borra del registro: queda como <b>cancelado por Dirección</b> con tu firma y el motivo, y no cuenta en la evaluación de la Contadora.</div>`,
-  `<button class="btn btn-s" onclick="verPendiente('${id}')">Volver</button><button class="btn btn-d" onclick="confEliminarPend('${id}')">Firmar y eliminar</button>`);
+  `<button class="btn btn-s" onclick="verPendiente('${id}')">Volver</button><button class="btn btn-d" onclick="confEliminarPend('${id}')">Eliminar</button>`);
 }
 async function confEliminarPend(id) {
   const m = elM.value.trim(); if (!m) { toast('Escribe el motivo', 'warning'); return; }
   const t = TAR.find(x => x.id === id);
-  const r = await rpcFirmado('fin_tarea_eliminar', { p_tarea: id, p_motivo: m }, { titulo: 'Firmar eliminación · Director', sub: t.titulo });
+  const r = await rpcDirector('fin_tarea_eliminar', { p_tarea: id, p_motivo: m }, { titulo: 'Firmar eliminación · Director', sub: t.titulo });
   if (r) { CM('mGen'); toast('Pendiente eliminado', 'success'); await cargarTodo(); }
 }
 
@@ -3894,6 +3917,45 @@ function textoContaDia(U, fecha, D) {
 }
 function imprimirContaDia(fecha) {
   imprimir('Reporte del día de la Contadora · ' + fmtD(fecha), `<pre style="white-space:pre-wrap;font:13px/1.5 inherit;margin:0">${esc(window._cddTxt || '')}</pre><div class="firmas"><div>Contadora<br>&nbsp;</div><div>Dirección General<br><b>Dr. José Antonio Villegas Ávila</b></div></div>`);
+}
+
+// ── Tablero del equipo: 5 columnas (eventuales + 10 rubros compactados) ──
+const PCOLS = [
+  ['ev', '⚡', 'Eventuales', 'Los que se asignan sobre la marcha', t => t.origen === 'manual'],
+  ['cf', '∑', 'Contable y fiscal', 'Bancos · fiscal · facturación', t => ['contable', 'fiscal'].includes(rubroDe(t))],
+  ['np', '☺', 'Nómina y pagos', 'Personal · proveedores · cobranza', t => ['nomina', 'pagos'].includes(rubroDe(t))],
+  ['inv', '✚', 'Inventarios y compras', 'Quirófano · farmacia · óptica · pedidos', t => ['inv_qui', 'inv_far', 'optica', 'compras'].includes(rubroDe(t))],
+  ['adm', '📊', 'Informes y administración', 'Informes · campañas · mantenimiento', () => true]];
+function pendCol(t) { if (t.origen === 'manual') return 'ev'; return (PCOLS.slice(1).find(c => c[4](t)) || PCOLS[4])[0]; }
+function pendTarjeta(t) {
+  const dv = t.fecha_limite ? diasA(t.fecha_limite) : null, ven = vencidaT(t), pv = porVencerT(t), ss = sinSeguimiento(t);
+  const col = ven ? 'var(--dg)' : pv ? 'var(--wn)' : 'var(--tx)';
+  return `<div class="pcard ${ven ? 'ven' : pv ? 'pv' : ''}" onclick="verPendiente('${t.id}')">
+    <div class="pcard-t" style="color:${col}"><span class="pdot ${t.prioridad || ''}" title="${esc(PRI[t.prioridad]?.t || 'Sin prioridad')}"></span>${esc(t.titulo)}</div>
+    <div class="pcard-m">${esc(respNom(respKey(t)))} · ${t.estado === 'cumplida' ? '✓ ' + fmtD(String(t.cumplida_at || '').slice(0, 10)) : dv === null ? 'sin fecha' : ven ? `<b style="color:var(--dg)">venció hace ${-dv} d</b>` : dv === 0 ? '<b style="color:var(--wn)">vence hoy</b>' : pv ? `<b style="color:var(--wn)">vence en ${dv} d</b>` : 'vence ' + fmtD(t.fecha_limite)}${t.estado === 'bloqueado' ? ' · <b style="color:var(--dg)">bloqueado</b>' : ''}</div>
+    <div class="pcard-m">${RUB_LBL[rubroDe(t)][1]} ${esc(RUB_LBL[rubroDe(t)][2])}${t.reprogramaciones ? ' · reprog. ' + t.reprogramaciones + '×' : ''}${abiertaT(t) && ss >= 3 ? ` · <span style="color:var(--or)">sin seguimiento ${ss} d</span>` : ''}</div>
+    ${esAdmin() && t.estado !== 'cancelada' ? `<div class="pcard-a" onclick="event.stopPropagation()"><button title="Modificar" onclick="editarPendiente('${t.id}')">✎</button><button title="Eliminar" onclick="eliminarPendiente('${t.id}')">🗑</button></div>` : ''}</div>`;
+}
+VIEW.pColAb = VIEW.pColAb || {};
+function pendTablero(L) {
+  const C = PCOLS.map(c => ({ c, T: L.filter(t => pendCol(t) === c[0]).sort(ordenPend) }));
+  return `<div class="pboard">${C.map(({ c, T }) => {
+    const v = T.filter(vencidaT).length, pv = T.filter(porVencerT).length, max = 12, ab = VIEW.pColAb[c[0]];
+    // Dentro de la columna: separador por rubro
+    const G = {}; T.forEach(t => { const k = c[0] === 'ev' ? '_' : rubroDe(t); (G[k] = G[k] || []).push(t); });
+    let n = 0; const cuerpo = Object.entries(G).map(([k, ts]) => { const vis = ab ? ts : ts.filter(() => n++ < max); if (!vis.length) return ''; return (k !== '_' && Object.keys(G).length > 1 ? `<div class="pcol-sep">${RUB_LBL[k][1]} ${esc(RUB_LBL[k][2])} <b>${ts.length}</b></div>` : '') + vis.map(pendTarjeta).join(''); }).join('');
+    return `<div class="pcol"><div class="pcol-h"><div><b>${c[1]} ${c[2]}</b> <span class="pcol-n">${T.length}</span></div><div class="mini">${c[3]}</div>
+      ${v || pv ? `<div class="mini" style="margin-top:3px">${v ? `<b style="color:var(--dg)">${v} vencido(s)</b>` : ''}${v && pv ? ' · ' : ''}${pv ? `<b style="color:var(--wn)">${pv} por vencer</b>` : ''}</div>` : ''}
+      ${c[0] === 'ev' && puede('tareas') ? `<button class="btn btn-s btn-sm" style="margin-top:6px;width:100%" onclick="nuevoPendiente()">＋ Eventual</button>` : ''}</div>
+      <div class="pcol-b">${cuerpo || '<div class="mini" style="padding:10px;text-align:center">Nada aquí ✓</div>'}${!ab && T.length > max ? `<button class="btn btn-s btn-sm" style="width:100%;margin-top:6px" onclick="VIEW.pColAb['${c[0]}']=true;renderTab()">Ver ${T.length - max} más</button>` : ''}</div></div>`;
+  }).join('')}</div>`;
+}
+// Director: con su sesión segura edita/elimina sin PIN; si no hay sesión, pide PIN
+async function rpcDirector(fn, args, opts) {
+  if (esAdmin()) {
+    try { const { data, error } = await sb.rpc(fn, { ...args, p_usuario: cu.id, p_pin: null }); if (!error && data?.ok) return data; if (!error && data && !['pin', 'sesion', 'usuario'].includes(data.error)) { toast(ERR[data.error] || data.error, 'error'); return null; } } catch (e) { }
+  }
+  return rpcFirmado(fn, args, opts);
 }
 
 // ══ DOCUMENTOS IMPRIMIBLES (una página, con logo) ══
