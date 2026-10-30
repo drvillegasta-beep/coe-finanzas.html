@@ -622,6 +622,8 @@ tr.trsep td{background:var(--dd);color:var(--dg);font-size:11px;font-weight:800;
 .pdot.critico{background:var(--dg)}.pdot.moderado{background:var(--wn)}.pdot.no_critico{background:var(--sc)}
 @media (hover:none){.pcard-a{display:flex}}
 
+.cattab td{padding:5px 6px;vertical-align:top}.cattab input,.cattab select{padding:4px 6px;font-size:12px}
+
 /* ===== Temas COE (mismo sistema que COE Quirófano): colores sobrios; el semáforo se reserva para alertas reales ===== */
 :root,[data-tema="grafito"]{--bg:#141517;--sf:#1B1D20;--sf2:#202327;--sf3:#272A2F;--br:#2F3338;--br2:#454A52;--tx:#E7E5E0;--tm:#9A9C9F;--td:#74777B;
  --pr:#8DB8A5;--pd:rgba(141,184,165,.13);--on-pr:#0F1A15;--in:#A9B7C6;--id:rgba(169,183,198,.12);--pu:#B9AFC9;--pud:rgba(185,175,201,.12);
@@ -1625,7 +1627,7 @@ function rCuentas(tipo) {
     ${ordenG.map(eid => {
       const g = grupos[eid], st = g.reduce((s, f) => s + saldo(f), 0);
       const col = !qq && cxCol(tipo)[eid], nv = g.filter(f => semaforo(f) === 'r').length, prox = g.filter(f => f.fecha_vencimiento && f.estado !== 'pagado').map(f => f.fecha_vencimiento).sort()[0];
-      return `<tr class="grp-hdr" style="cursor:pointer" onclick="cxToggle('${tipo}','${eid}')" title="${col ? 'Mostrar' : 'Ocultar'} sus cuentas"><td colspan="5"><div class="grp-name"><span style="display:inline-block;width:16px;color:var(--tm)">${col ? '▸' : '▾'}</span>${esc(nomEnt(eid))} <span class="mini">${g.length} · ${ent(eid)?.dias_credito ? ent(eid).dias_credito + ' días de crédito' : 'contado'}${col && nv ? ` · <b style="color:var(--dg)">${nv} vencida(s)</b>` : ''}${col && prox ? ' · próximo ' + fmtD(prox) : ''}</span></div></td><td class="amt" style="text-align:right;font-weight:700">${$$(st)}</td><td colspan="2" onclick="event.stopPropagation()"><button class="btn btn-s btn-sm" onclick="correoProveedor('${eid}')">✉ Correo</button></td></tr>` +
+      return `<tr class="grp-hdr" style="cursor:pointer" onclick="cxToggle('${tipo}','${eid}')" title="${col ? 'Mostrar' : 'Ocultar'} sus cuentas"><td colspan="5"><div class="grp-name"><span style="display:inline-block;width:16px;color:var(--tm)">${col ? '▸' : '▾'}</span>${esc(nomEnt(eid))} <span class="mini">${g.length} · ${ent(eid)?.dias_credito ? ent(eid).dias_credito + ' días de crédito' : 'contado'}${col && nv ? ` · <b style="color:var(--dg)">${nv} vencida(s)</b>` : ''}${col && prox ? ' · próximo ' + fmtD(prox) : ''}</span></div></td><td class="amt" style="text-align:right;font-weight:700">${$$(st)}</td><td colspan="2" onclick="event.stopPropagation()">${egr && /n[oó]mina coe/i.test(nomEnt(eid)) && puede('cxp') ? `<button class="btn btn-p btn-sm" onclick="nomCxp()">☰ Desglosar por persona</button>` : `<button class="btn btn-s btn-sm" onclick="correoProveedor('${eid}')">✉ Correo</button>`}</td></tr>` +
         (col ? '' : g.map(f => `<tr class="grp-child" style="cursor:pointer" onclick="verCuenta('${f.id}')">
           <td><span class="sem ${semaforo(f)}"></span><span class="mini">${semTxt[semaforo(f)]}</span></td>
           <td>${esc(f.descripcion)}${f.tipo_movimiento && f.tipo_movimiento !== 'normal' ? ` <span class="bdg bdg-cat">${esc(f.tipo_movimiento)}</span>` : ''}${f.sede && f.sede !== 'Tacámbaro' ? ` <span class="bdg bdg-pro">${esc(f.sede)}</span>` : ''}<div class="mini">${esc(f.categoria || '')}</div></td>
@@ -1668,6 +1670,7 @@ function verCuenta(id) {
     f.estado !== 'pagado' && !f.anulado && puedePagar(f) ? `<button class="btn btn-p" onclick="pagarCuenta('${id}')">${egr ? 'Pagar' : 'Registrar cobro'}</button>` : '',
     egr && f.estado !== 'pagado' && !f.anulado && puede('cxp') ? (f.propuesta_pago ? `<button class="btn btn-s" onclick="quitarPropuesta('${id}')">Quitar de propuesta</button>` : `<button class="btn btn-s" onclick="proponerUna('${id}')">Proponer pago</button>`) : '',
     f.estado !== 'pagado' && !f.anulado && puede('cxp') ? `<button class="btn btn-s" onclick="cambiarFechaPago(['${id}'])">📅 Fecha de pago</button>` : '',
+    puede(mod) && egr && esNomFijo(f) && !f.nomina_grupo && num(f.monto_pagado) <= 0.009 ? `<button class="btn btn-p" onclick="nomCxp('${f.recurrente_id || ''}','${f.recurrente_periodo || f.fecha_vencimiento || ''}','${id}')">☰ Desglosar en personas</button>` : '',
     puede(mod) && egr && !tieneXML(f) ? `<button class="btn btn-s" onclick="notaFoto('${id}')">📷 Foto de la nota / recibo</button>` : '',
     puede(mod) ? `<button class="btn btn-s" onclick="openUpload('${id}')">⬆ Factura, complemento o nota de crédito</button>` : '',
     puede(mod) ? `<button class="btn btn-s" onclick="correoProveedor('${f.entidad_id}','${id}')">✉ Correo</button>` : '',
@@ -1731,6 +1734,14 @@ async function confirmarPago(id, extra = {}) {
   if (dc > num(f.monto_total) * 0.3 + 0.01) { toast('El descuento no puede pasar del 30% de la cuenta', 'warning'); return; }
   if (dc) { const pct = num(document.getElementById('pgDp').value), esp = Math.round(saldo(f) * pct) / 100;
     if (Math.abs(dc - esp) > Math.max(1, saldo(f) * 0.005) && !confirm(`Con este monto el descuento sería ${$$(dc)} (${Math.round(dc / saldo(f) * 1000) / 10}%), distinto del ${pct || 0}% capturado.\n\n¿Liquidar la cuenta con ese descuento? (Cancelar si es un abono parcial: desmarca «Descuento por pronto pago»)`)) return; }
+  { const ref = document.getElementById('pgR').value, yr = pagoRefDup(ref, monto, [f.entidad_id], id);
+    if (yr) { const o = FAC.find(x => x.id === yr.factura_id); if (!confirm(`La referencia ${ref} ya está registrada en otro pago: ${nomEnt(o?.entidad_id)} · ${o?.descripcion || ''} · ${$$(yr.monto)} del ${fmtD(yr.fecha_pago)}.
+
+¿Es un pago distinto? (Cancelar si es el mismo)`)) return; }
+    const ya = !yr && ABO.find(a => !a.anulado && a.factura_id !== id && Math.abs(num(a.monto) - monto) <= 1 && a.fecha_pago && Math.abs((new Date(a.fecha_pago) - new Date(document.getElementById('pgF').value || hoyISO())) / 864e5) <= 10 && FAC.find(x => x.id === a.factura_id && !x.anulado && x.entidad_id === f.entidad_id));
+    if (ya) { const o = FAC.find(x => x.id === ya.factura_id); if (!confirm(`Ya hay un pago igual a ${nomEnt(f.entidad_id)}: ${o.descripcion} · ${$$(ya.monto)} del ${fmtD(ya.fecha_pago)}.
+
+¿Es otro pago distinto? (Cancelar si es el mismo)`)) return; } }
   let up;
   try { up = await subirArchivo(file, 'pagos'); } catch (e) { toast(e.message, 'error'); return; }
   const args = { p_factura: id, p_monto: monto, p_fecha: document.getElementById('pgF').value || null,
@@ -1880,7 +1891,8 @@ function pgFiltrados() {
   return ABO.map(pagoInfo).filter(x => {
     const { a, f } = x;
     if (B.tipo && (f.tipo || 'egreso') !== B.tipo) return false;
-    if (B.st === 'confac') { if (x.est !== 'comp' || x.fac !== 'fac') return false; }
+    if (B.st === 'dup') { if (!(window._pgDup || new Map()).has(a.id)) return false; }
+    else if (B.st === 'confac') { if (x.est !== 'comp' || x.fac !== 'fac') return false; }
     else if (B.st) { if (x.est !== B.st) return false; }
     else if (x.est === 'anul') return false;
     if (B.forma && String(a.metodo || '').toLowerCase() !== B.forma) return false;
@@ -1891,6 +1903,7 @@ function pgFiltrados() {
   });
 }
 function rPagos() {
+  window._pgDup = pagosDuplicados();
   const B = VIEW.pgB, L = pgFiltrados(), buscando = !!(String(B.q || '').trim() || B.de || B.a);
   const base = ABO.map(pagoInfo).filter(x => !B.tipo || (x.f.tipo || 'egreso') === B.tipo), cnt = k => k === 'confac' ? base.filter(x => x.est === 'comp' && x.fac === 'fac').length : base.filter(x => k ? x.est === k : x.est !== 'anul').length;
   const tot = L.filter(x => !x.a.anulado).reduce((s, x) => s + num(x.a.monto), 0);
@@ -1902,7 +1915,7 @@ function rPagos() {
     <td style="padding-left:34px">${fmtD(a.fecha_pago)}</td>
     <td><div>${esc(f.descripcion || '')}</div><div class="mini">${f.numero_factura ? 'Folio ' + esc(f.numero_factura) + ' · ' : ''}${esc(a.metodo || '')}${a.referencia ? ' · ref ' + esc(a.referencia) : ''}${x.liq ? '' : ' · <span style="color:var(--wn)">abono parcial · saldo ' + $$(saldo(f)) + '</span>'}</div></td>
     <td class="amt" style="text-align:right">${$$(a.monto)}</td>
-    <td><span class="bdg ${E[1]}" style="white-space:nowrap" title="${E[2]}">${E[0]}</span></td>
+    <td><span class="bdg ${E[1]}" style="white-space:nowrap" title="${E[2]}">${E[0]}</span>${(d => d ? `<div class="mini" style="color:var(--dg);margin-top:3px;cursor:pointer" title="Abrir la otra cuenta" onclick="event.stopPropagation();verCuenta('${d.con.f.id}')">⚠ Posible duplicado: ${esc(d.why)} · ver la otra (${fmtD(d.con.a.fecha_pago)})</div>` : '')((window._pgDup || new Map()).get(a.id))}</td>
     <td onclick="event.stopPropagation()">${docsDe(f)}${a.comprobante_url && a.comprobante_url !== f.comprobante_pago_url ? `<a class="dtag ok" href="${esc(a.comprobante_url)}" target="_blank">COMPROBANTE</a>` : ''}</td>
     <td class="mini">${esc(nomUsr(a.firma1_por || a.created_by))}${a.firma2_por ? ' + ' + esc(nomUsr(a.firma2_por)) : ''}</td></tr>`; };
   const cuerpo = ks.map((k, i) => { const F = M[k], vivos = F.filter(x => !x.a.anulado), tm = vivos.reduce((s, x) => s + num(x.a.monto), 0);
@@ -1917,7 +1930,7 @@ function rPagos() {
     <input class="sbox" id="pgB_q" type="text" placeholder="Buscar proveedor, concepto, folio, monto, referencia…" value="${esc(B.q || '')}" oninput="pgBusca('q',this.value)" style="min-width:240px;flex:1">
     <select class="fsel" style="width:auto" onchange="pgBusca('forma',this.value,1)"><option value="">Toda forma de pago</option>${formas.map(f => `<option value="${esc(f)}" ${B.forma === f ? 'selected' : ''}>${esc(f)}</option>`).join('')}</select>
     <span class="mini" style="display:inline-flex;gap:6px;align-items:center">Del <input type="date" class="fsel" style="width:auto" value="${B.de || ''}" onchange="pgBusca('de',this.value,1)"> al <input type="date" class="fsel" style="width:auto" value="${B.a || ''}" onchange="pgBusca('a',this.value,1)"></span>
-    <div class="chips" style="flex-basis:100%"><span class="chip ${!B.st ? 'act' : ''}" onclick="pgBusca('st','',1)">Todos <b>${cnt('')}</b></span>${chipE('confac', '✓ Completos con factura')}${chipE('comp', '✓ Completos (incluye los que no llevan factura)')}${chipE('sinfac', 'Sin factura')}${chipE('sincomp', 'Sin comprobante')}${chipE('anul', 'Anulados')}</div>
+    <div class="chips" style="flex-basis:100%"><span class="chip ${!B.st ? 'act' : ''}" onclick="pgBusca('st','',1)">Todos <b>${cnt('')}</b></span>${chipE('confac', '✓ Completos con factura')}${chipE('comp', '✓ Completos (incluye los que no llevan factura)')}${chipE('sinfac', 'Sin factura')}${chipE('sincomp', 'Sin comprobante')}${chipE('anul', 'Anulados')}${window._pgDup.size ? `<span class="chip ${B.st === 'dup' ? 'act' : ''}" style="color:var(--dg)" onclick="pgBusca('st','dup',1)">⚠ Posibles duplicados <b>${window._pgDup.size}</b></span>` : ''}</div>
   </div>
   ${B.st || buscando || B.forma ? `<div class="warnbox" style="margin:0 0 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span>${L.length} pago(s) coinciden · ${$$(tot)}</span><button class="btn btn-s btn-sm" onclick="VIEW.pgB={q:'',st:'',tipo:VIEW.pgB.tipo,forma:'',de:'',a:''};renderTab()">Quitar filtros</button></div>` : ''}
   ${L.length ? `<table><thead><tr><th>Fecha</th><th>Concepto · folio · forma</th><th style="text-align:right">Monto</th><th>Estatus</th><th>Documentos</th><th>Firmó</th></tr></thead><tbody>${cuerpo}</tbody></table>` : '<div class="emp"><p>Ningún pago coincide</p></div>'}</div></div>`;
@@ -1954,7 +1967,7 @@ function rPedidos() {
   <div class="pad"><div class="tc"><div class="ttb" style="gap:10px">${vista}<div class="chips">${chips}</div></div>
   ${VIEW.pedV === 'prov' ? pedPorProveedor(L) : L.length ? `<table><thead><tr><th>Folio</th><th>Área</th><th>Proveedor</th><th>Descripción</th><th style="text-align:right">Estimado</th><th>Estado</th><th>Solicitó</th><th></th></tr></thead><tbody>
   ${L.map(p => `<tr style="cursor:pointer" onclick="verPedido('${p.id}')"><td><b>${esc(p.folio)}</b>${p.urgente ? ' <span class="bdg bdg-rt-r">URGENTE</span>' : ''}${!p.visto_at && ['solicitado', 'autorizado'].includes(p.estado) ? ' <span class="bdg bdg-aut" title="La Contadora aún no lo abre">NUEVO</span>' : p.visto_at ? `<div class="mini" title="Visto por ${esc(nomUsr(p.visto_por))}">👁 ${fmtDT(p.visto_at)}</div>` : ''}</td><td>${esc(p.area)}<div class="mini">${esc(p.sede || '')}</div></td><td>${esc(nomEnt(p.entidad_id))}</td><td>${esc(p.descripcion)}</td><td class="amt" style="text-align:right">${$$(p.monto_estimado)}</td><td><span class="bdg ${PED_EST[p.estado]?.[1] || ''}">${PED_EST[p.estado]?.[0] || esc(p.estado)}</span></td><td class="mini">${esc(nomUsr(p.solicitado_por))}<br>${fmtDT(p.solicitado_at)}</td>
-    <td onclick="event.stopPropagation()">${p.estado === 'solicitado' && puede('pedidos', 3) ? `<button class="btn btn-p btn-sm" onclick="autorizarPedido('${p.id}','autorizar')">Autorizar</button>` : p.estado === 'autorizado' && puede('pedidos') ? `<button class="btn btn-s btn-sm" onclick="enviarPedido('${p.id}')">✉ Enviar</button>` : ''}</td></tr>`).join('')}</tbody></table>`
+    <td onclick="event.stopPropagation()">${(h => h ? `<button class="btn btn-s btn-sm" title="Hay en el almacén: traspasar a mostrador" onclick="pedTraspaso('${p.id}')">⇄ ${h} en almacén</button> ` : '')(pedAlm(p).filter(x => x.hay > 0).length)}${p.estado === 'solicitado' && puede('pedidos', 3) ? `<button class="btn btn-p btn-sm" onclick="autorizarPedido('${p.id}','autorizar')">Autorizar</button>` : p.estado === 'autorizado' && puede('pedidos') ? `<button class="btn btn-s btn-sm" onclick="enviarPedido('${p.id}')">✉ Enviar</button>` : ''}</td></tr>`).join('')}</tbody></table>`
       : `<div class="emp"><div class="ic">⬡</div><p>Sin pedidos en este filtro</p></div>`}</div></div>`;
 }
 // Productos de todos los pedidos del filtro, englobados por proveedor
@@ -1974,10 +1987,10 @@ function pedPorProveedor(L) {
   const ord = { solicitado: 0, autorizado: 1, enviado: 2, recibido: 3, facturado: 4 };
   return `<table><thead><tr><th>Proveedor · producto</th><th style="text-align:right">Cantidad</th><th style="text-align:right">Precio</th><th style="text-align:right">Importe</th><th>Pedidos</th><th></th></tr></thead><tbody>${P.map(g => {
     const ab = VIEW.pedAbre[g.eid || '_'] ?? P.length <= 3, est = {}; g.peds.forEach(p => est[p.estado] = (est[p.estado] || 0) + 1);
-    const S = {}; g.Y.forEach(x => { const s = S[x.k] = S[x.k] || { d: x.l.descripcion, u: x.l.unidad || 'pza', q: 0, imp: 0, pr: x.pr, peds: [] }; s.q += num(x.l.cantidad); s.imp += num(x.l.cantidad) * x.pr; if (x.pr) s.pr = x.pr; s.peds.push({ p: x.p, q: num(x.l.cantidad) }); });
+    const S = {}; g.Y.forEach(x => { const s = S[x.k] = S[x.k] || { d: x.l.descripcion, u: x.l.unidad || 'pza', q: 0, imp: 0, pr: x.pr, peds: [], fp: x.l.far_producto_id }; s.q += num(x.l.cantidad); s.imp += num(x.l.cantidad) * x.pr; if (x.pr) s.pr = x.pr; s.peds.push({ p: x.p, q: num(x.l.cantidad) }); });
     const mixtos = g.peds.filter(p => !p.entidad_id && new Set(pedLineas([p]).map(x => x.prov)).size > 1);
     return `<tr class="grp-hdr" style="cursor:pointer" onclick="VIEW.pedAbre['${g.eid || '_'}']=!${ab};renderTab()"><td colspan="3"><div class="grp-name">${ab ? '▾' : '▸'} ${esc(g.n)} <span class="mini">${Object.keys(S).length} producto(s) · ${g.peds.length} pedido(s) · ${Object.entries(est).sort((a, b) => (ord[a[0]] ?? 9) - (ord[b[0]] ?? 9)).map(([k, n]) => `${n} ${(PED_EST[k]?.[0] || k).toLowerCase()}`).join(' · ')}</span></div></td><td class="amt" style="text-align:right">${g.tot ? $$(g.tot) : '—'}</td><td colspan="2" style="text-align:right" onclick="event.stopPropagation()">${g.eid ? `<button class="btn btn-s btn-sm" onclick="imprimirOCProv('${g.eid}')">🖨 Orden consolidada</button>` : ''}</td></tr>`
-      + (!ab ? '' : Object.values(S).sort((a, b) => a.d.localeCompare(b.d)).map(s => `<tr><td style="padding-left:30px">${esc(s.d)}</td><td class="amt" style="text-align:right">${almNum(s.q)} ${esc(s.u)}</td><td class="amt" style="text-align:right">${s.pr ? $$(s.pr) : '—'}</td><td class="amt" style="text-align:right">${s.imp ? $$(s.imp) : '—'}</td><td>${s.peds.map(z => `<span class="chip" style="cursor:pointer;font-size:11px;padding:2px 8px" title="${esc(PED_EST[z.p.estado]?.[0] || z.p.estado)}" onclick="verPedido('${z.p.id}')">${esc(z.p.folio)}${s.peds.length > 1 ? ' ×' + almNum(z.q) : ''} <span class="mini">${esc((PED_EST[z.p.estado]?.[0] || z.p.estado).toLowerCase())}</span></span>`).join(' ')}</td><td></td></tr>`).join('')
+      + (!ab ? '' : Object.values(S).sort((a, b) => a.d.localeCompare(b.d)).map(s => `<tr><td style="padding-left:30px">${esc(s.d)}${(h => h > 0 ? ` <span class="bdg bdg-apr" title="Existencia vigente en el almacén de farmacia">almacén ${almNum(h)}</span>` : '')(s.fp ? (almFilas('alm').find(r => String(r.id) === String(s.fp))?.lotes || []).filter(l => !l.cad || diasA(l.cad) >= 0).reduce((a, l) => a + l.q, 0) : 0)}</td><td class="amt" style="text-align:right">${almNum(s.q)} ${esc(s.u)}</td><td class="amt" style="text-align:right">${s.pr ? $$(s.pr) : '—'}</td><td class="amt" style="text-align:right">${s.imp ? $$(s.imp) : '—'}</td><td>${s.peds.map(z => `<span class="chip" style="cursor:pointer;font-size:11px;padding:2px 8px" title="${esc(PED_EST[z.p.estado]?.[0] || z.p.estado)}" onclick="verPedido('${z.p.id}')">${esc(z.p.folio)}${s.peds.length > 1 ? ' ×' + almNum(z.q) : ''} <span class="mini">${esc((PED_EST[z.p.estado]?.[0] || z.p.estado).toLowerCase())}</span></span>`).join(' ')}</td><td></td></tr>`).join('')
       + (ab && mixtos.length && puede('pedidos') ? `<tr><td colspan="6" class="mini" style="padding-left:30px;color:var(--wn)">${mixtos.map(p => `${esc(p.folio)} trae productos de varios proveedores · <a href="#" style="color:var(--pr)" onclick="event.preventDefault();dividirPedido('${p.id}')">separarlo por proveedor</a>`).join(' · ')}</td></tr>` : ''));
   }).join('')}</tbody></table>`;
 }
@@ -2034,6 +2047,21 @@ async function guardarPedido() {
   CM('mGen'); toast(`Pedido ${r.folio} enviado a autorización${d.urgente ? ' (urgente)' : ''}`, 'success');
   await cargarTodo();
 }
+// Lo que el pedido pide y ya hay en el almacén de farmacia (para traspasar en vez de comprar)
+function pedAlm(p) {
+  if (['cancelado', 'rechazado'].includes(p.estado) || !Array.isArray(p.partidas)) return [];
+  const R = {}; almFilas('alm').forEach(r => R[String(r.id)] = r);
+  return p.partidas.map(l => { const pr = (INV.farProd || []).find(z => String(z.id) === String(l.far_producto_id)) || (INV.farProd || []).find(z => normTx(z.nombre) === normTx(l.descripcion)); if (!pr) return null;
+    const r = R[String(pr.id)], hay = r ? r.lotes.filter(x => !x.cad || diasA(x.cad) >= 0).reduce((s, x) => s + x.q, 0) : 0; return { id: pr.id, n: pr.nombre, q: num(l.cantidad), hay, most: r ? r.most : 0 }; }).filter(Boolean);
+}
+function pedTraspaso(id) { const A = pedAlm(PED.find(x => x.id === id)).filter(x => x.hay > 0); if (!A.length) return toast('No hay existencia en el almacén para este pedido', 'info'); const pre = {}; A.forEach(x => pre[x.id] = Math.min(x.q, x.hay)); CM('mGen'); almTraspaso(pre); }
+function pedAlmCaja(p) {
+  const A = pedAlm(p); if (!A.length) return '';
+  const con = A.filter(x => x.hay > 0), comp = A.filter(x => x.hay >= x.q).length;
+  return `<div style="margin-top:14px;padding:10px 12px;border-radius:var(--rs);background:var(--sf2);border:1px solid ${con.length ? 'var(--sc)' : 'var(--br)'}"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><b>¿Hay en el almacén de farmacia?</b>${con.length && puede('pedidos') ? `<button class="btn btn-p btn-sm" onclick="pedTraspaso('${p.id}')">⇄ Traspasar a mostrador lo que hay</button>` : ''}</div>
+    <div class="mini" style="margin:4px 0 6px">${con.length ? `${comp} de ${A.length} producto(s) se pueden surtir completos desde el almacén${con.length > comp ? ` y ${con.length - comp} en parte` : ''}; lo demás sí hay que pedirlo al proveedor.` : 'Nada de este pedido hay en el almacén: hay que pedirlo al proveedor.'}</div>
+    <table><tbody>${A.map(x => `<tr><td>${esc(x.n)}</td><td class="amt" style="text-align:right">pide ${almNum(x.q)}</td><td class="amt" style="text-align:right;color:${x.hay >= x.q ? 'var(--sc)' : x.hay > 0 ? 'var(--wn)' : 'var(--tm)'}">almacén ${almNum(x.hay)}</td><td class="amt mini" style="text-align:right">mostrador ${almNum(x.most)}</td></tr>`).join('')}</tbody></table></div>`;
+}
 function verPedido(id) {
   const p = PED.find(x => x.id === id); if (!p) return;
   if (!p.visto_at && ['contadora', 'administracion'].includes(cu.rol)) sb.rpc('fin_pedido_visto', { p_usuario: cu.id, p_pedido: id }).then(({ data }) => { if (data?.ok && !data.ya) { p.visto_at = new Date().toISOString(); p.visto_por = cu.id; } }).catch(() => {});
@@ -2062,7 +2090,7 @@ function verPedido(id) {
     ['solicitado', 'autorizado', 'enviado'].includes(p.estado) && pt.length > 1 && puede('pedidos') ? `<button class="btn btn-s" onclick="dividirPedido('${id}')">✂ Separar por proveedor</button>` : '',
     !['cancelado', 'rechazado', 'facturado'].includes(p.estado) ? `<button class="btn btn-d" onclick="estadoPedido('${id}','cancelado')">Cancelar</button>` : ''
   ].join('');
-  modal('Pedido ' + p.folio, b + cotPanel(p), ft, 'xl');
+  modal('Pedido ' + p.folio, b + pedAlmCaja(p) + cotPanel(p), ft, 'xl');
 }
 // Un pedido con productos de varios proveedores se separa: un pedido por proveedor, cada uno se surte por su lado
 function dividirPedido(id) {
@@ -2703,13 +2731,13 @@ function nomGrupoCuenta(r, per) {
   const tot = G.reduce((s, f) => s + num(f.monto_total), 0), pag = G.reduce((s, f) => s + num(f.monto_pagado) + num(f.descuento_monto), 0);
   return { id: G[0].id, _grupo: G, entidad_id: r.entidad_id, monto_total: tot, monto_pagado: pag, descuento_monto: 0, estado: G.every(f => saldo(f) <= 0.5) ? 'pagado' : 'pendiente', fecha_pago: G.map(f => f.fecha_pago).filter(Boolean).sort().pop() || null, recurrente_id: r.id, recurrente_periodo: per, descripcion: r.descripcion, tipo: 'egreso' };
 }
-function nomCxp(rid, per) {
-  const r = REC.find(x => x.id === rid) || REC.find(x => nomRef(x) === 'fijo');
+function nomCxp(rid, per, reemplaza) {
+  const r = REC.find(x => x.id === rid) || REC.find(x => nomRef(x) === 'fijo'), fr = reemplaza ? FAC.find(x => x.id === reemplaza) : null;
   if (!per) { const h = hoyD(), d = h.getDate() <= 15 ? new Date(h.getFullYear(), h.getMonth(), 15) : new Date(h.getFullYear(), h.getMonth() + 1, 0); per = isoD(d); }
   const ya = r ? FAC.filter(f => f.nomina_grupo === r.id + '|' + per && !f.anulado) : [];
   const base = ya.length ? [] : (r?.desglose?.length ? r.desglose : NOM_EMP.filter(e => e.activo !== false && e.esquema === 'fijo').map(e => ({ empleado: e.nombre, empleado_id: e.id, concepto: 'Sueldo quincenal', monto: '' })));
-  window._nc = { rid: r?.id || null, per, L: (base.length ? base : [{ empleado: '', concepto: 'Sueldo quincenal', monto: '' }]).map(x => ({ ...x, fecha: per })) };
-  modal('Nómina COE por persona', `<div class="mini" style="margin-bottom:10px">Cada línea se agrega como una <b>cuenta por pagar</b> separada (nombre, concepto, monto y fecha de pago). Se pagan una por una con su comprobante y ya no se cuentan como un solo pago de "Nómina COE".${ya.length ? ` <b>Esta quincena ya tiene ${ya.length} cuenta(s) por persona</b>; lo que agregues se suma.` : ''}</div>
+  window._nc = { rid: r?.id || null, per, rep: fr ? fr.id : null, L: (base.length ? base : [{ empleado: '', concepto: 'Sueldo quincenal', monto: '' }]).map(x => ({ ...x, fecha: per })) };
+  modal('Nómina COE por persona', `${fr ? `<div class="warnbox" style="margin-bottom:10px">Se reemplaza la cuenta única «${esc(fr.descripcion)}» de <b>${$$(fr.monto_total)}</b> por las cuentas por persona. Al firmar, la cuenta única se anula.</div>` : ''}<div class="mini" style="margin-bottom:10px">Cada línea se agrega como una <b>cuenta por pagar</b> separada (nombre, concepto, monto y fecha de pago). Se pagan una por una con su comprobante y ya no se cuentan como un solo pago de "Nómina COE".${ya.length ? ` <b>Esta quincena ya tiene ${ya.length} cuenta(s) por persona</b>; lo que agregues se suma.` : ''}</div>
     <div class="fgrd" style="margin-bottom:8px"><div class="fgrp"><label>Quincena</label><input type="date" id="ncPer" value="${per}" onchange="_nc.per=this.value"></div></div>
     <datalist id="ncEmp">${[...new Set(NOM_EMP.filter(e => e.activo !== false).map(e => e.nombre).concat(FAC.flatMap(x => (x.desglose || []).map(l => l.empleado))))].map(n => `<option value="${esc(n)}">`).join('')}</datalist>
     <datalist id="ncCon">${NOM_CONCEPTOS.map(c => `<option value="${c}">`).join('')}</datalist>
@@ -2722,7 +2750,7 @@ function ncPintar() {
   const d = window._nc, s = d.L.reduce((a, x) => a + num(x.monto), 0);
   document.getElementById('ncB').innerHTML = `<div class="tc"><table><thead><tr><th>Nombre del personal</th><th>Concepto</th><th style="width:140px;text-align:right">Monto</th><th style="width:150px">Fecha de pago</th><th></th></tr></thead><tbody>
     ${d.L.map((x, i) => `<tr><td><input type="text" list="ncEmp" value="${esc(x.empleado || '')}" onchange="_nc.L[${i}].empleado=this.value"></td><td><input type="text" list="ncCon" value="${esc(x.concepto || '')}" onchange="_nc.L[${i}].concepto=this.value"></td><td><div class="ipfx"><span>$</span><input type="number" step="0.01" min="0" value="${x.monto === '' ? '' : num(x.monto)}" style="text-align:right" onchange="_nc.L[${i}].monto=this.value;ncPintar()"></div></td><td><input type="date" value="${x.fecha || ''}" onchange="_nc.L[${i}].fecha=this.value"></td><td><span class="mcls" title="Quitar" onclick="_nc.L.splice(${i},1);ncPintar()">✕</span></td></tr>`).join('')}
-    <tr><td colspan="2"><b>Total</b> <span class="mini">${d.L.length} cuenta(s)</span></td><td class="amt" style="text-align:right"><b>${$$(s)}</b></td><td colspan="2"></td></tr></tbody></table></div>`;
+    <tr><td colspan="2"><b>Total</b> <span class="mini">${d.L.length} cuenta(s)${d.rep ? (f => f ? ` · la cuenta única era de ${$$(f.monto_total)}${Math.abs(num(f.monto_total) - s) > 0.5 ? ` · <b style="color:var(--wn)">diferencia ${$$(num(f.monto_total) - s)}</b>` : ' · cuadra ✓'}` : '')(FAC.find(x => x.id === d.rep)) : ''}</span></td><td class="amt" style="text-align:right"><b>${$$(s)}</b></td><td colspan="2"></td></tr></tbody></table></div>`;
 }
 async function nomCxpGuardar() {
   const d = window._nc; document.activeElement?.blur?.();
@@ -2732,7 +2760,7 @@ async function nomCxpGuardar() {
   if (mal) return toast('Cada línea necesita nombre, monto y fecha de pago', 'warning');
   const per = document.getElementById('ncPer').value || d.per;
   const lin = L.map(x => ({ empleado: x.empleado.trim(), empleado_id: x.empleado_id || NOM_EMP.find(e => normTx(e.nombre) === normTx(x.empleado))?.id || '', concepto: x.concepto || '', monto: num(x.monto), fecha: x.fecha }));
-  const r = await rpcFirmado('fin_nomina_cxp', { p_rec: d.rid, p_periodo: per, p_lineas: lin }, { titulo: 'Firmar nómina por persona', sub: `${lin.length} cuenta(s) · ${$$(lin.reduce((s, x) => s + x.monto, 0))}` });
+  const r = await rpcFirmado('fin_nomina_personas', { p_rec: d.rid, p_periodo: per, p_lineas: lin, p_reemplaza: d.rep }, { titulo: 'Firmar nómina por persona', sub: `${lin.length} cuenta(s) · ${$$(lin.reduce((s, x) => s + x.monto, 0))}` });
   if (!r) return;
   toast(`${r.cuentas} cuenta(s) agregadas a Por pagar`, 'success'); CM('mGen'); await cargarTodo(true); renderTab();
 }
@@ -4993,8 +5021,10 @@ function spDuplicado(it) {
   const eids = new Set([D.eid].filter(Boolean));
   if (it.sel === 'nuevo' && it.ent === '__alta' && it.alta.nombre.trim()) ENT.filter(e => e.activo !== false && simil(e.nombre, it.alta.nombre) >= 0.75).forEach(e => eids.add(e.id));
   const dias = (a, b) => Math.abs((new Date(a + 'T12:00:00') - new Date(b + 'T12:00:00')) / 864e5);
+  // 0) La misma referencia bancaria ya se usó en otro pago
+  { const yr = pagoRefDup(it.ref, m, [...eids]); if (yr) { const f = FAC.find(x => x.id === yr.factura_id); return { msg: `La referencia ${it.ref} ya está registrada: ${nomEnt(f?.entidad_id)} · ${f?.descripcion || ''} · ${$$(yr.monto)} pagado el ${fmtD(yr.fecha_pago)}${tieneXML(f || {}) ? ' (con factura)' : ''}.`, cual: 'dup' }; } }
   // 1) Ya hay un pago igual (mismo proveedor, mismo monto, fecha cercana)
-  const ya = ABO.find(a => !a.anulado && Math.abs(num(a.monto) - m) <= 1 && it.fecha && a.fecha_pago && dias(a.fecha_pago, it.fecha) <= 2 && (() => { const f = FAC.find(x => x.id === a.factura_id); return f && !f.anulado && eids.has(f.entidad_id); })());
+  const ya = ABO.find(a => !a.anulado && Math.abs(num(a.monto) - m) <= 1 && it.fecha && a.fecha_pago && dias(a.fecha_pago, it.fecha) <= 10 && (() => { const f = FAC.find(x => x.id === a.factura_id); return f && !f.anulado && eids.has(f.entidad_id); })());
   if (ya) { const f = FAC.find(x => x.id === ya.factura_id); return { msg: `Parece la misma transferencia ya registrada: ${nomEnt(f.entidad_id)} · ${f.descripcion} · ${$$(ya.monto)} pagado el ${fmtD(ya.fecha_pago)}.`, cual: 'dup' }; }
   // 2) Pago «nuevo» pero ya existe una cuenta abierta de ese proveedor por ese monto
   if (it.sel === 'nuevo') {
@@ -5147,6 +5177,29 @@ function fpsVerificar(ids) {
   return `<div class="dsec" style="margin:12px 0 4px">Dónde quedó cada pago</div>${L.map(fila).join('')}`;
 }
 
+// ── Duplicados por referencia bancaria ──
+const refNorm = r => String(r || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+const refValida = r => { const n = refNorm(r); return n.length >= 4 && /\d/.test(n) && !/EFECTIVO/.test(n); };
+function pagoRefDup(ref, monto, eids, excluirFactura) {
+  if (!refValida(ref)) return null; const n = refNorm(ref);
+  return ABO.find(a => !a.anulado && a.factura_id !== excluirFactura && refNorm(a.referencia) === n && (() => { const f = FAC.find(x => x.id === a.factura_id); return f && !f.anulado && (!eids || !eids.length || eids.includes(f.entidad_id) || Math.abs(num(a.monto) - num(monto)) <= 1); })()) || null;
+}
+// Pagos que parecen registrados dos veces (para revisión en la pestaña Pagos)
+function pagosDuplicados() {
+  const out = new Map(), V = ABO.filter(a => !a.anulado).map(a => ({ a, f: FAC.find(x => x.id === a.factura_id) })).filter(x => x.f && !x.f.anulado && x.f.tipo === 'egreso');
+  const marca = (x, y, why) => { if (!out.has(x.a.id)) out.set(x.a.id, { why, con: y }); if (!out.has(y.a.id)) out.set(y.a.id, { why, con: x }); };
+  const dd = (p, q) => Math.abs((new Date(p) - new Date(q)) / 864e5);
+  for (let i = 0; i < V.length; i++) for (let j = i + 1; j < V.length; j++) {
+    const x = V[i], y = V[j]; if (x.f.entidad_id !== y.f.entidad_id) continue;
+    const mismo = Math.abs(num(x.a.monto) - num(y.a.monto)) <= 1;
+    if (!mismo) continue;
+    if (refValida(x.a.referencia) && refNorm(x.a.referencia) === refNorm(y.a.referencia)) { marca(x, y, 'misma referencia ' + x.a.referencia); continue; }
+    if (x.f.id === y.f.id && x.a.fecha_pago === y.a.fecha_pago) { marca(x, y, 'dos pagos iguales en la misma cuenta'); continue; }
+    if (x.f.id !== y.f.id && num(x.a.monto) > 500 && x.a.fecha_pago && y.a.fecha_pago && dd(x.a.fecha_pago, y.a.fecha_pago) <= 7 && tieneXML(x.f) !== tieneXML(y.f)) marca(x, y, 'mismo monto en una cuenta con factura y otra sin factura');
+  }
+  return out;
+}
+
 // ══ ALMACÉN E INVENTARIOS: qué se va a terminar y qué va a caducar ══
 // Lee COE Farmacia (almacén y mostrador) y COE Quirófano v2. El pronóstico usa las salidas de las últimas 4 semanas.
 VIEW.almA = VIEW.almA || 'alm'; VIEW.almF = VIEW.almF || 'riesgo';
@@ -5249,8 +5302,8 @@ function rAlm() {
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><div class="seg">${ALM_AREAS.map(([k, t]) => `<button class="${A === k ? 'on' : ''}" onclick="VIEW.almA='${k}';renderTab()">${t}</button>`).join('')}</div>
     <button class="btn btn-s btn-sm" onclick="imprimirAlm()">🖨 Imprimir</button></div></div>
   ${almBarra(A)}
-  <div class="pad" style="padding-bottom:0">${cajaControlInv(true)}</div>
-  ${esAlmCont(A) && VIEW.almV === 'agregar' ? almVistaAgregar(A) : `<div class="pad">
+  ${['catalogo', 'rapida'].includes(VIEW.almV) ? '' : `<div class="pad" style="padding-bottom:0">${cajaControlInv(true)}</div>`}
+  ${VIEW.almV === 'catalogo' && esAdmin() && (A === 'alm' || A === 'far') ? almCatalogo() : VIEW.almV === 'rapida' && A === 'alm' ? almRapida() : esAlmCont(A) && VIEW.almV === 'agregar' ? almVistaAgregar(A) : `<div class="pad">
     ${A === 'alm' ? almFaltaBanner() : ''}
     ${sinSalidas ? `<div class="warnbox" style="margin-bottom:14px"><b>No hay salidas registradas en las últimas 4 semanas.</b> COE Farmacia no está descontando las ventas del mostrador ni los traspasos como «salida», por eso «Se acaban en 15 días», «Salida por semana» y «Alcanza para» quedan en cero. En cuanto se registren las salidas, el pronóstico se calcula solo.</div>` : ''}
     ${FI.length ? `<div class="warnbox" style="margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span style="flex:1"><b>${FI.length} producto(s) con información incompleta</b> — sin mínimo${A === 'far' || A === 'qui' ? ', crítico' : ''}, caducidad o proveedor no hay alerta de que se acaban o caducan.</span><button class="btn btn-s btn-sm" onclick="VIEW.almF='info';renderTab()">Ver cuáles</button><button class="btn btn-s btn-sm" onclick="almMinimos('${A}')">⚙ Definir mínimos${A === 'far' || A === 'qui' ? ' y críticos' : ''}</button>${A === 'alm' && R.some(r => r.lotes.some(l => l.falta)) ? `<button class="btn btn-s btn-sm" onclick="almCapturarLotes()">Capturar caducidades</button>` : ''}</div>` : ''}
@@ -5374,7 +5427,8 @@ function almBarra(A) {
   if (A === 'qui') return `<div class="pad" style="padding-bottom:0"><div class="almbar"><button class="btn btn-p btn-sm" onclick="VIEW.envOrg=null;almEnvio()">⇄ Traspaso (almacén de quirófano → quirófano o consultorio)</button><button class="btn btn-s btn-sm" onclick="almMinimos('qui')">⚙ Mínimos</button></div></div>`;
   const sol = A === 'alm' ? (INV.farSol || []).length : 0;
   return `<div class="pad" style="padding-bottom:0"><div class="almbar">
-    ${esAlmCont(A) ? `<div class="seg">${[['tablero', 'Tablero'], ['agregar', 'Agregar manualmente']].map(([k, t]) => `<button class="${VIEW.almV === k ? 'on' : ''}" onclick="VIEW.almV='${k}';renderTab()">${t}</button>`).join('')}</div>
+    ${A === 'far' && esAdmin() ? `<div class="seg">${[['tablero', 'Tablero'], ['catalogo', '📋 Catálogo']].map(([k, t]) => `<button class="${VIEW.almV === k ? 'on' : ''}" onclick="VIEW.almV='${k}';renderTab()">${t}</button>`).join('')}</div>` : ''}
+    ${esAlmCont(A) ? `<div class="seg">${[['tablero', 'Tablero'], ...(A === 'alm' ? [['rapida', '⚡ Llegada rápida']] : []), ['agregar', 'Agregar detallado'], ...(A === 'alm' && esAdmin() ? [['catalogo', '📋 Catálogo']] : [])].map(([k, t]) => `<button class="${VIEW.almV === k ? 'on' : ''}" onclick="VIEW.almV='${k}';renderTab()">${t}</button>`).join('')}</div>
       <button class="btn btn-p btn-sm" onclick="almSubir('${A}')">⬆ Subir inventario</button>
       ${A === 'alm' ? `<button class="btn btn-s btn-sm" onclick="almTraspaso()">⇄ Traspaso (mostrador o consultorio)${sol ? ` <span class="nbdg" style="position:static;display:inline-block">${sol}</span>` : ''}</button>` : `<button class="btn btn-s btn-sm" onclick="VIEW.envOrg=qxAdmId();almEnvio()">⇄ Traspaso (quirófano o consultorio)</button>`}` : ''}
     ${esAdmin() && (A === 'alm' || A === 'far') ? `<button class="btn btn-p btn-sm" onclick="almNuevoProd('${A}')">＋ Medicamento que no está en la lista</button>` : ''}
@@ -5987,6 +6041,103 @@ async function almNuevoFirmar(A) {
   const p = (INV.farProd || []).find(x => normTx(x.nombre) === normTx(nombre)); if (p) almDetalle(d.ubicacion === 'almacen' ? 'alm' : 'far', p.id);
 }
 
+// ══ CATÁLOGO DE MEDICAMENTOS (solo Dirección): altas, bajas y cambios en una sola tabla ══
+VIEW.catQ = VIEW.catQ || ''; VIEW.catInc = VIEW.catInc || false;
+function almCatalogo() {
+  const P = (INV.farProd || []).filter(p => !p.servicio), Ra = {}, Rf = {};
+  almFilas('alm').forEach(r => Ra[r.id] = r); almFilas('far').forEach(r => Rf[r.id] = r);
+  const falta = p => { const f = []; if (!num(p.minimo)) f.push('mín. mostrador'); if (!num(p.critico)) f.push('crítico'); if (!num(p.minimo_alm)) f.push('mín. almacén'); if (!p.proveedor_id) f.push('proveedor'); if (!num(p.costo)) f.push('costo');
+    const L = (INV.farLotes || []).filter(l => String(l.producto_id) === String(p.id) && num(l.cantidad) > 0); if (L.some(l => !l.caducidad || /^SIN LOTE/i.test(l.lote || ''))) f.push('caducidad'); return f; };
+  window._cat = { ch: {}, nuevos: [] };
+  const inc = P.filter(p => falta(p).length).length;
+  const qq = normTx(VIEW.catQ), L = P.filter(p => (!VIEW.catInc || falta(p).length) && (!qq || normTx(p.nombre + ' ' + (p.clave || '') + ' ' + (p.principio || '') + ' ' + nomEnt(p.proveedor_id)).includes(qq))).sort((a, b) => falta(b).length - falta(a).length || a.nombre.localeCompare(b.nombre));
+  const inp = (p, k, t = 'number', w = 70) => `<input type="${t}" ${t === 'number' ? 'min="0" step="any" style="width:' + w + 'px;text-align:right"' : 'style="min-width:' + w + 'px"'} value="${esc(p[k] ?? '')}" onchange="catSet('${p.id}','${k}',this.value)">`;
+  return `<div class="pad">
+    <div class="warnbox" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px"><span style="flex:1"><b>Catálogo de medicamentos e insumos</b> · edita directo en la tabla y guarda todos los cambios juntos. Mínimo y crítico de mostrador, mínimo de almacén, proveedor y costo son los que activan las alertas. <b>${inc}</b> de ${P.length} con información incompleta.</span>
+      <button class="btn btn-s btn-sm" onclick="catNueva()">＋ Medicamento nuevo</button><button class="btn btn-p btn-sm" id="catGo" onclick="catGuardar()" disabled>Guardar cambios</button></div>
+    <div class="tc"><div class="ttb" style="gap:10px"><input class="sbox" id="catQ" placeholder="🔎 Buscar nombre, clave, principio o proveedor" value="${esc(VIEW.catQ)}" onchange="VIEW.catQ=this.value;renderTab()" style="max-width:320px">
+      <div class="chips"><span class="chip ${!VIEW.catInc ? 'act' : ''}" onclick="VIEW.catInc=false;renderTab()">Todos ${P.length}</span><span class="chip ${VIEW.catInc ? 'act' : ''}" onclick="VIEW.catInc=true;renderTab()">⚠ Incompletos ${inc}</span></div><span class="mini" id="catN"></span></div>
+    <div style="overflow-x:auto"><table class="cattab"><thead><tr><th>Producto</th><th>Tipo</th><th>Presentación</th><th>Proveedor</th><th style="text-align:right">Costo</th><th style="text-align:right">Venta</th><th style="text-align:right" title="Mínimo en mostrador">Mín. most.</th><th style="text-align:right" title="Crítico en mostrador">Crítico</th><th style="text-align:right" title="Mínimo en almacén">Mín. alm.</th><th style="min-width:140px">Falta</th><th></th></tr></thead><tbody id="catNuevos"></tbody><tbody>
+    ${L.map(p => { const f = falta(p); return `<tr id="catR${p.id}"><td>${inp(p, 'nombre', 'text', 180)}<div class="mini">${esc(p.clave || '')} · hay ${almNum(Rf[p.id]?.most ?? 0)} en mostrador · ${almNum(Ra[p.id]?.alm ?? Rf[p.id]?.alm ?? 0)} en almacén</div></td>
+      <td><select style="width:120px" onchange="catSet('${p.id}','tipo_insumo',this.value)">${Object.entries(TIPO_INS).map(([k, t]) => `<option value="${k}" ${(p.tipo_insumo || 'medicamento') === k ? 'selected' : ''}>${t}</option>`).join('')}</select></td>
+      <td>${inp(p, 'presentacion', 'text', 110)}</td><td><select style="width:150px" onchange="catSet('${p.id}','proveedor_id',this.value)">${optProv(p.proveedor_id || '')}</select></td>
+      <td>${inp(p, 'costo')}</td><td>${inp(p, 'venta')}</td><td>${inp(p, 'minimo', 'number', 56)}</td><td>${inp(p, 'critico', 'number', 56)}</td><td>${inp(p, 'minimo_alm', 'number', 56)}</td>
+      <td class="mini" style="color:var(--wn);min-width:140px">${f.length ? '⚠ ' + f.join(', ') : '<span style="color:var(--sc)">✓ completo</span>'}</td>
+      <td style="white-space:nowrap"><button class="btn btn-s btn-sm" title="Ver lotes y corregir existencias" onclick="almDetalle('far','${p.id}')">Lotes</button> <label class="mini" title="Dar de baja del catálogo" style="cursor:pointer;color:var(--dg)"><input type="checkbox" style="width:auto" onchange="catSet('${p.id}','activo',this.checked?'false':'true');document.getElementById('catR${p.id}').style.opacity=this.checked?.45:1"> baja</label></td></tr>`; }).join('')}</tbody></table></div></div></div>`;
+}
+function catSet(id, k, v) { const c = window._cat.ch[id] = window._cat.ch[id] || { id }; c[k] = v; catCuenta(); }
+function catCuenta() { const n = Object.keys(window._cat.ch).length + window._cat.nuevos.filter(x => (x.nombre || '').trim()).length, b = document.getElementById('catGo'); if (b) { b.disabled = !n; b.textContent = n ? `Guardar ${n} cambio(s)` : 'Guardar cambios'; } }
+function catNueva() {
+  const i = window._cat.nuevos.push({ nombre: '', tipo_insumo: 'medicamento' }) - 1, tb = document.getElementById('catNuevos');
+  tb.insertAdjacentHTML('beforeend', `<tr style="background:var(--pd)"><td><input type="text" placeholder="Nombre del medicamento" style="min-width:180px" onchange="_cat.nuevos[${i}].nombre=this.value;catCuenta()"><div class="mini"><input type="text" placeholder="clave (opcional)" style="margin-top:3px" onchange="_cat.nuevos[${i}].clave=this.value"></div></td>
+    <td><select onchange="_cat.nuevos[${i}].tipo_insumo=this.value">${Object.entries(TIPO_INS).map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select></td>
+    <td><input type="text" style="min-width:110px" onchange="_cat.nuevos[${i}].presentacion=this.value"></td><td><select style="max-width:170px" onchange="_cat.nuevos[${i}].proveedor_id=this.value">${optProv('')}</select></td>
+    ${['costo', 'venta', 'minimo', 'critico', 'minimo_alm'].map(k => `<td><input type="number" min="0" step="any" style="width:${k.startsWith('m') || k === 'critico' ? 56 : 70}px;text-align:right" onchange="_cat.nuevos[${i}].${k}=this.value"></td>`).join('')}
+    <td class="mini">nuevo · la existencia se captura con «Lotes» o «Llegada rápida»</td><td></td></tr>`);
+  tb.lastElementChild.querySelector('input').focus();
+}
+async function catGuardar() {
+  document.activeElement?.blur?.();
+  const items = Object.values(window._cat.ch).concat(window._cat.nuevos.filter(x => (x.nombre || '').trim()));
+  if (!items.length) return;
+  const r = await rpcDirector('fin_far_catalogo', { p_items: items }, { titulo: 'Guardar catálogo · Director', sub: `${items.length} cambio(s)` });
+  if (!r) return;
+  (r.errores || []).length ? toast(r.errores.map(e => (e.nombre || 'Fila ' + e.fila) + ': ' + e.error).join(' · '), 'warning') : toast(`Catálogo guardado · ${r.altas} alta(s), ${r.cambios} cambio(s), ${r.bajas} baja(s)`, 'success');
+  await cargarTodo(); renderTab();
+}
+
+// ══ LLEGADA RÁPIDA AL ALMACÉN (Contadora): una fila por producto ══
+window._lr = window._lr || [];
+function almRapida() {
+  if (!window._lr.length) window._lr = [lrFila()];
+  setTimeout(lrPintar, 0);
+  const pend = PED.filter(p => /farm/i.test(p.area || '') && ['autorizado', 'enviado', 'recibido'].includes(p.estado));
+  return `<div class="pad"><div class="cfg-section"><h3>⚡ Llegada de insumos al almacén de farmacia</h3><div class="body">
+    <div class="mini" style="margin-bottom:10px">Escribe o elige el producto: si ya existe se llenan solos sus datos; si es nuevo, define sus características en la misma fila. Lote y caducidad son obligatorios.</div>
+    <div class="fgrd" style="margin-bottom:10px">
+      ${pend.length ? `<div class="fgrp"><label>¿Viene de un pedido?</label><select id="lrPed" onchange="lrDesdePedido(this.value)"><option value="">— No —</option>${pend.map(p => `<option value="${p.id}" ${ALM_N.pedido === p.id ? 'selected' : ''}>${esc(p.folio)} · ${esc(nomEnt(p.entidad_id))} · ${esc(String(p.descripcion).slice(0, 50))}</option>`).join('')}</select></div>` : ''}
+      <div class="fgrp"><label>Proveedor</label><select id="lrPv">${optProv(PED.find(x => x.id === ALM_N.pedido)?.entidad_id || '')}</select></div>
+      <div class="fgrp"><label>Factura / remisión</label><input type="text" id="lrF"></div>
+    </div>
+    <datalist id="lrLista">${(INV.farProd || []).filter(p => !p.servicio).map(p => `<option value="${esc(p.nombre)}">`).join('')}</datalist>
+    <div id="lrB"></div>
+    <div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-s btn-sm" onclick="_lr.push(lrFila());lrPintar()">＋ Otra fila</button></div>
+    <div style="margin-top:14px">${almCompHtml('n')}</div>
+    <button class="btn btn-p" style="width:100%;margin-top:10px" onclick="lrRegistrar()">Firmar y registrar llegada</button></div></div></div>`;
+}
+function lrFila(x = {}) { return { nombre: '', cantidad: '', lote: '', caducidad: '', costo: '', ...x }; }
+function lrProd(n) { return (INV.farProd || []).find(p => normTx(p.nombre) === normTx(n) || (p.clave && p.clave === String(n).trim())); }
+function lrPintar() {
+  const e = document.getElementById('lrB'); if (!e) return;
+  e.innerHTML = `<div class="tc" style="overflow-x:auto"><table><thead><tr><th>Producto</th><th style="width:80px">Cantidad</th><th>Lote</th><th style="width:150px">Caducidad</th><th style="width:110px">Costo c/u</th><th></th></tr></thead><tbody>${window._lr.map((x, i) => { const p = lrProd(x.nombre);
+    return `<tr><td><input type="text" list="lrLista" value="${esc(x.nombre)}" placeholder="Nombre o clave" onchange="_lr[${i}].nombre=this.value;lrAuto(${i})">
+      <div class="mini" style="margin-top:3px">${!x.nombre ? '' : p ? `<span style="color:var(--sc)">✓ ${esc(TIPO_INS[p.tipo_insumo] || 'Medicamento')}${p.presentacion ? ' · ' + esc(p.presentacion) : ''}${num(p.minimo_alm) ? ' · mínimo ' + p.minimo_alm : ' · <b style="color:var(--wn)">sin mínimo</b>'}</span>` : `<span style="color:var(--wn)">Nuevo:</span> <select style="width:auto;padding:2px 4px;font-size:11px" onchange="_lr[${i}].tipo_insumo=this.value">${Object.entries(TIPO_INS).map(([k, t]) => `<option value="${k}" ${(x.tipo_insumo || 'medicamento') === k ? 'selected' : ''}>${t}</option>`).join('')}</select> <input type="text" placeholder="presentación" value="${esc(x.presentacion || '')}" style="width:110px;padding:2px 6px;font-size:11px" onchange="_lr[${i}].presentacion=this.value"> <input type="number" placeholder="mínimo" value="${esc(x.minimo_alm || '')}" style="width:70px;padding:2px 6px;font-size:11px" onchange="_lr[${i}].minimo_alm=this.value">`}</div></td>
+      <td><input type="number" min="1" step="1" value="${esc(x.cantidad)}" onchange="_lr[${i}].cantidad=this.value"></td>
+      <td><input type="text" value="${esc(x.lote)}" onchange="_lr[${i}].lote=this.value"></td>
+      <td><input type="date" value="${esc(x.caducidad)}" onchange="_lr[${i}].caducidad=this.value"></td>
+      <td><div class="ipfx"><span>$</span><input type="number" step="0.01" value="${esc(x.costo)}" onchange="_lr[${i}].costo=this.value"></div></td>
+      <td><span class="mcls" onclick="_lr.splice(${i},1);if(!_lr.length)_lr.push(lrFila());lrPintar()">✕</span></td></tr>`; }).join('')}</tbody></table></div>`;
+}
+function lrAuto(i) { const x = window._lr[i], p = lrProd(x.nombre); if (p) { x.nombre = p.nombre; if (!x.costo && num(p.costo)) x.costo = p.costo; } if (i === window._lr.length - 1 && x.nombre) window._lr.push(lrFila()); lrPintar(); }
+function lrDesdePedido(id) {
+  ALM_N.pedido = id; const p = PED.find(x => x.id === id); if (!p) return;
+  window._lr = (p.partidas || []).map(x => { const pr = (INV.farProd || []).find(z => String(z.id) === String(x.far_producto_id)) || lrProd(x.descripcion); return lrFila({ nombre: pr ? pr.nombre : x.descripcion, cantidad: num(x.cantidad) || '', costo: num(x.costo ?? x.precio) || (pr && num(pr.costo)) || '' }); });
+  const pv = document.getElementById('lrPv'); if (pv && p.entidad_id) pv.value = p.entidad_id;
+  lrPintar(); toast('Productos del pedido cargados: captura lote y caducidad', 'info');
+}
+async function lrRegistrar() {
+  document.activeElement?.blur?.();
+  const L = window._lr.filter(x => (x.nombre || '').trim());
+  if (!L.length) return toast('Agrega al menos un producto', 'warning');
+  const mal = L.find(x => !(num(x.cantidad) > 0) || !String(x.lote || '').trim() || (almReqCad(lrProd(x.nombre)?.tipo_insumo || x.tipo_insumo || 'medicamento') && !x.caducidad));
+  if (mal) return toast(`«${mal.nombre}»: falta cantidad, lote o caducidad`, 'warning');
+  const pv = document.getElementById('lrPv')?.value || '', fac = document.getElementById('lrF')?.value || '';
+  ALM_N.area = 'alm';
+  ALM_N.filas = L.map(x => { const p = lrProd(x.nombre); return { producto_id: p ? p.id : '', nombre: p ? p.nombre : x.nombre.trim(), tipo_insumo: p?.tipo_insumo || x.tipo_insumo || 'medicamento', presentacion: p ? '' : (x.presentacion || ''), unidad: p?.unidad || 'pza', lote: String(x.lote).trim(), caducidad: x.caducidad || null, cantidad: num(x.cantidad), costo: num(x.costo) || '', factura: fac, proveedor_id: pv, minimo_alm: p ? '' : (x.minimo_alm === '' || x.minimo_alm === undefined ? '' : num(x.minimo_alm)) }; });
+  await almGuardarManual();
+  if (!ALM_N.filas.length) { window._lr = []; }
+}
+
 // ══ ELIMINAR FACTURAS O PAGOS MAL CAPTURADOS (Por pagar / Por cobrar) ══
 // La Contadora (o Dirección General) elimina con su PIN (queda anulado con motivo en la bitácora, no se borra la evidencia).
 // Los demás usuarios lo solicitan y la Contadora lo autoriza.
@@ -6332,12 +6483,13 @@ function ppFila(x, esDirTab) {
   const tag = x.sinCuenta ? `<span class="bdg pp-rec">↻ ${x.nom ? 'nómina' : 'recurrente'}</span>` : x.rec ? '<span class="bdg pp-rec">↻</span>' : '';
   const monto = x.variable ? (puede('cxp') ? `<div onclick="event.stopPropagation()"><div class="ipfx pp-mon"><span>$</span><input type="number" step="0.01" placeholder="${x.nom ? 'según Nómina' : 'monto'}" value="${esc(P.mon[x.k] || (x.est ? x.est.toFixed(2) : ''))}" onchange="VIEW.pp.mon['${x.k}']=this.value;renderTab()"></div><div class="mini pp-var">variable${x.est && !P.mon[x.k] ? ' · estimado del último pago' : ''}</div></div>` : x.est ? `<b class="amt">${$$(x.est)}</b><div class="mini pp-var">variable</div>` : '<span class="mini">variable</span>') : `<b class="amt">${$$(x.monto)}</b>`;
   const ir = x.f ? `verCuenta('${x.f.id}')` : '';
+  const nomF = x.nom && nomRef(x.r) === 'fijo' && puede('cxp') ? (x.sinCuenta ? `<button class="btn btn-s btn-sm" title="Separar por persona, monto y concepto" onclick="event.stopPropagation();nomCxp('${x.r.id}','${x.fecha}')">☰ Desglosar</button>` : x.f && esNomFijo(x.f) && !x.f.nomina_grupo && num(x.f.monto_pagado) <= 0.009 ? `<button class="btn btn-s btn-sm" onclick="event.stopPropagation();nomCxp('${x.f.recurrente_id || ''}','${x.f.recurrente_periodo || x.fecha}','${x.f.id}')">☰ Desglosar</button>` : '') : (x.f && esNomFijo(x.f) && !x.f.nomina_grupo && num(x.f.monto_pagado) <= 0.009 && puede('cxp') ? `<button class="btn btn-s btn-sm" onclick="event.stopPropagation();nomCxp('${x.f.recurrente_id || ''}','${x.f.recurrente_periodo || x.fecha}','${x.f.id}')">☰ Desglosar</button>` : '');
   const acc = esDirTab || pagar ? (x.f && pagar ? `<button class="btn ${x.prop ? 'btn-p' : 'btn-s'} btn-sm" onclick="event.stopPropagation();pagarCuenta('${x.f.id}')">Pagar</button>` : x.sinCuenta && pagar ? `<button class="btn btn-s btn-sm" onclick="event.stopPropagation();pagarRecurrenteDesde(${x.oi})">Pagar</button>` : '') : '';
   return `<div class="pprow ${v ? 'v' : ''} ${x.prop ? 'p' : ''}" ${ir ? `onclick="${ir}"` : ''}>
     <input type="checkbox" ${P.sel[x.k] ? 'checked' : ''} onclick="event.stopPropagation()" onchange="VIEW.pp.sel['${x.k}']=this.checked;renderTab()">
     <div class="ppd"><div class="ppdt">${fmtD(x.prop || x.fecha).slice(0, 5)}</div><div class="mini">${x.prop && x.fecha && x.prop !== x.fecha ? 'vence ' + fmtD(x.fecha).slice(0, 5) : diasTxtPP(x.fecha)}</div></div>
     <div class="ppt"><div>${VIEW.pp.grp === 'prov' ? '' : `<b>${esc(nomEnt(x.ent))}</b> · `}${esc(x.desc)} ${tag} ${est} ${x.pri && PRI[x.pri] ? priBdg(x.pri) : ''}</div><div class="mini">${esc(x.cat)}${x.f ? ' · ' + docsDe(x.f) : ' · aún sin cuenta: se crea al proponer o pagar'}</div>${ppDescChip(x)}</div>
-    <div class="ppm">${monto}</div><div class="rowact" onclick="event.stopPropagation()">${acc}${x.prop && puede('cxp') && x.f ? `<button class="btn btn-s btn-sm" onclick="quitarPropuesta('${x.f.id}')" title="Quitar de la propuesta">✕</button>` : ''}</div></div>`;
+    <div class="ppm">${monto}</div><div class="rowact" onclick="event.stopPropagation()">${nomF}${acc}${x.prop && puede('cxp') && x.f ? `<button class="btn btn-s btn-sm" onclick="quitarPropuesta('${x.f.id}')" title="Quitar de la propuesta">✕</button>` : ''}</div></div>`;
 }
 // Aviso de descuento por pronto pago (vigente o vencido)
 function ppDescChip(x) {
