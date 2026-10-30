@@ -1630,6 +1630,7 @@ function verCuenta(id) {
     ${f.propuesta_pago ? `<b>Propuesta</b><div class="mini">Pagar el ${fmtD(f.propuesta_pago)} · propuso ${esc(nomUsr(f.propuesta_por))}</div>` : ''}
     <b>Revisión</b><div class="mini">${!sinRevisar(f) ? esc(f.revision) + ' por ' + esc(nomUsr(f.revision_por)) + ' ' + fmtDT(f.revision_at) + (f.revision_nota ? ' — ' + esc(f.revision_nota) : '') : 'Sin revisar'}</div>
   </div>
+  ${esNomFijo(f) ? `<h4 style="margin:18px 0 8px;display:flex;justify-content:space-between;align-items:center">Desglose de la nómina${puede('recurrentes') ? `<button class="btn btn-s btn-sm" onclick="nomDesglose('${f.id}')">✎ ${f.desglose?.length ? 'Editar' : 'Desglosar'}</button>` : ''}</h4>${nomDesgTabla(f.desglose, num(f.monto_pagado) || num(f.monto_total))}` : ''}
   <h4 style="margin:18px 0 8px">Documentos probatorios</h4>
   ${docs.length || f.xml_url || f.pdf_url ? `<div class="flist">${docs.map(d => `<div class="fitem"><span class="fk">${esc(d.tipo.toUpperCase())}</span><a class="fn" href="${esc(d.url)}" target="_blank">${esc(d.url.split('/').pop())}</a><span class="mini">${esc(nomUsr(d.subido_por))} · ${fmtDT(d.subido_at)}</span><span class="mini" title="Huella SHA-256">#${esc((d.sha256 || '').slice(0, 8))}</span></div>`).join('')}</div>` : '<div class="mini">Sin documentos</div>'}
   <h4 style="margin:18px 0 8px">${egr ? 'Pagos' : 'Cobros'}</h4>
@@ -2374,6 +2375,7 @@ async function _confirmarRecurrente(i) {
   }
   const p = await rpcConPin('fin_pagar', { p_factura: fid, p_monto: monto, p_fecha: pgF.value, p_metodo: pgMet.value, p_referencia: pgR.value, p_comprobante_url: up.url, p_sha256: up.sha }, pin, pinDir);
   if (!p.ok) { toast(ERR[p.error] || p.error, 'error'); return; }
+  if (nomRef(r) === 'fijo') { CM('mGen'); toast('Transferencia de nómina registrada · desglósala por empleado y concepto', 'success'); await cargarTodo(); nomDesglose(fid); return; }
   CM('mGen'); toast(nomRef(r) === 'fijo' ? 'Transferencia de nómina registrada con su comprobante' : nomRef(r) ? 'Transferencia registrada · la Contadora ya tiene el pendiente crítico «Solicitar facturas de nómina»' : 'Pago registrado con comprobante · la factura pasa a Facturas por solicitar', 'success'); await cargarTodo(); if (window._volverTransf) openTransferencias();
 }
 // ══ TRANSFERENCIAS DE HONORARIOS Y NÓMINA (botón directo) ══
@@ -2388,7 +2390,7 @@ function openTransferencias() {
   const celda = o => {
     if (!o) return '<td class="mini">—</td>';
     const i = oc.indexOf(o), k = isoD(o.fecha), f = o.factura;
-    if (f && num(f.monto_pagado) > 0.009) return `<td>${esAdmin() ? `<button class="btn btn-s btn-sm" style="float:right;padding:1px 7px" title="Corregir monto o fecha" onclick="event.stopPropagation();corregirPagoNom('${f.id}')">✎</button>` : ''}<div class="trok" onclick="verCuenta('${f.id}')">✓ ${$$(f.monto_pagado)}<div class="mini">pagado ${fmtD(f.fecha_pago)}${f.comprobante_pago_url ? ' · <a href="' + esc(f.comprobante_pago_url) + '" target="_blank" onclick="event.stopPropagation()">comprobante</a>' : ''}</div></div></td>`;
+    if (f && num(f.monto_pagado) > 0.009) return `<td>${nomRef(o.rec) === 'fijo' && puede('recurrentes') ? `<button class="btn btn-s btn-sm" style="float:right;padding:1px 7px;margin-left:4px" title="Desglose por empleado y concepto" onclick="event.stopPropagation();nomDesglose('${f.id}')">${f.desglose?.length ? '☰ ' + f.desglose.length : '☰ Desglosar'}</button>` : ''}${esAdmin() ? `<button class="btn btn-s btn-sm" style="float:right;padding:1px 7px" title="Corregir monto o fecha" onclick="event.stopPropagation();corregirPagoNom('${f.id}')">✎</button>` : ''}<div class="trok" onclick="verCuenta('${f.id}')">✓ ${$$(f.monto_pagado)}<div class="mini">pagado ${fmtD(f.fecha_pago)}${f.comprobante_pago_url ? ' · <a href="' + esc(f.comprobante_pago_url) + '" target="_blank" onclick="event.stopPropagation()">comprobante</a>' : ''}</div></div></td>`;
     const est = f ? saldo(f) : num(o.rec.monto) || montoNomina(o.rec, k);
     return `<td>${puede('recurrentes') ? `<button class="btn ${diasA(k) <= 0 ? 'btn-p' : 'btn-s'} btn-sm" onclick="pagarRecurrente(${i})">⬆ Subir transferencia</button>` : '<span class="mini">pendiente</span>'}<div class="mini" style="margin-top:3px">${est !== null && est !== undefined ? $$(est) + ' según COE Nómina' : 'monto por capturar'} · ${fmtD(k)}</div></td>`;
   };
@@ -2400,7 +2402,7 @@ function openTransferencias() {
       : !pag.length ? '<span class="mini">Se pide al subir la transferencia</span>'
       : `<span class="bdg ${conXml.length === pag.length && pag.length >= 2 ? 'bdg-apr' : d < 0 ? 'bdg-ven' : 'bdg-pnd'}">${conXml.length} de ${Math.max(2, pag.length)} facturas</span><div class="mini" style="margin-top:3px">límite ${fmtD(finISO)} · la Contadora las solicita</div>`;
     return `<tr><td><b>${esc(fijo ? 'Nómina · personal fijo' : nomEnt(r.entidad_id))}</b><div class="mini">${fijo ? 'Plantilla bancaria · sin factura' : ent(r.entidad_id)?.no_factura ? 'Honorarios · no factura' : ent(r.entidad_id)?.factura_mensual ? 'Honorarios · factura mensual' : 'Honorarios · factura obligatoria'}</div>
-      <div class="mini" style="margin-top:4px">Por quincena: ${puede('recurrentes') ? `<a href="#" onclick="event.preventDefault();montoNomManual('${r.id}')"><b>${num(r.monto) ? $$(r.monto) : 'capturar monto'}</b> ✎</a>` : `<b>${num(r.monto) ? $$(r.monto) : 'variable'}</b>`}</div></td>${celda(q1)}${celda(q2)}<td>${fac}</td></tr>`;
+      ${fijo && puede('recurrentes') ? `<div class="mini" style="margin-top:4px"><a href="#" onclick="event.preventDefault();nomDesglose(null,'${r.id}')">☰ Desglose base${r.desglose?.length ? ' (' + r.desglose.length + ')' : ''}</a> · <a href="#" onclick="event.preventDefault();nomDesgMes()">por empleado del mes</a></div>` : ''}<div class="mini" style="margin-top:4px">Por quincena: ${puede('recurrentes') ? `<a href="#" onclick="event.preventDefault();montoNomManual('${r.id}')"><b>${num(r.monto) ? $$(r.monto) : 'capturar monto'}</b> ✎</a>` : `<b>${num(r.monto) ? $$(r.monto) : 'variable'}</b>`}</div></td>${celda(q1)}${celda(q2)}<td>${fac}</td></tr>`;
   }).join('');
   modal('Transferencias de honorarios y nómina', `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px;flex-wrap:wrap">
       <div class="mini" style="max-width:520px">Sube aquí el comprobante de cada transferencia. En honorarios, la Contadora recibe en automático el <b>pendiente crítico</b> «Solicitar facturas de nómina» por las transferencias del 15 y del fin de mes, con límite el <b>${fmtD(finISO)}</b>; se cierra solo al subir los XML.</div>
@@ -2560,6 +2562,62 @@ async function recResolver(sid, ok) {
   if (!ok) { nota = prompt('Motivo del rechazo (lo verá la Contadora):') || ''; if (!nota.trim()) return toast('Escribe el motivo', 'warning'); }
   const r = await rpcFirmado('fin_rec_resolver', { p_sol: sid, p_aprobar: ok, p_nota: nota }, { titulo: ok ? 'Autorizar cambio' : 'Rechazar cambio' });
   if (r) { toast(ok ? 'Cambio autorizado y aplicado' : 'Cambio rechazado', 'success'); await cargarTodo(true); renderTab(); }
+}
+
+// ── Desglose de Nómina COE (personal fijo): empleado · concepto · monto ──
+const NOM_CONCEPTOS = ['Sueldo quincenal', 'Horas extra', 'Bono', 'Comisión', 'Prima vacacional', 'Vacaciones', 'Aguinaldo', 'Finiquito', 'Préstamo', 'Descuento', 'Ajuste'];
+function esNomFijo(f) { const r = REC.find(x => x.id === f.recurrente_id); return (r && nomRef(r) === 'fijo') || /n[oó]mina coe/i.test(nomEnt(f.entidad_id)); }
+function nomDesgTabla(L, total) {
+  if (!L || !L.length) return '<div class="mini">Sin desglose capturado</div>';
+  const s = L.reduce((a, x) => a + num(x.monto), 0), dif = total ? Math.round((total - s) * 100) / 100 : 0;
+  return `<table><thead><tr><th>Empleado</th><th>Concepto</th><th style="text-align:right">Monto</th></tr></thead><tbody>${L.map(x => `<tr><td>${esc(x.empleado)}</td><td class="mini">${esc(x.concepto || '')}</td><td class="amt" style="text-align:right;${num(x.monto) < 0 ? 'color:var(--dg)' : ''}">${$$(x.monto)}</td></tr>`).join('')}
+    <tr><td colspan="2"><b>Total desglosado</b>${Math.abs(dif) > 0.5 ? ` <span class="mini" style="color:var(--wn)">· ${dif > 0 ? 'faltan' : 'sobran'} ${$$(Math.abs(dif))} contra la transferencia</span>` : total ? ' <span class="mini" style="color:var(--sc)">· cuadra con la transferencia</span>' : ''}</td><td class="amt" style="text-align:right"><b>${$$(s)}</b></td></tr></tbody></table>`;
+}
+function nomDesglose(fid, rid) {
+  const f = fid ? FAC.find(x => x.id === fid) : null, r = REC.find(x => x.id === (rid || f?.recurrente_id)) || REC.find(x => nomRef(x) === 'fijo');
+  const base = (f?.desglose?.length ? f.desglose : r?.desglose?.length ? r.desglose : NOM_EMP.filter(e => e.activo !== false && e.esquema === 'fijo').map(e => ({ empleado: e.nombre, empleado_id: e.id, concepto: 'Sueldo quincenal', monto: '' })));
+  window._nd = { fid, rid: r?.id || null, total: f ? (num(f.monto_pagado) || num(f.monto_total)) : num(r?.monto), L: base.map(x => ({ ...x })) };
+  modal(f ? 'Desglose · ' + (f.descripcion || 'Nómina') : 'Desglose base de la nómina quincenal', `<div class="mini" style="margin-bottom:10px">${f ? `Transferencia de <b>${$$(window._nd.total)}</b> del ${fmtD(f.fecha_pago || f.recurrente_periodo)}. ` : 'Se usa para prellenar cada quincena. '}Una línea por empleado y concepto; los descuentos van en negativo.</div>
+    <datalist id="ndEmp">${[...new Set(NOM_EMP.filter(e => e.activo !== false).map(e => e.nombre).concat(FAC.flatMap(x => (x.desglose || []).map(l => l.empleado))))].map(n => `<option value="${esc(n)}">`).join('')}</datalist>
+    <datalist id="ndCon">${NOM_CONCEPTOS.map(c => `<option value="${c}">`).join('')}</datalist>
+    <div id="ndB"></div>
+    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center"><button class="btn btn-s btn-sm" onclick="_nd.L.push({empleado:'',concepto:'Sueldo quincenal',monto:''});ndPintar()">＋ Línea</button>
+      ${f ? `<label style="display:flex;gap:6px;align-items:center;cursor:pointer;text-transform:none;font-size:13px;margin-left:auto"><input type="checkbox" id="ndPl" style="width:auto" ${r?.desglose?.length ? '' : 'checked'}> Usar como base para las siguientes quincenas</label>` : ''}</div>`,
+  `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="nomDesgGuardar()">Firmar desglose</button>`, 'lg');
+  ndPintar();
+}
+function ndPintar() {
+  const d = window._nd, s = d.L.reduce((a, x) => a + num(x.monto), 0), dif = Math.round((d.total - s) * 100) / 100;
+  document.getElementById('ndB').innerHTML = `<div class="tc"><table><thead><tr><th>Empleado</th><th>Concepto</th><th style="width:150px;text-align:right">Monto</th><th></th></tr></thead><tbody>
+    ${d.L.map((x, i) => `<tr><td><input type="text" list="ndEmp" value="${esc(x.empleado || '')}" onchange="_nd.L[${i}].empleado=this.value"></td><td><input type="text" list="ndCon" value="${esc(x.concepto || '')}" onchange="_nd.L[${i}].concepto=this.value"></td><td><div class="ipfx"><span>$</span><input type="number" step="0.01" value="${x.monto === '' ? '' : num(x.monto)}" style="text-align:right" onchange="_nd.L[${i}].monto=this.value;ndPintar()"></div></td><td><span class="mcls" title="Quitar" onclick="_nd.L.splice(${i},1);ndPintar()">✕</span></td></tr>`).join('')}
+    <tr><td colspan="2"><b>Total</b>${d.total ? (Math.abs(dif) > 0.5 ? ` <span class="mini" style="color:var(--wn)">· ${dif > 0 ? 'faltan' : 'sobran'} ${$$(Math.abs(dif))} para cuadrar con ${$$(d.total)}</span>` : ' <span class="mini" style="color:var(--sc)">· cuadra ✓</span>') : ''}</td><td class="amt" style="text-align:right"><b>${$$(s)}</b></td><td></td></tr></tbody></table></div>`;
+}
+async function nomDesgGuardar() {
+  const d = window._nd; document.activeElement?.blur?.();
+  const L = d.L.filter(x => String(x.empleado || '').trim() && num(x.monto) !== 0).map(x => ({ ...x, empleado_id: x.empleado_id || NOM_EMP.find(e => normTx(e.nombre) === normTx(x.empleado))?.id || '' }));
+  if (d.L.some(x => String(x.empleado || '').trim() && num(x.monto) === 0)) return toast('Hay líneas sin monto', 'warning');
+  const s = L.reduce((a, x) => a + num(x.monto), 0);
+  if (d.fid && d.total && Math.abs(d.total - s) > 0.5 && !confirm(`El desglose suma ${$$(s)} y la transferencia fue de ${$$(d.total)} (diferencia ${$$(d.total - s)}).\n\n¿Guardar así?`)) return;
+  const pl = !!document.getElementById('ndPl')?.checked;
+  const r = await rpcFirmado('fin_nomina_desglose', { p_factura: d.fid, p_rec: d.rid, p_lineas: L, p_plantilla: pl }, { titulo: 'Firmar desglose de nómina', sub: `${L.length} línea(s) · ${$$(s)}` });
+  if (!r) return;
+  toast('Desglose guardado', 'success'); CM('mGen'); await cargarTodo(true);
+  if (d.fid) verCuenta(d.fid); else openTransferencias();
+}
+// Resumen del mes: por empleado y concepto
+function nomDesgMes() {
+  const base = new Date(); base.setDate(1); base.setMonth(base.getMonth() + VIEW.trOff);
+  const ym = isoD(base).slice(0, 7);
+  const F = FAC.filter(f => !f.anulado && esNomFijo(f) && String(f.recurrente_periodo || f.fecha_pago || '').slice(0, 7) === ym && num(f.monto_pagado) > 0.009);
+  const L = F.flatMap(f => (f.desglose || []).map(x => ({ ...x, q: String(f.recurrente_periodo || '').slice(8, 10) <= '15' ? 'q1' : 'q2' })));
+  const E = {}; L.forEach(x => { const k = x.empleado; (E[k] = E[k] || { q1: 0, q2: 0, c: {} }); E[k][x.q] += num(x.monto); E[k].c[x.concepto || '—'] = (E[k].c[x.concepto || '—'] || 0) + num(x.monto); });
+  const sin = F.filter(f => !(f.desglose || []).length), tot = F.reduce((s, f) => s + num(f.monto_pagado), 0), td = L.reduce((s, x) => s + num(x.monto), 0);
+  window._ndX = L.map(x => ({ Mes: ym, Quincena: x.q === 'q1' ? '15' : 'Fin de mes', Empleado: x.empleado, Concepto: x.concepto, Monto: num(x.monto) }));
+  modal('Nómina COE por empleado · ' + MES_TXT(ym), `${sin.length ? `<div class="warnbox">${sin.length} transferencia(s) del mes sin desglosar: ${sin.map(f => `<a href="#" onclick="event.preventDefault();nomDesglose('${f.id}')" style="color:var(--wn);text-decoration:underline">${fmtD(f.recurrente_periodo || f.fecha_pago)} · ${$$(f.monto_pagado)}</a>`).join(' · ')}</div>` : ''}
+    ${L.length ? `<div class="tc"><table><thead><tr><th>Empleado</th><th>Conceptos</th><th style="text-align:right">Quincena 15</th><th style="text-align:right">Fin de mes</th><th style="text-align:right">Total</th></tr></thead><tbody>
+    ${Object.entries(E).sort((a, b) => a[0].localeCompare(b[0])).map(([n, e]) => `<tr><td><b>${esc(n)}</b></td><td class="mini">${Object.entries(e.c).map(([c, m]) => esc(c) + ' ' + $$(m)).join(' · ')}</td><td class="amt" style="text-align:right">${$$(e.q1)}</td><td class="amt" style="text-align:right">${$$(e.q2)}</td><td class="amt" style="text-align:right"><b>${$$(e.q1 + e.q2)}</b></td></tr>`).join('')}
+    <tr><td colspan="4"><b>Total desglosado</b> <span class="mini">· transferido ${$$(tot)}</span></td><td class="amt" style="text-align:right"><b>${$$(td)}</b></td></tr></tbody></table></div>` : '<div class="emp"><p>Sin desglose capturado este mes</p></div>'}`,
+  `<button class="btn btn-s" onclick="openTransferencias()">Volver</button>${L.length ? `<button class="btn btn-s" onclick="xls(window._ndX,'Nomina_COE_${ym}')">Excel</button>` : ''}<button class="btn btn-p" onclick="CM('mGen')">Cerrar</button>`, 'lg');
 }
 
 // ══ PERFILES Y PERMISOS ════════════════════════
