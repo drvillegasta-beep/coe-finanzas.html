@@ -872,6 +872,8 @@ tr.fps-prov td{background:var(--sf2)}
 .fxslot b{font-size:18px}.fxslot span{font-size:11.5px;color:var(--tm);word-break:break-all}
 .fxslot input{position:absolute;inset:0;opacity:0;cursor:pointer}.fxslot.ok{border-style:solid;border-color:var(--sc);background:rgba(34,160,107,.08)}
 .pp-var{color:var(--wn);text-align:right;font-weight:600}
+
+.sb-none{background:var(--td)}
 </style>
 </head>
 <body>
@@ -1951,7 +1953,7 @@ function rPedidos() {
     ${puede('pedidos') ? `<button class="btn btn-p btn-sm" onclick="nuevoPedido()">+ Nuevo pedido</button>` : ''}</div>
   <div class="pad"><div class="tc"><div class="ttb" style="gap:10px">${vista}<div class="chips">${chips}</div></div>
   ${VIEW.pedV === 'prov' ? pedPorProveedor(L) : L.length ? `<table><thead><tr><th>Folio</th><th>Área</th><th>Proveedor</th><th>Descripción</th><th style="text-align:right">Estimado</th><th>Estado</th><th>Solicitó</th><th></th></tr></thead><tbody>
-  ${L.map(p => `<tr style="cursor:pointer" onclick="verPedido('${p.id}')"><td><b>${esc(p.folio)}</b>${p.urgente ? ' <span class="bdg bdg-rt-r">URGENTE</span>' : ''}</td><td>${esc(p.area)}<div class="mini">${esc(p.sede || '')}</div></td><td>${esc(nomEnt(p.entidad_id))}</td><td>${esc(p.descripcion)}</td><td class="amt" style="text-align:right">${$$(p.monto_estimado)}</td><td><span class="bdg ${PED_EST[p.estado]?.[1] || ''}">${PED_EST[p.estado]?.[0] || esc(p.estado)}</span></td><td class="mini">${esc(nomUsr(p.solicitado_por))}<br>${fmtDT(p.solicitado_at)}</td>
+  ${L.map(p => `<tr style="cursor:pointer" onclick="verPedido('${p.id}')"><td><b>${esc(p.folio)}</b>${p.urgente ? ' <span class="bdg bdg-rt-r">URGENTE</span>' : ''}${!p.visto_at && ['solicitado', 'autorizado'].includes(p.estado) ? ' <span class="bdg bdg-aut" title="La Contadora aún no lo abre">NUEVO</span>' : p.visto_at ? `<div class="mini" title="Visto por ${esc(nomUsr(p.visto_por))}">👁 ${fmtDT(p.visto_at)}</div>` : ''}</td><td>${esc(p.area)}<div class="mini">${esc(p.sede || '')}</div></td><td>${esc(nomEnt(p.entidad_id))}</td><td>${esc(p.descripcion)}</td><td class="amt" style="text-align:right">${$$(p.monto_estimado)}</td><td><span class="bdg ${PED_EST[p.estado]?.[1] || ''}">${PED_EST[p.estado]?.[0] || esc(p.estado)}</span></td><td class="mini">${esc(nomUsr(p.solicitado_por))}<br>${fmtDT(p.solicitado_at)}</td>
     <td onclick="event.stopPropagation()">${p.estado === 'solicitado' && puede('pedidos', 3) ? `<button class="btn btn-p btn-sm" onclick="autorizarPedido('${p.id}','autorizar')">Autorizar</button>` : p.estado === 'autorizado' && puede('pedidos') ? `<button class="btn btn-s btn-sm" onclick="enviarPedido('${p.id}')">✉ Enviar</button>` : ''}</td></tr>`).join('')}</tbody></table>`
       : `<div class="emp"><div class="ic">⬡</div><p>Sin pedidos en este filtro</p></div>`}</div></div>`;
 }
@@ -2034,6 +2036,7 @@ async function guardarPedido() {
 }
 function verPedido(id) {
   const p = PED.find(x => x.id === id); if (!p) return;
+  if (!p.visto_at && ['contadora', 'administracion'].includes(cu.rol)) sb.rpc('fin_pedido_visto', { p_usuario: cu.id, p_pedido: id }).then(({ data }) => { if (data?.ok && !data.ya) { p.visto_at = new Date().toISOString(); p.visto_por = cu.id; } }).catch(() => {});
   const pt = Array.isArray(p.partidas) ? p.partidas : [];
   const corr = CORR.filter(c => c.pedido_id === id);
   const b = `<div class="kv">
@@ -2042,7 +2045,8 @@ function verPedido(id) {
     <b>Proveedor</b><div>${esc(nomEnt(p.entidad_id))} <span class="mini">${esc(ent(p.entidad_id)?.email || 'sin correo registrado')}</span></div>
     <b>Descripción</b><div>${esc(p.descripcion)}</div>
     <b>Requerido</b><div>${fmtD(p.fecha_requerida)}</div>
-    <b>Solicitó</b><div class="mini">${esc(nomUsr(p.solicitado_por))} · ${fmtDT(p.solicitado_at)}</div>
+    <b>Solicitó</b><div class="mini">${esc(nomUsr(p.solicitado_por))} · ${fmtDT(p.solicitado_at)}${p.far_pedido_id ? ' · desde COE Farmacia' : ''}</div>
+    <b>Enterada</b><div class="mini">${p.visto_at ? `✓ ${esc(nomUsr(p.visto_por))} lo vio el ${fmtDT(p.visto_at)}${p.far_pedido_id ? ' · avisado en COE Farmacia' : ''}` : '<span style="color:var(--wn)">La Contadora aún no lo abre</span>'}</div>
     <b>Autorizó</b><div class="mini">${p.autorizado_por ? esc(nomUsr(p.autorizado_por)) + ' · ' + fmtDT(p.autorizado_at) + (p.firma2_por ? ' · 2ª firma ' + esc(nomUsr(p.firma2_por)) : '') : '—'}${p.rechazo_motivo ? ' · ' + esc(p.rechazo_motivo) : ''}</div>
     <b>Correos</b><div class="mini">${corr.length ? corr.map(c => fmtDT(c.enviado_at) + ' ' + esc(c.motivo || '') + ' → ' + esc(c.para || '')).join('<br>') : '—'}</div>
     ${p.factura_id ? `<b>Factura</b><div><a href="#" onclick="event.preventDefault();verCuenta('${p.factura_id}')" style="color:var(--pr)">Ver cuenta ligada</a></div>` : ''}
@@ -5192,12 +5196,22 @@ function almCierre(R) {
     r.fin = r.dias !== null ? isoD(new Date(Date.now() + r.dias * 864e5)) : null;
     // Lo que no se alcanza a vender antes de caducar
     if (r.rate > 0) { let acum = 0; r.lotes.filter(l => l.cad).sort((a, b) => a.cad < b.cad ? -1 : 1).forEach(l => { const d = diasA(l.cad); const vend = Math.max(0, d * r.rate - acum); const sobra = Math.max(0, l.q - vend); acum += l.q; if (d >= 0 && sobra > 0) l.sobra = Math.ceil(sobra); }); }
-    const b = r.base ?? r.ex; r.est = b <= 0 && (r.min > 0 || r.c4) ? 'acabado' : r.crit && b <= r.crit ? 'critico' : r.min && b <= r.min ? 'bajo' : r.dias !== null && r.dias <= DIAS_ALERTA_FIN ? 'pronto' : 'ok';
-    r.riesgo = { acabado: 0, critico: 1, bajo: 2, pronto: 3, ok: 9 }[r.est] + (r.caducado.length ? -0.5 : 0);
+    const b = r.base ?? r.ex; r.est = b <= 0 && (r.min > 0 || r.c4) ? 'acabado' : r.crit && b <= r.crit ? 'critico' : r.min && b <= r.min ? 'bajo' : r.dias !== null && r.dias <= DIAS_ALERTA_FIN ? 'pronto' : !r.min && !r.lio ? 'sinmin' : 'ok';
+    r.riesgo = { acabado: 0, critico: 1, bajo: 2, pronto: 3, sinmin: 5, ok: 9 }[r.est] + (r.caducado.length ? -0.5 : 0);
   });
   return R;
 }
-const EST_ALM = { acabado: ['Acabado', 'bdg-ven'], critico: ['Crítico', 'bdg-ven'], bajo: ['Bajo mínimo', 'bdg-pnd'], pronto: ['Se acaba pronto', 'bdg-pnd'], ok: ['Suficiente', 'bdg-apr'] };
+const EST_ALM = { acabado: ['Acabado', 'bdg-ven'], critico: ['Crítico', 'bdg-ven'], bajo: ['Bajo mínimo', 'bdg-pnd'], pronto: ['Se acaba pronto', 'bdg-pnd'], ok: ['Suficiente', 'bdg-apr'], sinmin: ['Sin mínimo', 'bdg-pnd'] };
+// Qué datos le faltan a un producto para que las alertas funcionen
+function almFaltaInfo(r, A) {
+  if (r.lio) return [];
+  const f = [];
+  if (!r.min) f.push('mínimo');
+  if ((A === 'far' || A === 'qui') && !r.crit) f.push('crítico');
+  if (r.p?.tipo_insumo !== 'equipo' && r.lotes.some(l => l.q > 0 && (!l.cad || /^SIN LOTE/i.test(l.lote || '')))) f.push('caducidad');
+  if (!r.qx && !almProvDe(r).length) f.push('proveedor');
+  return f;
+}
 const almNum = n => (Math.round(n * 10) / 10).toLocaleString('es-MX');
 function almBadge() { try { const R = almFilas('alm').concat(almFilas('far')); return R.filter(r => r.est === 'acabado' || r.est === 'critico' || r.caducado.length).length; } catch { return 0; } }
 
@@ -5212,13 +5226,14 @@ function rAlm() {
   const xEnv = A === 'adm' ? R.filter(r => r.ex > 0 && r.min && r.most <= r.min) : [];
   const ped = D.pedidos.filter(x => !/^Surtir/.test(x.t));
   const sinDatos = !R.some(r => r.ex > 0) && !R.some(r => r.c4);
+  const FI = R.filter(r => almFaltaInfo(r, A).length), sinSalidas = conPron && R.length && !R.some(r => r.c4);
   // Pronóstico de fin: los que se acaban primero
   const seAcaba = R.filter(r => r.est !== 'ok' || (r.dias !== null && r.dias <= 45)).sort((a, b) => a.riesgo - b.riesgo || (a.dias ?? 9999) - (b.dias ?? 9999)).slice(0, 12);
   // Caducidades por mes: 12 meses
   const mes0 = new Date(); mes0.setDate(1);
   const meses = Array.from({ length: 12 }, (_, i) => { const d = new Date(mes0.getFullYear(), mes0.getMonth() + i, 1), k = isoD(d).slice(0, 7); const L = R.flatMap(r => r.lotes).filter(l => l.cad && l.cad.slice(0, 7) === k && diasA(l.cad) >= 0); return { l: MESES[d.getMonth()].slice(0, 3), hoy: i === 0, a: L.reduce((s, l) => s + l.q, 0), b: L.reduce((s, l) => s + (l.sobra || 0), 0), tip: `${MESES[d.getMonth()]} ${d.getFullYear()}: ${L.length} lote(s), ${L.reduce((s, l) => s + l.q, 0)} pza` }; });
   // Tabla
-  const F = VIEW.almF, filt = { riesgo: r => r.est !== 'ok' || r.caducado.length || r.xCad.length, acaba: r => r.est !== 'ok', caduca: r => r.caducado.length || r.xCad.length, todo: () => true }[F] || (() => true);
+  const F = VIEW.almF, filt = { info: r => almFaltaInfo(r, A).length, riesgo: r => (r.est !== 'ok' && r.est !== 'sinmin') || r.caducado.length || r.xCad.length || almFaltaInfo(r, A).length, acaba: r => !['ok', 'sinmin'].includes(r.est), caduca: r => r.caducado.length || r.xCad.length, todo: () => true }[F] || (() => true);
   const B = VIEW.almB || {}, busca = almBuscaActiva();
   const T = R.filter(busca ? almBuscaFiltro : filt).sort((a, b) => a.riesgo - b.riesgo || (a.dCad ?? 9999) - (b.dCad ?? 9999) || a.n.localeCompare(b.n));
   const fCad = r => r.cad ? `<span style="${r.dCad < 0 ? 'color:var(--dg);font-weight:700' : r.dCad <= 30 ? 'color:var(--dg)' : r.dCad <= 90 ? 'color:var(--wn)' : ''}">${fmtD(r.cad)}</span><div class="mini">${r.dCad < 0 ? 'caducado' : 'en ' + r.dCad + ' d'}</div>` : '<span class="mini">—</span>';
@@ -5226,9 +5241,9 @@ function rAlm() {
     <td class="amt" style="text-align:right">${almNum(r.ex)}</td>${esAlmCont(A) ? `<td class="amt" style="text-align:right">${almNum(r.most)}</td>` : ''}
     <td class="amt" style="text-align:right">${r.min ? almNum(r.min) : '<span class="mini">—</span>'}</td>
     ${conPron ? `<td class="amt" style="text-align:right">${r.c4 ? almNum(r.c4 / 4) : '<span class="mini">0</span>'}</td><td style="text-align:right">${r.dias !== null ? `<b style="${r.dias <= DIAS_ALERTA_FIN ? 'color:var(--dg)' : r.dias <= 45 ? 'color:var(--wn)' : ''}">${r.dias} d</b><div class="mini">${fmtD(r.fin)}</div>` : '<span class="mini">sin consumo</span>'}</td>` : ''}
-    <td>${fCad(r)}</td><td><span class="bdg ${EST_ALM[r.est][1]}">${EST_ALM[r.est][0]}</span>${r.caducado.length ? ' <span class="bdg bdg-ven">Caducado</span>' : ''}${r.lotes.some(l => l.falta) ? ` <span class="bdg bdg-pnd" style="cursor:pointer" onclick="event.stopPropagation();almCapturarLotes(${r.id})">Falta lote/caducidad</span>` : ''}</td>
+    <td>${fCad(r)}</td><td><span class="bdg ${EST_ALM[r.est][1]}">${EST_ALM[r.est][0]}</span>${r.caducado.length ? ' <span class="bdg bdg-ven">Caducado</span>' : ''}${r.lotes.some(l => l.falta) ? ` <span class="bdg bdg-pnd" style="cursor:pointer" onclick="event.stopPropagation();almCapturarLotes(${r.id})">Falta lote/caducidad</span>` : ''}${(fi => fi.length ? `<div class="mini" style="color:var(--wn);margin-top:3px">⚠ Falta: ${fi.join(' · ')}</div>` : '')(almFaltaInfo(r, A))}</td>
     ${A !== 'qui' && puede('pedidos') ? `<td style="text-align:right;white-space:nowrap" onclick="event.stopPropagation()"><button class="btn btn-s btn-sm" title="Solicitar a proveedor" onclick="almSolicitar('${A}',['${r.id}'])">Solicitar</button>${A === 'alm' && r.ex > 0 ? ` <button class="btn btn-s btn-sm" title="Traspasar a mostrador" onclick="almTraspaso({${r.id}:1})">⇄</button>` : A === 'adm' && r.ex > 0 ? ` <button class="btn btn-s btn-sm" title="Enviar a quirófano" onclick="almEnvio({'${r.id}':1},qxAdmId())">⇄</button>` : ''}</td>` : ''}</tr>`;
-  const segs = [{ t: 'Suficiente', n: R.filter(r => r.est === 'ok').length, c: 'sb-ok' }, { t: 'Se acaba pronto', n: R.filter(r => r.est === 'pronto').length, c: 'sb-warn' }, { t: 'Bajo mínimo', n: bajo.length, c: 'sb-ser' }, { t: 'Crítico o acabado', n: acab.length + crit.length, c: 'sb-crit' }];
+  const segs = [{ t: 'Suficiente', n: R.filter(r => r.est === 'ok').length, c: 'sb-ok' }, { t: 'Sin mínimo definido', n: R.filter(r => r.est === 'sinmin').length, c: 'sb-none' }, { t: 'Se acaba pronto', n: R.filter(r => r.est === 'pronto').length, c: 'sb-warn' }, { t: 'Bajo mínimo', n: bajo.length, c: 'sb-ser' }, { t: 'Crítico o acabado', n: acab.length + crit.length, c: 'sb-crit' }];
   return `<div class="ph"><div><div class="ptit">Almacén e inventarios</div><div class="psub">Qué se va a terminar y qué va a caducar · lee COE Farmacia y COE Quirófano en tiempo real</div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><div class="seg">${ALM_AREAS.map(([k, t]) => `<button class="${A === k ? 'on' : ''}" onclick="VIEW.almA='${k}';renderTab()">${t}</button>`).join('')}</div>
     <button class="btn btn-s btn-sm" onclick="imprimirAlm()">🖨 Imprimir</button></div></div>
@@ -5236,9 +5251,12 @@ function rAlm() {
   <div class="pad" style="padding-bottom:0">${cajaControlInv(true)}</div>
   ${esAlmCont(A) && VIEW.almV === 'agregar' ? almVistaAgregar(A) : `<div class="pad">
     ${A === 'alm' ? almFaltaBanner() : ''}
+    ${sinSalidas ? `<div class="warnbox" style="margin-bottom:14px"><b>No hay salidas registradas en las últimas 4 semanas.</b> COE Farmacia no está descontando las ventas del mostrador ni los traspasos como «salida», por eso «Se acaban en 15 días», «Salida por semana» y «Alcanza para» quedan en cero. En cuanto se registren las salidas, el pronóstico se calcula solo.</div>` : ''}
+    ${FI.length ? `<div class="warnbox" style="margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span style="flex:1"><b>${FI.length} producto(s) con información incompleta</b> — sin mínimo${A === 'far' || A === 'qui' ? ', crítico' : ''}, caducidad o proveedor no hay alerta de que se acaban o caducan.</span><button class="btn btn-s btn-sm" onclick="VIEW.almF='info';renderTab()">Ver cuáles</button><button class="btn btn-s btn-sm" onclick="almMinimos('${A}')">⚙ Definir mínimos${A === 'far' || A === 'qui' ? ' y críticos' : ''}</button>${A === 'alm' && R.some(r => r.lotes.some(l => l.falta)) ? `<button class="btn btn-s btn-sm" onclick="almCapturarLotes()">Capturar caducidades</button>` : ''}</div>` : ''}
     ${sinDatos ? `<div class="warnbox" style="margin-bottom:14px">${A === 'adm' ? 'El Almacén de Contabilidad (Administración) de Quirófano aún no tiene existencias. Usa «⬆ Subir inventario» o «Agregar manualmente»; después envía a quirófano con «⇄ Enviar a quirófano».' : A === 'alm' ? 'COE Farmacia todavía no tiene existencias registradas en el almacén. En cuanto se capturen lotes en «Almacén», aquí aparece el pronóstico.' : `Sin existencias registradas en COE ${A === 'qui' ? 'Quirófano' : 'Farmacia'}.`}</div>` : ''}
     <div class="kps">
-      ${kp('Se acaban en ' + DIAS_ALERTA_FIN + ' días', conPron ? String(pronto.length) : '—', conPron ? (pronto[0] ? `primero: ${esc(pronto[0].n)} (${pronto[0].dias} d)` : 'según salidas de 4 semanas') : 'sin registro de consumo', "VIEW.almF='acaba';renderTab()", pronto.length ? 't-amar' : '')}
+      ${kp('Falta información', String(FI.length), FI.length ? `${FI.filter(r => almFaltaInfo(r, A).includes('mínimo')).length} sin mínimo · ${FI.filter(r => almFaltaInfo(r, A).includes('caducidad')).length} sin caducidad${A === 'far' || A === 'qui' ? ' · ' + FI.filter(r => almFaltaInfo(r, A).includes('crítico')).length + ' sin crítico' : ''}` : 'todo completo', "VIEW.almF='info';renderTab()", FI.length ? 't-amar' : '')}
+      ${kp('Se acaban en ' + DIAS_ALERTA_FIN + ' días', conPron && !sinSalidas ? String(pronto.length) : '—', sinSalidas ? 'no hay salidas registradas' : conPron ? (pronto[0] ? `primero: ${esc(pronto[0].n)} (${pronto[0].dias} d)` : 'según salidas de 4 semanas') : 'sin registro de consumo', "VIEW.almF='acaba';renderTab()", pronto.length ? 't-amar' : '')}
       ${kp('Acabados o críticos', String(acab.length + crit.length), `${bajo.length} más bajo mínimo`, "VIEW.almF='acaba';renderTab()", acab.length + crit.length ? 't-rojo' : '')}
       ${kp('Caducan en 90 días', String(lotesX.length), `${lotesX.reduce((s, l) => s + l.q, 0)} pza${valX ? ' · ' + moneyK(valX) : ''}${lotesX.some(l => l.sobra) ? ' · no se alcanzan a vender ' + lotesX.reduce((s, l) => s + (l.sobra || 0), 0) : ''}`, "VIEW.almF='caduca';renderTab()", lotesX.some(l => diasA(l.cad) <= 30) ? 't-amar' : '')}
       ${kp('Caducados en existencia', String(lotesC.length), `${lotesC.reduce((s, l) => s + l.q, 0)} pza${valC ? ' · ' + moneyK(valC) + ' de pérdida' : ''} · retirar`, "VIEW.almF='caduca';renderTab()", lotesC.length ? 't-rojo' : '')}
@@ -5249,7 +5267,7 @@ function rAlm() {
       ${dcard('Va a caducar', colPares(meses, [['s-pr', 'Piezas que caducan'], ['s-ser', 'No se alcanzan a vender']], x => String(x)) + (lotesC.concat(lotesX).slice(0, 10).map(l => `<div class="list-item" onclick="almDetalle('${A}','${esc(l.r.id)}')"><i class="dot ${diasA(l.cad) < 0 ? 'cr' : diasA(l.cad) <= 30 ? 'hi' : 'lo'}"></i><div class="grow"><b>${esc(l.r.n)}</b><div class="muted">${l.lote ? (/^Poder/.test(l.lote) ? '' : 'Lote ') + esc(l.lote) + ' · ' : ''}${almNum(l.q)} pza${l.costo ? ' · ' + moneyK(l.q * l.costo) : ''}${l.sobra ? ` · <b>${l.sobra} no se alcanzan a vender</b>` : ''}</div></div><div style="text-align:right;flex:0 0 auto"><b style="${diasA(l.cad) < 0 ? 'color:var(--dg)' : ''}">${fmtD(l.cad)}</b><div class="muted">${diasA(l.cad) < 0 ? 'caducado' : 'en ' + diasA(l.cad) + ' d'}</div></div></div>`).join('') || '<div class="muted" style="margin-top:8px">Nada caduca en los próximos 90 días.</div>'), lotesC.length + lotesX.length)}
     </div>
     ${sol.length ? dcard('La farmacia pidió al almacén', sol.map(x => { const p = (INV.farProd || []).find(z => z.id === x.producto_id); return `<div class="list-item"><i class="dot hi"></i><div class="grow"><b>${esc(p ? p.nombre : 'Producto')}</b><div class="muted">${num(x.cantidad) - num(x.surtido)} pza por surtir${x.estado === 'parcial' ? ' (surtido parcial)' : ''} · ${esc(x.solicitante || '')} · ${fmtD(String(x.created_at || '').slice(0, 10))}</div></div></div>`; }).join(''), sol.length) : ''}
-    <div class="ph3" style="margin:16px 0 10px;flex-wrap:wrap"><h3 style="font-size:16px;flex:0 0 auto">${esc(nom)}</h3><div class="seg" style="flex-wrap:wrap">${[['riesgo', 'Con alerta'], ['acaba', 'Se acaba'], ['caduca', 'Caduca'], ['todo', 'Todo']].map(([k, t]) => `<button class="${F === k ? 'on' : ''}" onclick="VIEW.almF='${k}';renderTab()">${t}</button>`).join('')}</div><span style="flex:1"></span><span class="muted">${T.length} de ${R.length}</span></div>
+    <div class="ph3" style="margin:16px 0 10px;flex-wrap:wrap"><h3 style="font-size:16px;flex:0 0 auto">${esc(nom)}</h3><div class="seg" style="flex-wrap:wrap">${[['riesgo', 'Con alerta'], ['info', '⚠ Falta información'], ['acaba', 'Se acaba'], ['caduca', 'Caduca'], ['todo', 'Todo']].map(([k, t]) => `<button class="${F === k ? 'on' : ''}" onclick="VIEW.almF='${k}';renderTab()">${t}</button>`).join('')}</div><span style="flex:1"></span><span class="muted">${T.length} de ${R.length}</span></div>
     ${almBuscador(R)}
     <div class="tc" style="overflow-x:auto">${T.length ? `<table><thead><tr><th>Producto</th><th style="text-align:right">${A === 'alm' ? 'Almacén' : A === 'adm' ? 'Contabilidad' : 'Existencia'}</th>${A === 'adm' ? '<th style="text-align:right">En quirófano</th>' : ''}${A === 'alm' ? '<th style="text-align:right">Mostrador</th>' : ''}<th style="text-align:right">Mínimo</th>${conPron ? '<th style="text-align:right">Salida / semana</th><th style="text-align:right">Alcanza para</th>' : ''}<th>Próxima caducidad</th><th>Estado</th>${A !== 'qui' && puede('pedidos') ? '<th></th>' : ''}</tr></thead><tbody>${T.map(fila).join('')}</tbody></table>` : '<div class="emp">Sin productos en esta lista</div>'}</div>
     <div class="mini" style="margin:10px 0 24px">${conPron ? `«Alcanza para» = existencia total (almacén + mostrador) entre las salidas diarias promedio de las últimas 4 semanas. «No se alcanzan a vender» = piezas que, al ritmo actual, seguirán en existencia el día que caduquen.` : 'Quirófano aún no registra consumo por cirugía, por eso no hay pronóstico de días; se usan mínimo y crítico.'}</div>
@@ -5366,6 +5384,7 @@ function almAvisosDatos(A) {
     ['Acabados o críticos', 'r', R.filter(r => r.est === 'acabado' || r.est === 'critico').map(r => [r, `Quedan ${almNum(r.ex)}${r.min ? ' · mínimo ' + almNum(r.min) : ''}`, EST_ALM[r.est][0]])],
     ['Bajo mínimo', 'a', R.filter(r => r.est === 'bajo').map(r => [r, `Quedan ${almNum(r.ex)} · mínimo ${almNum(r.min)}`, r.dias !== null ? 'alcanza ' + r.dias + ' d' : ''])],
     ['Se acaban en ' + DIAS_ALERTA_FIN + ' días', 'a', R.filter(r => r.dias !== null && r.dias <= DIAS_ALERTA_FIN && r.est !== 'acabado').map(r => [r, `Quedan ${almNum(r.tot || r.ex)} · salen ${almNum((r.c4 || 0) / 4)} por semana`, 'se acaba ' + fmtD(r.fin)])],
+    ['Falta información (mínimo, crítico, caducidad o proveedor)', 'a', R.filter(r => almFaltaInfo(r, A).length).map(r => [r, 'Falta: ' + almFaltaInfo(r, A).join(' · '), ''])],
     ['Equipos con garantía por vencer (60 días)', 'a', L.filter(l => l.gar && diasA(l.gar) <= 60).map(l => [l.r, 'Serie ' + (l.serie || l.lote || '—'), (diasA(l.gar) < 0 ? 'venció ' : 'vence ') + fmtD(l.gar)])],
   ];
 }
@@ -5378,6 +5397,7 @@ function almAlertas(A) {   // para la campana de Alertas
   const out = [], S = almAvisosDatos('alm'), g = (i, n, txt) => { const L = S[i][2]; if (L.length) out.push({ n, t: `Almacén: ${L.length} ${txt}`, m: L.slice(0, 3).map(x => x[0].n + ' (' + x[2] + ')').join(' · ') + (L.length > 3 ? '…' : ''), go: () => { VIEW.almA = 'alm'; goTab('alm'); setTimeout(() => almAvisos('alm'), 80); } }); };
   g(1, 'r', 'lote(s) caducados en existencia'); g(2, 'r', 'lote(s) caducan en 30 días'); g(4, 'r', 'producto(s) acabados o críticos'); g(5, 'a', 'producto(s) bajo mínimo'); g(6, 'a', 'producto(s) se acaban en ' + DIAS_ALERTA_FIN + ' días'); g(7, 'a', 'equipo(s) con garantía por vencer');
   { const F = S[0][2]; if (F.length) out.push({ n: 'i', t: `Almacén: ${F.length} producto(s) sin lote o caducidad`, m: F.slice(0, 3).map(x => x[0].n).join(' · ') + (F.length > 3 ? '…' : ''), go: () => { VIEW.almA = 'alm'; goTab('alm'); setTimeout(() => almCapturarLotes(), 80); } }); }
+  for (const [ar, nom] of [['alm', 'Almacén'], ['far', 'Farmacia']]) { const L = almFilas(ar).filter(r => almFaltaInfo(r, ar).length); if (L.length) out.push({ n: 'i', t: `${nom}: ${L.length} producto(s) con información incompleta`, m: L.slice(0, 3).map(r => r.n + ' (falta ' + almFaltaInfo(r, ar).join(', ') + ')').join(' · ') + (L.length > 3 ? '…' : ''), go: () => { VIEW.almA = ar; VIEW.almF = 'info'; goTab('alm'); } }); }
   const sol = INV.farSol || []; if (sol.length) out.push({ n: 'i', t: `Almacén: ${sol.length} solicitud(es) de farmacia por surtir`, m: 'Hacer el traspaso a mostrador', go: () => { VIEW.almA = 'alm'; goTab('alm'); setTimeout(() => almTraspaso(), 80); } });
   return out;
 }
