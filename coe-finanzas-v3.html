@@ -6648,11 +6648,11 @@ function ppSemanas(L, esDirTab) {
   window._ppL = L;
   const B = {}; L.forEach((x, i) => { let k = ppSemanaDe(x); if (k !== 'venc' && k > ult) return; if (k !== 'venc' && k < l0) k = 'venc'; (B[k] = B[k] || []).push(i); });
   const tarjeta = i => { const x = L[i], tarde = x.prop && x.fecha && x.prop > x.fecha, v = ppVencido(x) && !x.prop;
-    return `<div class="ppcard ${x.prop ? 'p' : ''} ${v ? 'v' : ''} ${x.rec ? 'r' : ''}" draggable="${puede('cxp') ? 'true' : 'false'}" ondragstart="event.dataTransfer.setData('text/plain','${i}');this.classList.add('drag')" ondragend="this.classList.remove('drag')" onclick="${x.f ? `verCuenta('${x.f.id}')` : ''}">
+    return `<div class="ppcard ${x.prop ? 'p' : ''} ${v ? 'v' : ''} ${x.rec ? 'r' : ''}" draggable="${puede('cxp') ? 'true' : 'false'}" ondragstart="event.dataTransfer.setData('text/plain','${i}');this.classList.add('drag')" ondragend="this.classList.remove('drag')" onclick="${ppAccion(x)}" title="${puede('cxp') ? 'Toca para subir el comprobante' : ''}">
       <div class="ppc1"><b>${esc(nomEnt(x.ent))}</b><span class="amt" style="text-align:right">${x.variable && !VIEW.pp.mon[x.k] && !x.est ? '<span class="mini">variable</span>' : $$(ppMonto(x)) + (x.variable ? '<div class="mini pp-var">variable</div>' : '')}</span></div>
       <div class="mini">${esc(String(x.desc || '').slice(0, 60))}</div>${ppDescChip(x)}
       <div class="ppc2">${x.prop ? `<span class="bdg bdg-aut">pagar ${fmtD(x.prop).slice(0, 5)}</span>` : ''}${x.nom ? '<span class="bdg pp-rec">nómina</span>' : x.rec ? '<span class="bdg pp-rec">↻</span>' : ''}${x.fecha ? `<span class="mini" style="${v || tarde ? 'color:var(--dg);font-weight:700' : ''}">vence ${fmtD(x.fecha).slice(0, 5)}${tarde ? ' · se paga tarde' : ''}</span>` : ''}
-        ${puede('cxp') ? `<button class="btn btn-s btn-sm" style="margin-left:auto;padding:2px 8px" onclick="event.stopPropagation();ppMoverDlg(${i})">Mover</button>` : ''}${x.f && puede('pagos', 3) && esDirTab ? `<button class="btn btn-p btn-sm" style="padding:2px 8px" onclick="event.stopPropagation();pagarCuenta('${x.f.id}')">Pagar</button>` : ''}</div></div>`; };
+        ${puede('cxp') ? `<button class="btn btn-s btn-sm" style="margin-left:auto;padding:2px 8px" onclick="event.stopPropagation();ppMoverDlg(${i})">Mover</button>` : ''}${ppNomBtn(x)}${x.f ? `<button class="btn btn-s btn-sm" style="padding:2px 8px" onclick="event.stopPropagation();verCuenta('${x.f.id}')">Ver</button>` : ''}${puede('cxp') && (x.f || x.sinCuenta) ? `<button class="btn btn-p btn-sm" style="padding:2px 8px" onclick="event.stopPropagation();${ppAccion(x)}">⬆ Comprobante</button>` : ''}</div></div>`; };
   return `<div class="mini" style="margin:0 0 8px">Cada semana viene compactada por proveedor: toca la flecha ▸ para ver sus pagos. Arrastra un pago a otra semana (o toca «Mover»). Los propuestos se pagan el día marcado; lo demás aparece en la semana en que vence. Si lo mueves después de su vencimiento te aviso.</div>
   <div class="ppweeks">${W.map(w => { const I2 = B[w.k] || [], t = I2.reduce((s, i) => s + ppMonto(L[i]), 0), tp = I2.filter(i => L[i].prop).reduce((s, i) => s + ppMonto(L[i]), 0), nv = I2.filter(i => L[i].variable && !VIEW.pp.mon[L[i].k]).length;
     if (w.k === 'venc' && !I2.length) return '';
@@ -6661,7 +6661,7 @@ function ppSemanas(L, esDirTab) {
       ${(() => { if (!I2.length) return '<div class="mini" style="padding:10px;text-align:center">Sin pagos</div>';
         const G = {}; I2.forEach(i => (G[L[i].ent || '—'] = G[L[i].ent || '—'] || []).push(i));
         return Object.entries(G).map(([e, ix]) => ({ e, ix, m: ix.reduce((s, i) => s + ppMonto(L[i]), 0) })).sort((a, b) => b.m - a.m).map(g => { const kk = w.k + '|' + g.e, ab = VIEW.ppSemAbre[kk], np = g.ix.filter(i => L[i].prop).length, nv = g.ix.filter(i => ppVencido(L[i]) && !L[i].prop).length;
-          return `<div class="ppprov ${ab ? 'ab' : ''}" draggable="${puede('cxp') && g.ix.length === 1 ? 'true' : 'false'}" ondragstart="event.dataTransfer.setData('text/plain','${g.ix[0]}')" onclick="VIEW.ppSemAbre['${esc(kk)}']=!VIEW.ppSemAbre['${esc(kk)}'];renderTab()"><span class="ppar">${ab ? '▾' : '▸'}</span><div style="flex:1;min-width:0"><b>${esc(nomEnt(g.e) || 'Sin proveedor')}</b><div class="mini">${g.ix.length} pago(s)${np ? ' · ' + np + ' propuesto(s)' : ''}${nv ? ` · <b style="color:var(--dg)">${nv} vencido(s)</b>` : ''}${g.ix.some(i => L[i].f && descPP(L[i].f)?.vig) ? ' · <b style="color:var(--sc)">💰 pronto pago</b>' : ''}</div></div><b class="amt">${g.m ? $$(g.m) : '<span class="mini">variable</span>'}</b></div>${ab ? g.ix.sort((a, b) => String(ppDiaPago(L[a]) || L[a].fecha || '').localeCompare(String(ppDiaPago(L[b]) || L[b].fecha || ''))).map(tarjeta).join('') : ''}`; }).join(''); })()}</div>`; }).join('')}</div>`;
+          return `<div class="ppprov ${ab ? 'ab' : ''}" draggable="${puede('cxp') && g.ix.length === 1 ? 'true' : 'false'}" ondragstart="event.dataTransfer.setData('text/plain','${g.ix[0]}')" onclick="VIEW.ppSemAbre['${esc(kk)}']=!VIEW.ppSemAbre['${esc(kk)}'];renderTab()"><span class="ppar">${ab ? '▾' : '▸'}</span><div style="flex:1;min-width:0"><b>${esc(nomEnt(g.e) || 'Sin proveedor')}</b><div class="mini">${g.ix.length} pago(s)${np ? ' · ' + np + ' propuesto(s)' : ''}${nv ? ` · <b style="color:var(--dg)">${nv} vencido(s)</b>` : ''}${g.ix.some(i => L[i].f && descPP(L[i].f)?.vig) ? ' · <b style="color:var(--sc)">💰 pronto pago</b>' : ''}</div></div><b class="amt">${g.m ? $$(g.m) : '<span class="mini">variable</span>'}</b></div>${(x => x ? `<div style="margin:-4px 0 6px 28px" onclick="event.stopPropagation()">${ppNomBtn(x)} <span class="mini">son varias personas: sepáralas para pagar cada una</span></div>` : '')(g.ix.map(i => L[i]).find(x => ppNomBtn(x)))}${ab ? g.ix.sort((a, b) => String(ppDiaPago(L[a]) || L[a].fecha || '').localeCompare(String(ppDiaPago(L[b]) || L[b].fecha || ''))).map(tarjeta).join('') : ''}`; }).join(''); })()}</div>`; }).join('')}</div>`;
 }
 // Día de pago al soltar en una semana: su vencimiento si cae en esa semana, si no el viernes; nunca antes de hoy
 function ppDiaEnSemana(x, l) {
@@ -6695,6 +6695,21 @@ async function ppMover(x, fecha) {
   if (x.variable && !(num(VIEW.pp.mon[x.k]) > 0)) return toast('Escribe primero el monto de este pago variable (vista Lista)', 'warning');
   VIEW.pp.sel = { [x.k]: true }; VIEW.pp.modo = 'unica'; VIEW.pp.fecha = fecha;
   await ppFirmar();
+}
+
+// Tocar un pago de la propuesta = subir su comprobante (cuenta existente o recurrente sin cuenta)
+function ppAccion(x) {
+  if (!puede('cxp')) return x.f ? `verCuenta('${x.f.id}')` : '';
+  if (x.f) return `pagarCuenta('${x.f.id}')`;
+  if (x.sinCuenta && x.oi !== undefined) return `pagarRecurrenteDesde(${x.oi})`;
+  return '';
+}
+// Nómina COE (personal fijo): desglosar en personas
+function ppNomBtn(x) {
+  if (!puede('cxp')) return '';
+  if (x.sinCuenta && x.nom && nomRef(x.r) === 'fijo') return `<button class="btn btn-s btn-sm" style="padding:2px 8px" title="Separar por persona, monto y concepto" onclick="event.stopPropagation();nomCxp('${x.r.id}','${x.fecha}')">☰ Desglosar</button>`;
+  if (x.f && esNomFijo(x.f) && !x.f.nomina_grupo && num(x.f.monto_pagado) <= 0.009) return `<button class="btn btn-s btn-sm" style="padding:2px 8px" title="Separar por persona, monto y concepto" onclick="event.stopPropagation();nomCxp('${x.f.recurrente_id || ''}','${x.f.recurrente_periodo || x.fecha}','${x.f.id}')">☰ Desglosar</button>`;
+  return '';
 }
 
 // ══ HONORARIOS CON FACTURA MENSUAL ══
