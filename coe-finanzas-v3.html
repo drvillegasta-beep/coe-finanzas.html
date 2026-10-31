@@ -2408,6 +2408,14 @@ function cuentaNomina(r, per) {
   return FAC.find(f => f.origen === 'nomina' && !f.anulado && f.estado !== 'cancelado' && f.fecha_vencimiento && Math.abs(diasEntre(f.fecha_vencimiento, per)) <= 5
     && (ref === 'fijo' ? f.categoria === 'Nómina' : (f.entidad_id === r.entidad_id || normTx(nomEnt(f.entidad_id)) === nom))) || null;
 }
+// Cuenta capturada a mano (sin ligar al recurrente) que corresponde a este periodo: misma empresa, fecha cercana,
+// nunca anterior al inicio del recurrente y cada cuenta cubre solo un periodo (el más cercano)
+function recCuentaSuelta(r, per, alta) {
+  const ini = alta ? isoD(alta) : null;
+  const C = FAC.filter(f => f.entidad_id === r.entidad_id && f.tipo === 'egreso' && !f.anulado && f.estado !== 'cancelado' && !f.recurrente_id && f.fecha_vencimiento && (!ini || f.fecha_vencimiento >= isoD(new Date(new Date(ini + 'T12:00:00').getTime() - 3 * 864e5))) && Math.abs(diasEntre(f.fecha_vencimiento, per)) <= 10);
+  const otros = calcOcurrencias(r, 400).map(isoD).filter(p => p !== per);
+  return C.find(f => !otros.some(p => Math.abs(diasEntre(f.fecha_vencimiento, p)) < Math.abs(diasEntre(f.fecha_vencimiento, per)))) || null;
+}
 function buildRecOcurrencias(diasFuturo) {
   const hoy = hoyD(), items = [];
   REC.filter(r => r.activo && r.tipo !== 'ingreso').forEach(r => {
@@ -2416,7 +2424,7 @@ function buildRecOcurrencias(diasFuturo) {
     const fin = r.fecha_fin ? new Date(r.fecha_fin + 'T00:00:00') : null;
     calcOcurrencias(r, diasFuturo).filter(d => (!alta || d >= alta) && (!fin || d <= fin)).forEach(d => {
       const per = isoD(d), pag = nomGrupoCuenta(r, per) || FAC.find(f => f.recurrente_id === r.id && f.recurrente_periodo === per && !f.anulado) || cuentaNomina(r, per)
-        || (!nomRef(r) && FAC.find(f => f.entidad_id === r.entidad_id && f.tipo === 'egreso' && !f.anulado && f.estado !== 'cancelado' && !f.recurrente_id && f.fecha_vencimiento && Math.abs(diasEntre(f.fecha_vencimiento, per)) <= 10));
+        || (!nomRef(r) && recCuentaSuelta(r, per, alta));
       const diff = Math.floor((d - hoy) / 86400000);
       items.push({ rec: r, fecha: d, factura: pag, diasDiff: diff, estado: pag && pag.estado === 'pagado' ? 'pagado' : diff < 0 ? 'vencido' : diff <= (r.dias_alerta || 3) ? 'proximo' : 'futuro' });
     });
