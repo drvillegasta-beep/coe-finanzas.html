@@ -918,6 +918,7 @@ tr.fps-prov td{background:var(--sf2)}
     <span class="live wait" id="liveBadge" title="Estado de conexión"><span class="ldot"></span><span class="ltx" id="liveTx">Conectando…</span></span>
     <span class="tsp"></span>
     <button class="tbtn-tema" onclick="elegirTema()" title="Apariencia: elegir colores">🎨 <span>Apariencia</span></button>
+    <button class="tbtn-tema" id="btnAct" onclick="actualizarApp()" title="Actualizar: trae la última versión publicada y los datos al momento">⟳ <span>Actualizar</span></button>
     <button class="bell" onclick="goTab('alr')" title="Alertas">🔔<b id="bellN" style="display:none"></b></button>
     <div class="tusr">
       <div class="tav" id="tav" style="cursor:pointer" onclick="miAcceso()" title="Mi acceso">A</div>
@@ -4150,6 +4151,16 @@ function imprimirInforme(id) {
 let SWREG = null, AVISOS_ON = null;
 const esIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const esStandalone = () => (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+// Botón «Actualizar»: baja la última versión publicada (sin caché) y recarga en la misma pestaña, conservando la sesión
+async function actualizarApp() {
+  const b = document.getElementById('btnAct'); if (b) { b.disabled = true; b.innerHTML = '⟳ <span>Actualizando…</span>'; }
+  try {
+    const u = location.href.split('#')[0].split('?')[0];
+    await Promise.all([u, new URL('sw.js', u).href].map(x => fetch(x, { cache: 'reload' }).catch(() => null)));
+    if (SWREG) await SWREG.update().catch(() => null);
+  } catch (e) {}
+  location.reload();
+}
 const pushSoportado = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 const b64u = s => { const p = '='.repeat((4 - s.length % 4) % 4), r = atob((s + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from([...r].map(c => c.charCodeAt(0))); };
 async function initSW() {
