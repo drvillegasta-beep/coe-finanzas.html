@@ -789,6 +789,9 @@ tr.fps-prov td{background:var(--sf2)}
 .alr-ir{font-size:12px;font-weight:700;color:var(--pr);white-space:nowrap;align-self:center;padding-left:8px}
 
 .ppprov{display:flex;gap:8px;align-items:center;background:var(--sf2);border:1px solid var(--br);border-radius:10px;padding:8px 9px;cursor:pointer;font-size:12.5px}
+.ppsec{display:flex;justify-content:space-between;align-items:center;margin:8px 0 6px;padding:5px 9px;border-radius:8px;font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em}
+.ppsec.cf{background:rgba(56,152,236,.16);color:#5fb0f5;border-left:4px solid #3898ec}.ppsec.sf{background:rgba(245,166,35,.15);color:#f0a93a;border-left:4px solid #f5a623}
+.ppprov.cf{border-left:4px solid #3898ec}.ppprov.sf{border-left:4px solid #f5a623}
 .ppprov:hover{border-color:var(--pr)}.ppprov.ab{border-color:var(--pr);background:var(--sf3)}
 .ppprov b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ppar{color:var(--pr);font-size:13px;width:12px}
@@ -6646,6 +6649,8 @@ async function fpGuardar() {
 
 // ══ VISTA POR SEMANA: cuándo se paga cada semana (propuestos, cuentas, recurrentes y nómina) · arrastrar o «Mover» ══
 const ppDiaPago = x => x.prop || (x.fecha && x.fecha < hoyISO() ? null : x.fecha);
+// Con factura: la cuenta ya trae su CFDI (XML) o se capturó como factura; lo demás (sin factura, recurrentes sin cuenta, nómina, honorarios) va aparte
+function ppConFactura(x) { const f = x.f; return !!(f && (f.documento_tipo === 'factura' || f.xml_url || f.uuid_cfdi)); }
 function ppSemanaDe(x) { const d = ppDiaPago(x); return d ? ppLunes(d) : 'venc'; }
 VIEW.ppSemAbre = VIEW.ppSemAbre || {};
 function ppSemanas(L, esDirTab) {
@@ -6667,9 +6672,11 @@ function ppSemanas(L, esDirTab) {
     return `<div class="ppweek ${w.k === 'venc' ? 'v' : ''} ${w.k === l0 ? 'hoy' : ''}" ondragover="event.preventDefault();this.classList.add('over')" ondragleave="this.classList.remove('over')" ondrop="this.classList.remove('over');ppDrop(event,'${w.k}')">
       <div class="ppwh"><div><b>${w.t}</b><div class="mini">${w.sub}</div></div><div style="text-align:right"><b class="amt">${$$(t)}</b><div class="mini">${I2.length} pago(s)${tp ? ' · propuesto ' + moneyK(tp) : ''}${nv ? ' · +' + nv + ' variable(s)' : ''}</div></div></div>
       ${(() => { if (!I2.length) return '<div class="mini" style="padding:10px;text-align:center">Sin pagos</div>';
-        const G = {}; I2.forEach(i => (G[L[i].ent || '—'] = G[L[i].ent || '—'] || []).push(i));
-        return Object.entries(G).map(([e, ix]) => ({ e, ix, m: ix.reduce((s, i) => s + ppMonto(L[i]), 0) })).sort((a, b) => b.m - a.m).map(g => { const kk = w.k + '|' + g.e, ab = VIEW.ppSemAbre[kk], np = g.ix.filter(i => L[i].prop).length, nv = g.ix.filter(i => ppVencido(L[i]) && !L[i].prop).length;
-          return `<div class="ppprov ${ab ? 'ab' : ''}" draggable="${puede('cxp') && g.ix.length === 1 ? 'true' : 'false'}" ondragstart="event.dataTransfer.setData('text/plain','${g.ix[0]}')" onclick="VIEW.ppSemAbre['${esc(kk)}']=!VIEW.ppSemAbre['${esc(kk)}'];renderTab()"><span class="ppar">${ab ? '▾' : '▸'}</span><div style="flex:1;min-width:0"><b>${esc(nomEnt(g.e) || 'Sin proveedor')}</b><div class="mini">${g.ix.length} pago(s)${np ? ' · ' + np + ' propuesto(s)' : ''}${nv ? ` · <b style="color:var(--dg)">${nv} vencido(s)</b>` : ''}${g.ix.some(i => L[i].f && descPP(L[i].f)?.vig) ? ' · <b style="color:var(--sc)">💰 pronto pago</b>' : ''}</div></div><b class="amt">${g.m ? $$(g.m) : '<span class="mini">variable</span>'}</b></div>${(x => x ? `<div style="margin:-4px 0 6px 28px" onclick="event.stopPropagation()">${ppNomBtn(x)} <span class="mini">son varias personas: sepáralas para pagar cada una</span></div>` : '')(g.ix.map(i => L[i]).find(x => ppNomBtn(x)))}${ab ? g.ix.sort((a, b) => String(ppDiaPago(L[a]) || L[a].fecha || '').localeCompare(String(ppDiaPago(L[b]) || L[b].fecha || ''))).map(tarjeta).join('') : ''}`; }).join(''); })()}</div>`; }).join('')}</div>`;
+        const secc = cf => { const J = I2.filter(i => ppConFactura(L[i]) === cf); if (!J.length) return '';
+        const G = {}; J.forEach(i => (G[L[i].ent || '—'] = G[L[i].ent || '—'] || []).push(i));
+        return `<div class="ppsec ${cf ? 'cf' : 'sf'}"><span>${cf ? '🧾 Con factura' : '📄 Sin factura'} · ${J.length}</span><b class="amt">${$$(J.reduce((s, i) => s + ppMonto(L[i]), 0))}</b></div>` + Object.entries(G).map(([e, ix]) => ({ e, ix, m: ix.reduce((s, i) => s + ppMonto(L[i]), 0) })).sort((a, b) => b.m - a.m).map(g => { const kk = w.k + '|' + (cf ? 'cf' : 'sf') + '|' + g.e, ab = VIEW.ppSemAbre[kk], np = g.ix.filter(i => L[i].prop).length, nv = g.ix.filter(i => ppVencido(L[i]) && !L[i].prop).length;
+          return `<div class="ppprov ${cf ? 'cf' : 'sf'} ${ab ? 'ab' : ''}" draggable="${puede('cxp') && g.ix.length === 1 ? 'true' : 'false'}" ondragstart="event.dataTransfer.setData('text/plain','${g.ix[0]}')" onclick="VIEW.ppSemAbre['${esc(kk)}']=!VIEW.ppSemAbre['${esc(kk)}'];renderTab()"><span class="ppar">${ab ? '▾' : '▸'}</span><div style="flex:1;min-width:0"><b>${esc(nomEnt(g.e) || 'Sin proveedor')}</b><div class="mini">${g.ix.length} pago(s)${np ? ' · ' + np + ' propuesto(s)' : ''}${nv ? ` · <b style="color:var(--dg)">${nv} vencido(s)</b>` : ''}${g.ix.some(i => L[i].f && descPP(L[i].f)?.vig) ? ' · <b style="color:var(--sc)">💰 pronto pago</b>' : ''}</div></div><b class="amt">${g.m ? $$(g.m) : '<span class="mini">variable</span>'}</b></div>${(x => x ? `<div style="margin:-4px 0 6px 28px" onclick="event.stopPropagation()">${ppNomBtn(x)} <span class="mini">son varias personas: sepáralas para pagar cada una</span></div>` : '')(g.ix.map(i => L[i]).find(x => ppNomBtn(x)))}${ab ? g.ix.sort((a, b) => String(ppDiaPago(L[a]) || L[a].fecha || '').localeCompare(String(ppDiaPago(L[b]) || L[b].fecha || ''))).map(tarjeta).join('') : ''}`; }).join(''); };
+        return secc(true) + secc(false); })()}</div>`; }).join('')}</div>`;
 }
 // Día de pago al soltar en una semana: su vencimiento si cae en esa semana, si no el viernes; nunca antes de hoy
 function ppDiaEnSemana(x, l) {
