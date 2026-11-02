@@ -943,6 +943,7 @@ tr.fps-prov td{background:var(--sf2)}
     <div class="ni" id="n-prov" onclick="goTab('prov')">☰ Proveedores</div>
     <div class="ns">Control</div>
     <div class="ni" id="n-fps" onclick="goTab('fps')">⧉ Facturas por solicitar<span class="nbdg" id="nb-fps" style="display:none"></span></div>
+    <div class="ni" id="n-fpe" onclick="goTab('fpe')">⧉ Facturas por entregar<span class="nbdg" id="nb-fpe" style="display:none"></span></div>
     <div class="ni" id="n-prop" onclick="goTab('prop')">✎ Propuesta de pagos</div>
     <div class="ni" id="n-rev" onclick="goTab('rev')">☑ Por revisar<span class="nbdg" id="nb-rev" style="display:none"></span></div>
     <div class="ni" id="n-tar" onclick="goTab('tar')">✓ Pendientes<span class="nbdg" id="nb-tar" style="display:none"></span></div>
@@ -1357,6 +1358,7 @@ async function cargarTodo(silencioso) {
   [ENT, FAC, ABO, REC, PED, TAR, DOCS, RS, CIE, SUC] = r;
   if (silencioso !== 'sinusr') { await cargarUsuarios(); const yo = USR.find(u => u.id === cu.id); if (!yo || yo.activo === false || yo.debe_cambiar) { try { localStorage.removeItem(SESSION_KEY); } catch { } alert('Tu acceso fue cambiado por Dirección General. Entra de nuevo.'); location.reload(); return; } if (yo) { cu.permisos = yo.permisos || {}; cu.rol = yo.rol; cu.sede = yo.sede || null; aplicarPermisosMenu(); } }
   RECSOL = await q('fin_rec_solicitudes', x => x.order('solicitado_at', { ascending: false }).limit(150));
+  await fpeCargar();
   CORR = r[11]; AVA = r[12]; CJ = r[13]; SOLB = r[14]; NOM_EMP = r[15] || []; NOM = r[16] || [];
   INV = { farProd: r[17] || [], farLotes: r[18] || [], farPed: r[19] || [], quiInv: r[20] || [], quiLotes: r[21] || [], quiLentes: r[22] || [], quiPed: r[23] || [], farSol: r[24] || [], qxMat: r[25] || [], qxLot: r[26] || [], qxLio: r[27] || [], qxUb: r[28] || [], farMov: r[29] || [], quiLio: r[30] || [], ctl: r[31] || [], farCnt: r[32] || [], qxCnt: r[33] || [] };
   FM = r[r.length - 1] || [];
@@ -1381,7 +1383,7 @@ let canal = null;
 function suscribir() {
   if (canal) sb.removeChannel(canal);
   canal = sb.channel('coe-finanzas-v3');
-  ['fin_facturas', 'fin_abonos', 'fin_pedidos', 'fin_tareas', 'fin_documentos', 'fin_entidades', 'fin_recurrentes', 'con_cierres_dia', 'fin_correos', 'fin_tareas_avances', 'fin_cierres_jornada', 'fin_solicitudes_baja', 'fin_fact_mensual', 'fin_rec_solicitudes']
+  ['fin_facturas', 'fin_abonos', 'fin_pedidos', 'fin_tareas', 'fin_documentos', 'fin_entidades', 'fin_recurrentes', 'con_cierres_dia', 'fin_correos', 'fin_tareas_avances', 'fin_cierres_jornada', 'fin_solicitudes_baja', 'fin_fact_mensual', 'fin_rec_solicitudes', 'fin_fact_entregar']
     .forEach(t => canal.on('postgres_changes', { event: '*', schema: 'public', table: t }, p => onCambio(t, p)));
   canal.subscribe(st => {
     rtState = st === 'SUBSCRIBED' ? 'on' : (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT' || st === 'CLOSED') ? 'off' : 'wait';
@@ -1400,6 +1402,7 @@ function onCambio(tabla, p) {
     fin_cierres_jornada: p.eventType === 'INSERT' ? `${nomUsr(n.usuario_id)} cerró su día` : null,
     fin_solicitudes_baja: p.eventType === 'INSERT' && esAdmin() ? `${nomUsr(n.solicitado_por)} solicita una baja` : p.eventType === 'UPDATE' && n.solicitado_por === cu.id ? `Tu solicitud de baja fue ${n.estado}` : null,
     con_cierres_dia: 'Llegó un cierre de caja de Conciliación',
+    fin_fact_entregar: p.eventType === 'INSERT' ? `Nueva factura por entregar: ${n.cliente || ''} ${$$(n.monto)}` : 'Factura por entregar actualizada',
     fin_rec_solicitudes: p.eventType === 'INSERT' && esAdmin() ? `Cambio en recurrentes por autorizar: ${n.accion === 'eliminar' ? 'eliminar' : n.accion === 'monto' ? 'monto' : 'alta/cambio'}` : p.eventType === 'UPDATE' && n.solicitado_por === cu.id && n.estado !== 'pendiente' ? `Tu cambio en recurrentes fue ${n.estado === 'aprobada' ? 'autorizado' : 'rechazado'}` : null,
   }[tabla];
   if (msg) { toast(msg, 'info'); notificar(msg); }
@@ -1501,6 +1504,7 @@ function calcAlertas() {
   const fpsU = fps.filter(f => diasA(limFps(f)) <= 5);
   if (fpsU.length > 3) { const v = fpsU.filter(f => diasA(limFps(f)) < 0).length; A.push({ n: v ? 'r' : 'a', t: `Facturas por solicitar: ${fpsU.length} con límite próximo`, m: `${v ? v + ' ya vencidas · ' : ''}${$$(fpsU.reduce((s, f) => s + num(f.monto_pagado), 0))} pagados sin factura`, go: () => goTab('fps') }); }
   else fpsU.forEach(f => { const d = diasA(limFps(f)); A.push({ n: d < 0 ? 'r' : 'a', t: `${d < 0 ? 'Factura no conseguida' : 'Factura por solicitar'}: ${nomEnt(f.entidad_id)}`, m: `${f.descripcion} · límite ${fmtD(limFps(f))}`, go: () => verCuenta(f.id) }); });
+  if (puede('fps')) try { fpeAlertas().forEach(a => A.push(a)); } catch (e) { }
   TAR.filter(t => abiertaT(t) && (esMia(t) || (veEquipo() && t.prioridad === 'critico'))).forEach(t => {
     const d = diasA(t.fecha_limite), P = PRI[t.prioridad] || PRI.moderado, quien = esMia(t) ? '' : ' · ' + respNom(respKey(t));
     if (d < 0) A.push({ n: P.c === 'r' ? 'r' : P.c === 'a' ? 'a' : 'i', t: `Pendiente ${P.t.toLowerCase()} vencido hace ${-d} d: ${t.titulo}`, m: `Atraso real ${atraso(t)} d${quien} · ${t.ultimo_avance || 'sin avance'}`, go: () => verPendiente(t.id) });
@@ -1524,6 +1528,7 @@ function calcAlertas() {
   bdg('nb-cxc', abiertas('ingreso').filter(f => semaforo(f) === 'r').length);
   bdg('nb-ped', PED.filter(p => p.estado === 'solicitado' && enMiSede(p)).length);
   bdg('nb-fps', fps.length);
+  bdg('nb-fpe', FPE.filter(x => fpeAbierta(x) && fpeDias(x) <= 2).length || FPE.filter(fpeAbierta).length);
   bdg('nb-alm', almBadge());
   bdg('nb-rev', vivas().filter(f => sinRevisar(f) && String(f.created_at || '').slice(0, 10) >= isoD(new Date(Date.now() - 60 * 86400000))).length);
   bdg('nb-tar', TAR.filter(t => esMia(t) && vencidaT(t) && t.prioridad !== 'no_critico').length);
@@ -1560,7 +1565,7 @@ function mostrarResumen() {
 }
 
 // ══ NAVEGACIÓN ═════════════════════════════════
-const TABS = { dash: rDash, alm: rAlm, alr: rAlr, cxp: () => rCuentas('egreso'), cxc: () => rCuentas('ingreso'), ingd: rIngDiario, pag: rPagos, cal: rCal, ped: rPedidos, prov: rProv, fps: rFps, prop: rPropuesta, rev: rRevisar, tar: rTareas, rec: rRec, rep: rRep, aud: rAud, cfg: rCfg };
+const TABS = { dash: rDash, alm: rAlm, alr: rAlr, cxp: () => rCuentas('egreso'), cxc: () => rCuentas('ingreso'), ingd: rIngDiario, pag: rPagos, cal: rCal, ped: rPedidos, prov: rProv, fpe: rFpe, fps: rFps, prop: rPropuesta, rev: rRevisar, tar: rTareas, rec: rRec, rep: rRep, aud: rAud, cfg: rCfg };
 function goTab(t) {
   if (!TABS[t]) t = 'dash';
   if (TAB_MOD[t] && t !== 'dash' && t !== 'alr' && niv(TAB_MOD[t]) < 1) t = 'dash';
@@ -2815,7 +2820,7 @@ function niv(m, u = cu) {
   return p !== undefined && p !== null && p !== '' ? Number(p) : nivelRol(u.rol, m);
 }
 const puede = (m, n = 2) => niv(m) >= n;
-const TAB_MOD = { alm: 'pedidos', dash: 'tablero', alr: 'tablero', cxp: 'cxp', cxc: 'cxc', ingd: 'ingreso', pag: 'cxp', cal: 'cxp', ped: 'pedidos', prov: 'proveedores', fps: 'fps', prop: 'cxp', rev: 'revision', tar: 'tareas', rec: 'recurrentes', rep: 'reportes', aud: 'auditoria', cfg: 'config' };
+const TAB_MOD = { alm: 'pedidos', dash: 'tablero', alr: 'tablero', cxp: 'cxp', cxc: 'cxc', ingd: 'ingreso', pag: 'cxp', cal: 'cxp', ped: 'pedidos', prov: 'proveedores', fps: 'fps', fpe: 'fps', prop: 'cxp', rev: 'revision', tar: 'tareas', rec: 'recurrentes', rep: 'reportes', aud: 'auditoria', cfg: 'config' };
 function aplicarPermisosMenu() {
   Object.entries(TAB_MOD).forEach(([t, m]) => { const el = document.getElementById('n-' + t); if (el) el.style.display = niv(m) >= 1 || t === 'dash' || t === 'alr' ? '' : 'none'; });
   document.querySelectorAll('.ns').forEach(ns => {
@@ -6965,6 +6970,182 @@ function evImprimir(per) {
     ${malos.length ? `<table><thead><tr><th>No cumplido / fuera de regla</th><th>Clasificación</th><th>Límite</th></tr></thead><tbody>${malos.slice(0, 18).map(t => `<tr><td>${esc(t.titulo)}</td><td>${EV_CLASE[t.clase][0]}</td><td>${fmtD(t.limite)}</td></tr>`).join('')}${malos.length > 18 ? `<tr><td colspan="3">y ${malos.length - 18} más</td></tr>` : ''}</tbody></table>` : ''}
     <div style="font-size:9.5px;color:#556;margin-top:6px">${arch ? `Reporte congelado el ${fmtDT(arch.generado_at)} · inalterable · huella SHA-256: ${arch.hash}` : 'Periodo en curso · cálculo preliminar'}</div>
     <div class="firmas"><div>Contadora · enterada<br>&nbsp;</div><div>Dirección General<br><b>Dr. José Antonio Villegas Ávila</b></div></div>`);
+}
+// ══ FACTURAS POR ENTREGAR: pagos recibidos de clientes que piden factura ══
+// Se sube el pago recibido, se agenda la fecha límite (dentro del mes del pago) y la Contadora recibe el pendiente con aviso.
+let FPE = [];
+const FPE_EST = { pendiente: ['Por emitir', 'bdg-pnd'], emitida: ['Emitida · falta entregar', 'bdg-aut'], entregada: ['✓ Entregada', 'bdg-apr'], cancelada: ['Cancelada', 'bdg-can'] };
+const fpeAbierta = x => x.estado === 'pendiente' || x.estado === 'emitida';
+const fpeDias = x => diasA(x.factura_limite);
+VIEW.fpeF = VIEW.fpeF || 'abiertas'; VIEW.fpeQ = VIEW.fpeQ || '';
+async function fpeCargar() { FPE = await q('fin_fact_entregar', x => x.gte('created_at', new Date(Date.now() - 200 * 864e5).toISOString()).order('factura_limite')) || []; }
+function rFpe() {
+  const A = FPE.filter(fpeAbierta), ven = A.filter(x => fpeDias(x) < 0), hoy = A.filter(x => fpeDias(x) >= 0 && fpeDias(x) <= 2), mes = hoyISO().slice(0, 7);
+  const entMes = FPE.filter(x => x.estado === 'entregada' && String(x.entregada_at || '').slice(0, 7) === mes);
+  const qq = normTx(VIEW.fpeQ);
+  let L = VIEW.fpeF === 'abiertas' ? A : VIEW.fpeF === 'vencidas' ? ven : VIEW.fpeF === 'entregadas' ? FPE.filter(x => x.estado === 'entregada') : FPE.slice();
+  if (qq) L = L.filter(x => normTx([x.cliente, x.rfc, x.razon_social, x.concepto, x.referencia, x.monto].join(' ')).includes(qq));
+  L.sort((a, b) => fpeAbierta(a) !== fpeAbierta(b) ? (fpeAbierta(a) ? -1 : 1) : String(a.factura_limite).localeCompare(String(b.factura_limite)));
+  const chip = (k, t, n) => `<span class="chip ${VIEW.fpeF === k ? 'act' : ''}" onclick="VIEW.fpeF='${k}';renderTab()">${t}${n !== undefined ? ' <b>' + n + '</b>' : ''}</span>`;
+  const fila = x => { const d = fpeDias(x), ab = fpeAbierta(x);
+    return `<tr style="cursor:pointer" onclick="fpeVer('${x.id}')"><td><span class="sem ${!ab ? 'v' : d < 0 ? 'r' : d <= 2 ? 'a' : 'v'}"></span></td>
+      <td><b>${esc(x.cliente)}</b><div class="mini">${esc(x.rfc || 'sin RFC')}${x.razon_social && x.razon_social !== x.cliente ? ' · ' + esc(x.razon_social) : ''}${x.concepto ? ' · ' + esc(x.concepto) : ''}</div></td>
+      <td>${fmtD(x.fecha_pago)}<div class="mini">${esc(x.metodo || '')}${x.comprobante_url ? ` · <a href="${esc(x.comprobante_url)}" target="_blank" onclick="event.stopPropagation()">comprobante</a>` : ''}</div></td>
+      <td class="amt" style="text-align:right">${$$(x.monto)}</td>
+      <td>${fmtD(x.factura_limite)}${ab ? `<div class="mini" style="${d < 0 ? 'color:var(--dg);font-weight:700' : d <= 2 ? 'color:var(--wn);font-weight:700' : ''}">${d < 0 ? 'venció hace ' + -d + ' d' : d === 0 ? 'hoy' : 'en ' + d + ' d'}</div>` : ''}</td>
+      <td><span class="bdg ${FPE_EST[x.estado][1]}">${FPE_EST[x.estado][0]}</span>${x.xml_url ? ` <a class="dtag ok" href="${esc(x.xml_url)}" target="_blank" onclick="event.stopPropagation()">XML</a>` : ''}${x.pdf_url ? ` <a class="dtag ok" href="${esc(x.pdf_url)}" target="_blank" onclick="event.stopPropagation()">PDF</a>` : ''}</td>
+      <td onclick="event.stopPropagation()">${puede('fps') && ab ? `<div class="rowact">${x.estado === 'pendiente' ? `<button class="btn btn-p btn-sm" onclick="fpeFactura('${x.id}')">⬆ XML/PDF</button>` : `<button class="btn btn-p btn-sm" onclick="fpeEntregar('${x.id}')">✉ Entregar</button>`}</div>` : ''}</td></tr>`; };
+  return `<div class="ph"><div><div class="ptit">Facturas por entregar</div><div class="psub">Pagos recibidos de clientes que piden factura · la factura debe emitirse en el mismo mes del pago · la Contadora recibe el pendiente con aviso</div></div>
+    ${puede('fps') ? `<button class="btn btn-p btn-sm" onclick="fpeNuevo()">⬆ Subir pago recibido</button>` : ''}</div>
+  <div class="pad"><div class="dg">
+    ${kpi('Por emitir o entregar', String(A.length), $$(A.reduce((s, x) => s + num(x.monto), 0)), A.length ? 'var(--wn)' : '', "VIEW.fpeF='abiertas';renderTab()")}
+    ${kpi('Vencen en 2 días', String(hoy.length), hoy.length ? 'atender hoy' : 'ninguna', hoy.length ? 'var(--wn)' : '')}
+    ${kpi('Vencidas', String(ven.length), ven.length ? 'fuera de plazo' : 'ninguna', ven.length ? 'var(--dg)' : 'var(--sc)', "VIEW.fpeF='vencidas';renderTab()")}
+    ${kpi('Entregadas este mes', String(entMes.length), $$(entMes.reduce((s, x) => s + num(x.monto), 0)), 'var(--sc)', "VIEW.fpeF='entregadas';renderTab()")}
+  </div>
+  <div class="tc"><div class="ttb" style="gap:10px"><div class="chips">${chip('abiertas', 'Abiertas', A.length)}${chip('vencidas', '● Vencidas', ven.length)}${chip('entregadas', 'Entregadas')}${chip('todas', 'Todas')}</div>
+    <input class="sbox" placeholder="🔎 Cliente, RFC, concepto o monto" value="${esc(VIEW.fpeQ)}" onchange="VIEW.fpeQ=this.value;renderTab()" style="max-width:280px"></div>
+  ${L.length ? `<table><thead><tr><th></th><th>Cliente · RFC · concepto</th><th>Pagó</th><th style="text-align:right">Monto</th><th>Entregar a más tardar</th><th>Estatus</th><th></th></tr></thead><tbody>${L.map(fila).join('')}</tbody></table>`
+    : `<div class="emp"><div class="ic">✓</div><p>${VIEW.fpeF === 'abiertas' ? 'Sin facturas por entregar' : 'Nada en este filtro'}</p></div>`}</div></div>`;
+}
+function fpeLimite(d) { if (!d) return ''; const t = new Date(d + 'T12:00:00'), a = isoD(new Date(t.getTime() + 3 * 864e5)), b = isoD(new Date(t.getFullYear(), t.getMonth() + 1, 0)); return a < b ? a : b; }
+// Alta / edición: sube el comprobante del pago recibido y los datos fiscales del cliente
+function fpeNuevo(id) {
+  const x = id ? FPE.find(z => z.id === id) : {}; window._fpeF = null;
+  const lim = fpeLimite;
+  const fp = x.fecha_pago || hoyISO();
+  modal(id ? 'Editar factura por entregar' : 'Subir pago recibido · factura por entregar', `
+    ${id ? '' : `<div class="drop" id="fpeDrop"><input type="file" accept="image/*,application/pdf" onchange="fpeArchivo(this.files[0])"><div class="big">⬆</div><div><b>Comprobante del pago recibido</b> (transferencia, voucher o recibo)</div><div class="mini">Foto o PDF · el sistema lee monto, fecha y referencia</div></div><div id="fpeInfo"></div>`}
+    <div class="fgrd" style="margin-top:12px">
+      <div class="fgrp sp2"><label>Cliente (nombre)</label><input type="text" id="fpC" value="${esc(x.cliente || '')}" list="fpeCli"><datalist id="fpeCli">${[...new Set(FPE.map(z => z.cliente))].map(n => `<option value="${esc(n)}">`).join('')}</datalist></div>
+      <div class="fgrp"><label>RFC</label><input type="text" id="fpR" value="${esc(x.rfc || '')}" style="text-transform:uppercase" onchange="fpeAutollenar()"></div>
+      <div class="fgrp"><label>Razón social (como en su constancia)</label><input type="text" id="fpRs" value="${esc(x.razon_social || '')}"></div>
+      <div class="fgrp"><label>Régimen fiscal</label><input type="text" id="fpRg" value="${esc(x.regimen || '')}" placeholder="Ej. 605 Sueldos y salarios"></div>
+      <div class="fgrp"><label>Uso de CFDI</label><select id="fpU">${[['', '—'], ['D01', 'D01 Honorarios médicos'], ['G03', 'G03 Gastos en general'], ['G01', 'G01 Adquisición de mercancías'], ['S01', 'S01 Sin efectos fiscales'], ['CP01', 'CP01 Pagos']].map(([k, t]) => `<option value="${k}" ${x.uso_cfdi === k ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+      <div class="fgrp"><label>Código postal fiscal</label><input type="text" id="fpCp" value="${esc(x.cp || '')}" maxlength="5" inputmode="numeric"></div>
+      <div class="fgrp"><label>Correo para enviarla</label><input type="email" id="fpE" value="${esc(x.email || '')}"></div>
+      <div class="fgrp"><label>WhatsApp</label><input type="text" id="fpT" value="${esc(x.telefono || '')}" inputmode="numeric"></div>
+      <div class="fgrp sp2"><label>Concepto</label><input type="text" id="fpCo" value="${esc(x.concepto || '')}" placeholder="Ej. Consulta de oftalmología, cirugía de catarata OD"></div>
+      <div class="fgrp"><label>Monto pagado</label><div class="ipfx"><span>$</span><input type="number" step="0.01" id="fpM" value="${x.monto || ''}"></div></div>
+      <div class="fgrp"><label>Forma de pago</label><select id="fpMe">${['Transferencia', 'Tarjeta de débito', 'Tarjeta de crédito', 'Efectivo', 'Cheque'].map(m => `<option ${x.metodo === m ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
+      <div class="fgrp"><label>Fecha del pago</label><input type="date" id="fpF" value="${fp}" onchange="fpL.value=fpeLimite(this.value)"></div>
+      <div class="fgrp"><label>Entregar factura a más tardar</label><input type="date" id="fpL" value="${x.factura_limite || lim(fp)}"></div>
+      <div class="fgrp"><label>Referencia</label><input type="text" id="fpRef" value="${esc(x.referencia || '')}"></div>
+      <div class="fgrp"><label>Notas</label><input type="text" id="fpN" value="${esc(x.notas || '')}"></div>
+    </div>
+    <div class="mini" style="margin-top:6px">El límite se propone a 3 días del pago sin pasar del fin de mes: una factura de un pago de este mes ya no puede emitirse el mes siguiente. Al guardar, la Contadora recibe el pendiente «Emitir y entregar factura» con su aviso.</div>`,
+  `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="fpeGuardar('${id || ''}')">Firmar y agendar</button>`, 'lg');
+}
+function fpeAutollenar() {
+  const r = fpR.value.trim().toUpperCase(), p = FPE.filter(z => z.rfc === r).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0]; if (!p) return;
+  [['fpC', 'cliente'], ['fpRs', 'razon_social'], ['fpRg', 'regimen'], ['fpCp', 'cp'], ['fpE', 'email'], ['fpT', 'telefono']].forEach(([i, k]) => { const e = document.getElementById(i); if (e && !e.value && p[k]) e.value = p[k]; });
+  if (p.uso_cfdi && !fpU.value) fpU.value = p.uso_cfdi; toast('Datos fiscales del cliente recuperados', 'info');
+}
+async function fpeArchivo(file) {
+  if (!file) return; window._fpeF = file;
+  const info = document.getElementById('fpeInfo'); info.innerHTML = `<div class="fitem" style="margin-top:8px"><span class="fk">PAGO</span><span class="fn">${esc(file.name)}</span><span class="mini">leyendo…</span></div>`;
+  const r = await leerComprobante(file, p => { const m = info.querySelector('.mini'); if (m) m.textContent = p; });
+  info.innerHTML = `<div class="fitem" style="margin-top:8px"><span class="fk">PAGO</span><span class="fn">${esc(file.name)}</span><span class="mini">${r.monto ? 'Monto leído ' + $$(r.monto) : 'No se leyó el monto: escríbelo'}</span></div>`;
+  if (r.monto && !fpM.value) fpM.value = r.monto.toFixed(2);
+  if (r.fecha) { fpF.value = r.fecha; fpF.onchange(); }
+  if (r.referencia && !fpRef.value) fpRef.value = r.referencia;
+  if (r.metodo) { const o = [...fpMe.options].find(o => o.text.toLowerCase().startsWith(String(r.metodo).toLowerCase().slice(0, 5))); if (o) fpMe.value = o.text; }
+  if (r.beneficiario && !fpC.value) fpC.value = r.beneficiario;
+}
+async function fpeGuardar(id) {
+  const d = { id: id || null, cliente: fpC.value.trim(), rfc: fpR.value.trim(), razon_social: fpRs.value.trim(), regimen: fpRg.value.trim(), uso_cfdi: fpU.value, cp: fpCp.value.trim(), email: fpE.value.trim(), telefono: fpT.value.trim(),
+    concepto: fpCo.value.trim(), monto: num(fpM.value), metodo: fpMe.value, fecha_pago: fpF.value, factura_limite: fpL.value, referencia: fpRef.value.trim(), notas: fpN.value.trim() };
+  if (!d.cliente) return toast('Escribe el nombre del cliente', 'warning');
+  if (!(d.monto > 0)) return toast('Escribe el monto pagado', 'warning');
+  if (!id && !window._fpeF) return toast('Sube el comprobante del pago recibido', 'warning');
+  if (d.rfc && !/^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/i.test(d.rfc)) return toast('El RFC no tiene el formato correcto', 'warning');
+  if (d.factura_limite && d.fecha_pago && d.factura_limite.slice(0, 7) > d.fecha_pago.slice(0, 7) && !confirm('La fecha límite cae en el mes siguiente al pago: la factura ya no podría emitirse con la fecha del pago. ¿Guardar así?')) return;
+  if (window._fpeF) { try { const u = await subirArchivo(window._fpeF, 'cobros'); d.comprobante_url = u.url; d.comprobante_sha = u.sha; } catch (e) { return toast(e.message, 'error'); } }
+  const r = await rpcFirmado('fin_fpe_guardar', { p_datos: d }, { titulo: 'Firmar factura por entregar', sub: `${d.cliente} · ${$$(d.monto)}` });
+  if (!r) return;
+  CM('mGen'); toast(id ? 'Actualizada' : `Agendada para el ${fmtD(r.limite)} · la Contadora ya tiene el pendiente`, 'success'); await cargarTodo(true); renderTab();
+}
+// Detalle
+function fpeVer(id) {
+  const x = FPE.find(z => z.id === id); if (!x) return; const ab = fpeAbierta(x), d = fpeDias(x);
+  modal('Factura por entregar · ' + x.cliente, `<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px"><span class="bdg ${FPE_EST[x.estado][1]}">${FPE_EST[x.estado][0]}</span>${ab ? `<span class="mini" style="${d < 0 ? 'color:var(--dg)' : d <= 2 ? 'color:var(--wn)' : ''}">límite ${fmtD(x.factura_limite)} · ${d < 0 ? 'venció hace ' + -d + ' d' : d === 0 ? 'hoy' : 'en ' + d + ' d'}</span>` : ''}</div>
+    <div class="kv"><b>Cliente</b><div>${esc(x.cliente)}${x.razon_social ? '<div class="mini">' + esc(x.razon_social) + '</div>' : ''}</div>
+      <b>Datos fiscales</b><div>${esc(x.rfc || 'sin RFC')}${x.regimen ? ' · régimen ' + esc(x.regimen) : ''}${x.uso_cfdi ? ' · uso ' + esc(x.uso_cfdi) : ''}${x.cp ? ' · CP ' + esc(x.cp) : ''}</div>
+      <b>Contacto</b><div>${esc(x.email || '—')}${x.telefono ? ' · ' + esc(x.telefono) : ''}</div>
+      <b>Concepto</b><div>${esc(x.concepto || '—')}</div>
+      <b>Pago recibido</b><div><b>${$$(x.monto)}</b> · ${esc(x.metodo || '')} · ${fmtD(x.fecha_pago)}${x.referencia ? ' · ref ' + esc(x.referencia) : ''}${x.comprobante_url ? ` · <a href="${esc(x.comprobante_url)}" target="_blank">comprobante</a>` : ''}</div>
+      <b>Factura</b><div>${x.xml_url ? `<a class="dtag ok" href="${esc(x.xml_url)}" target="_blank">XML</a> ` : ''}${x.pdf_url ? `<a class="dtag ok" href="${esc(x.pdf_url)}" target="_blank">PDF</a> ` : ''}${x.uuid_cfdi ? '<span class="mini">UUID ' + esc(x.uuid_cfdi) + '</span>' : x.xml_url ? '' : '<span class="mini">aún no emitida</span>'}${x.emitida_at ? '<div class="mini">emitida ' + fmtDT(x.emitida_at) + ' por ' + esc(nomUsr(x.emitida_por)) + '</div>' : ''}</div>
+      ${x.entregada_at ? `<b>Entregada</b><div>${fmtDT(x.entregada_at)} · ${esc(nomUsr(x.entregada_por))}${x.entregada_via ? ' · por ' + esc(x.entregada_via) : ''}</div>` : ''}
+      ${x.motivo_cancel ? `<b>Cancelada</b><div>${esc(x.motivo_cancel)}</div>` : ''}
+      ${x.notas ? `<b>Notas</b><div>${esc(x.notas)}</div>` : ''}
+      <b>Registró</b><div class="mini">${esc(nomUsr(x.created_by))} · ${fmtDT(x.created_at)}</div></div>`,
+  [ab && puede('fps') ? `<button class="btn btn-d" onclick="fpeCancelar('${id}')">Cancelar</button><button class="btn btn-s" onclick="fpeNuevo('${id}')">✎ Editar</button>` : '',
+   ab && puede('fps') ? `<button class="btn ${x.estado === 'pendiente' ? 'btn-p' : 'btn-s'}" onclick="fpeFactura('${id}')">⬆ ${x.xml_url ? 'Reemplazar' : 'Subir'} XML/PDF</button>` : '',
+   x.xml_url && x.estado !== 'cancelada' && puede('fps') ? `<button class="btn btn-p" onclick="fpeEntregar('${id}')">✉ ${x.estado === 'entregada' ? 'Reenviar' : 'Entregar'}</button>` : ''].join(''), 'lg');
+}
+// Subir la factura emitida (XML obligatorio)
+function fpeFactura(id) {
+  const x = FPE.find(z => z.id === id); window._fpeX = { id, xml: null, pdf: null, c: null };
+  modal('Factura emitida · ' + x.cliente, `<div class="prop" style="margin-top:0"><div class="row"><span>Pago</span><span class="amt">${$$(x.monto)} · ${fmtD(x.fecha_pago)}</span></div><div class="row"><span>RFC</span><span>${esc(x.rfc || '—')}</span></div></div>
+    <div class="fxgrid" style="margin-top:12px"><label class="fxslot" id="feX"><input type="file" multiple accept=".xml,text/xml,application/xml,.pdf,application/pdf" onchange="fpeFxArch(this.files)"><b>XML</b><span>obligatorio</span></label>
+      <label class="fxslot" id="feP"><input type="file" multiple accept=".pdf,application/pdf,.xml,text/xml" onchange="fpeFxArch(this.files)"><b>PDF</b><span>para el cliente</span></label></div><div id="feInfo" style="margin-top:10px"></div>`,
+  `<button class="btn btn-s" onclick="fpeVer('${id}')">Volver</button><button class="btn btn-p" id="feGo" disabled onclick="fpeFxGuardar()">Firmar factura emitida</button>`);
+}
+async function fpeFxArch(files) {
+  const X = window._fpeX, x = FPE.find(z => z.id === X.id);
+  for (const f of files) { if (/\.xml$/i.test(f.name) || /xml/.test(f.type)) { X.xml = f; try { X.c = parseCFDI(await f.text()); } catch { X.c = null; } } else X.pdf = f; }
+  document.getElementById('feX').classList.toggle('ok', !!X.xml); document.getElementById('feP').classList.toggle('ok', !!X.pdf);
+  if (X.xml) document.querySelector('#feX span').textContent = X.xml.name; if (X.pdf) document.querySelector('#feP span').textContent = X.pdf.name;
+  const c = X.c, av = [], err = [];
+  if (X.xml && !c) err.push('No pude leer el XML: verifica que sea el CFDI timbrado.');
+  if (c) {
+    if (!c.uuid) err.push('El XML no está timbrado (sin UUID).');
+    const mios = RS.map(r => String(r.rfc || '').toUpperCase()); if (c.emisorRfc && mios.length && !mios.includes(c.emisorRfc)) av.push(`El emisor (${c.emisorRfc}) no es una razón social del COE.`);
+    if (x.rfc && c.receptorRfc && c.receptorRfc !== x.rfc) av.push(`El RFC del receptor (${c.receptorRfc}) no es el del cliente (${x.rfc}).`);
+    if (Math.abs(num(c.total) - num(x.monto)) > 1) av.push(`El total (${$$(c.total)}) no coincide con lo pagado (${$$(x.monto)}).`);
+    if (c.fecha && x.fecha_pago && c.fecha.slice(0, 7) !== x.fecha_pago.slice(0, 7)) av.push(`La factura es de ${fmtD(c.fecha)} y el pago de ${fmtD(x.fecha_pago)} (meses distintos).`);
+  }
+  if (!X.xml) av.push('Falta el XML.');
+  X.av = av;
+  document.getElementById('feInfo').innerHTML = (c ? `<div class="kv"><b>Receptor</b><div>${esc(c.receptorNombre || '')} · ${esc(c.receptorRfc || '')}</div><b>Total</b><div><b>${$$(c.total)}</b> · ${fmtD(c.fecha)}</div><b>UUID</b><div class="mini">${esc(c.uuid || '—')}</div></div>` : '')
+    + err.map(e => `<div class="errbox" style="margin:6px 0">${esc(e)}</div>`).join('') + av.map(e => `<div class="warnbox" style="margin:6px 0">${esc(e)}</div>`).join('');
+  document.getElementById('feGo').disabled = !X.xml || err.length > 0;
+}
+async function fpeFxGuardar() {
+  const X = window._fpeX; if (!X.xml) return;
+  const av = (X.av || []).filter(a => a !== 'Falta el XML.');
+  if (av.length && !confirm('Revisa:\n\n• ' + av.join('\n• ') + '\n\n¿Guardar de todos modos?')) return;
+  let ux, up = null; try { ux = await subirArchivo(X.xml, 'facturas_emitidas'); if (X.pdf) up = await subirArchivo(X.pdf, 'facturas_emitidas'); } catch (e) { return toast(e.message, 'error'); }
+  const r = await rpcFirmado('fin_fpe_estado', { p_id: X.id, p_estado: 'emitida', p_datos: { xml_url: ux.url, pdf_url: up?.url || '', uuid: X.c?.uuid || '' } }, { titulo: 'Firmar factura emitida' });
+  if (!r) return; toast('Factura emitida · ahora entrégala al cliente', 'success'); await cargarTodo(true); fpeEntregar(X.id);
+}
+// Entregar: WhatsApp o correo con los enlaces de XML y PDF; se marca entregada
+function fpeEntregar(id) {
+  const x = FPE.find(z => z.id === id); if (!x) return;
+  const txt = `Buen día${x.cliente ? ', ' + x.cliente : ''}.\n\nLe compartimos su factura del Centro Ocular Especializado por ${$$(x.monto)}${x.concepto ? ' (' + x.concepto + ')' : ''}.\n${x.pdf_url ? 'PDF: ' + x.pdf_url + '\n' : ''}XML: ${x.xml_url}\n\nQuedamos a sus órdenes.`;
+  window._fpeTxt = txt;
+  const tel = String(x.telefono || '').replace(/\D/g, ''), wa = tel ? 'https://wa.me/' + (tel.length === 10 ? '52' + tel : tel) + '?text=' + encodeURIComponent(txt) : '';
+  const mail = 'mailto:' + encodeURIComponent(x.email || '') + '?subject=' + encodeURIComponent('Factura · Centro Ocular Especializado') + '&body=' + encodeURIComponent(txt);
+  modal('Entregar factura · ' + x.cliente, `<textarea style="min-height:150px;width:100%" readonly>${esc(txt)}</textarea>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">${wa ? `<a class="btn btn-s" href="${esc(wa)}" target="_blank" onclick="window._fpeVia='WhatsApp'">🟢 WhatsApp</a>` : '<span class="mini">Sin WhatsApp registrado</span>'}<a class="btn btn-s" href="${esc(mail)}" onclick="window._fpeVia='correo'">✉ Correo${x.email ? '' : ' (sin correo registrado)'}</a><button class="btn btn-s" onclick="navigator.clipboard?.writeText(window._fpeTxt);window._fpeVia=window._fpeVia||'copiado';toast('Mensaje copiado','success')">Copiar</button></div>
+    <div class="mini" style="margin-top:8px">Envíala y después marca «Ya la entregué»: el pendiente de la Contadora se cierra con la factura como evidencia.</div>`,
+  `<button class="btn btn-s" onclick="CM('mGen')">Después</button>${x.estado !== 'entregada' ? `<button class="btn btn-p" onclick="fpeMarcarEntregada('${id}')">✓ Ya la entregué</button>` : ''}`);
+}
+async function fpeMarcarEntregada(id) {
+  const r = await rpcFirmado('fin_fpe_estado', { p_id: id, p_estado: 'entregada', p_datos: { via: window._fpeVia || '' } }, { titulo: 'Firmar entrega de factura' });
+  if (!r) return; CM('mGen'); toast('Factura entregada · pendiente cerrado', 'success'); await cargarTodo(true); renderTab();
+}
+async function fpeCancelar(id) {
+  const m = prompt('Motivo de la cancelación (por ejemplo: el cliente ya no la quiere, se emitió a público en general):'); if (!m) return;
+  const r = await rpcFirmado('fin_fpe_estado', { p_id: id, p_estado: 'cancelada', p_datos: { motivo: m } }, { titulo: 'Firmar cancelación' });
+  if (r) { CM('mGen'); toast('Cancelada', 'success'); await cargarTodo(true); renderTab(); }
+}
+// Alertas para la campana
+function fpeAlertas() {
+  const A = FPE.filter(fpeAbierta), v = A.filter(x => fpeDias(x) < 0), p = A.filter(x => fpeDias(x) >= 0 && fpeDias(x) <= 2), out = [];
+  if (v.length) out.push({ n: 'r', t: `Facturas por entregar: ${v.length} vencida(s)`, m: v.slice(0, 3).map(x => x.cliente + ' ' + $$(x.monto)).join(' · '), go: () => { VIEW.fpeF = 'vencidas'; goTab('fpe'); } });
+  if (p.length) out.push({ n: 'a', t: `Facturas por entregar: ${p.length} vencen en 2 días`, m: p.slice(0, 3).map(x => x.cliente + ' · ' + fmtD(x.factura_limite)).join(' · '), go: () => { VIEW.fpeF = 'abiertas'; goTab('fpe'); } });
+  return out;
 }
 
 // ══ WIDGET PARA IPHONE (Scriptable) ══
