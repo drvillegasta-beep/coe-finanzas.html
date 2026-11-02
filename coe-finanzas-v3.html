@@ -7217,48 +7217,86 @@ async function infDatos(per, off) {
     ['Movimientos revisados · observaciones abiertas', `${obsC} · ${obsP}`, obsP ? Math.max(0, 100 - obsP * 10) : 100, 'meta 0 abiertas']];
   const conD = met.filter(m => m[2] !== null && m[2] !== undefined), orden = conD.length ? Math.round(conD.reduce((s, m) => s + m[2], 0) / conD.length) : null;
   const global = ev && ev.calificacion !== null && ev.calificacion !== undefined && orden !== null ? Math.round(ev.calificacion * 0.6 + orden * 0.4) : ev?.calificacion ?? orden;
-  return { per, a, b, pa, pb, corte, caja, cajaP, pag, pagP, cob, cobP, S, cxp, cxpV, cxp7, cxc, cxcV, fps, fpsV, fpeA, fpeV, inv, ctl, nom, ant, cat, meses, pedidos, pedRec, met, orden, ev, global, cont, ingT: caja + S(cob), ingTP: cajaP + S(cobP) };
+  // ── Cumplimiento de la empresa ──
+  const pagAT = pag.filter(x => !x.f.fecha_vencimiento || String(x.fecha_pago) <= x.f.fecha_vencimiento);
+  let oc = []; try { oc = buildRecOcurrencias(Math.max(1, diasA(b) + 1)).filter(o => en(isoD(o.fecha)) && isoD(o.fecha) <= corte); } catch (e) { }
+  const recNo = oc.filter(o => !nomRef(o.rec)), recPag = recNo.filter(o => o.factura && num(o.factura.monto_pagado) > 0.009);
+  const eqT = TAR.filter(t => t.estado !== 'cancelada' && fOrig(t) && en(fOrig(t)) && fOrig(t) <= corte), eqAT = eqT.filter(t => t.estado === 'cumplida' && String(t.cumplida_at).slice(0, 10) <= fOrig(t));
+  const pedAut = PED.filter(p => en(p.autorizado_at)), pedSol = PED.filter(p => en(p.solicitado_at || p.created_at));
+  // ── Facturas por solicitar: detalle ──
+  const xmlP = DOCS.filter(d => d.tipo === 'xml' && en(d.subido_at) && FAC.find(f => f.id === d.registro_id && f.tipo === 'egreso'));
+  const fpsProv = Object.entries(fps.reduce((g, f) => { const k = f.entidad_id; (g[k] = g[k] || { n: 0, m: 0, v: 0 }); g[k].n++; g[k].m += num(f.monto_pagado); if (diasA(limFps(f)) < 0) g[k].v++; return g; }, {})).sort((x, y) => y[1].m - x[1].m).slice(0, 6);
+  // ── Facturas por entregar: detalle ──
+  const fpeReg = fpe.filter(x => en(x.created_at)), fpeEnt = fpe.filter(x => x.estado === 'entregada' && en(x.entregada_at)), fpeEntAT = fpeEnt.filter(x => String(x.entregada_at).slice(0, 10) <= x.factura_limite);
+  // ── Inventarios por área ──
+  const invA = []; try { [['alm', 'Almacén de farmacia'], ['far', 'Farmacia mostrador'], ['adm', 'Almacén Contabilidad · Quirófano'], ['qui', 'Quirófano']].forEach(([A, n]) => { const R = almFilas(A); if (!R.length) return;
+    invA.push({ n, tot: R.length, acab: R.filter(r => r.est === 'acabado').map(r => r.n), crit: R.filter(r => r.est === 'critico').map(r => r.n), bajo: R.filter(r => r.est === 'bajo').map(r => r.n), cad: R.flatMap(r => r.caducado.map(l => r.n + ' (' + l.q + ')')), xcad: R.flatMap(r => r.xCad.map(l => r.n + ' ' + fmtD(l.cad).slice(0, 5))), falta: R.filter(r => almFaltaInfo(r, A).length).length, sinmin: R.filter(r => r.est === 'sinmin').length }); }); } catch (e) { }
+  // ── Nómina y honorarios: pagado, facturado, montos, extras ──
+  const ma = a.slice(0, 7), mb = b.slice(0, 7);
+  let ocN = []; try { ocN = buildRecOcurrencias(Math.max(1, diasA(b) + 1)).filter(o => nomRef(o.rec) && String(isoD(o.fecha)).slice(0, 7) >= ma && String(isoD(o.fecha)).slice(0, 7) <= mb && (per === 'quincenal' ? en(isoD(o.fecha)) : true)); } catch (e) { }
+  const nomP = Object.values(ocN.reduce((g, o) => { const r = o.rec, fijo = nomRef(r) === 'fijo', k = fijo ? 'fijo' : r.entidad_id;
+    const p = g[k] = g[k] || { n: fijo ? 'Nómina personal fijo' : nomEnt(r.entidad_id), fijo, base: num(r.monto), q: [], extras: [] };
+    const f = o.factura, m = f ? num(f.monto_pagado) : 0, fac = fijo || ent(r.entidad_id)?.no_factura ? 'no aplica' : (f && tieneXML(f)) || (FM || []).some(x => x.entidad_id === r.entidad_id && String(x.mes).slice(0, 7) === isoD(o.fecha).slice(0, 7) && (x.xml_uuid || x.xml_at)) ? 'sí' : 'no';
+    if (p.q.some(q => q.d === isoD(o.fecha))) return g;
+    p.q.push({ d: isoD(o.fecha), pag: !!(f && m > 0.009) && (!f._grupo || f.estado === 'pagado'), m, fac });
+    (f?._grupo || (f ? [f] : [])).forEach(x => (x.desglose || []).filter(l => !/sueldo|quincena|honorario/i.test(l.concepto || '')).forEach(l => p.extras.push(`${l.empleado}: ${l.concepto} ${$$(l.monto)}`)));
+    if (f && m > 0.009 && p.base && Math.abs(m - p.base) > 1) p.extras.push(`${isoD(o.fecha).slice(8)}/${isoD(o.fecha).slice(5, 7)}: ${m > p.base ? 'bono o extra' : 'descuento'} de ${$$(Math.abs(m - p.base))} (habitual ${$$(p.base)})`);
+    return g; }, {}));
+  return { pagAT, recNo, recPag, eqT, eqAT, pedAut, pedSol, xmlP, fpsProv, fpeReg, fpeEnt, fpeEntAT, invA, nomP,
+    per, a, b, pa, pb, corte, caja, cajaP, pag, pagP, cob, cobP, S, cxp, cxpV, cxp7, cxc, cxcV, fps, fpsV, fpeA, fpeV, inv, ctl, nom, ant, cat, meses, pedidos, pedRec, met, orden, ev, global, cont, ingT: caja + S(cob), ingTP: cajaP + S(cobP) };
 }
 function infCuerpo(D) {
-  const h = s => `<h3 style="font-size:12px;margin:10px 0 3px;border-bottom:1px solid #1d2733;padding-bottom:2px">${s}</h3>`;
-  const fila = (t, v, extra = '') => `<tr><td>${t}</td><td class="r">${v}${extra}</td></tr>`;
-  const S = D.S, sem = infSem(D.global);
-  let c = `<div class="kv"><b>Periodo</b><div>${fmtD(D.a)} al ${fmtD(D.b)}${D.corte < D.b ? ' · corte al ' + fmtD(D.corte) : ''} · comparado con ${fmtD(D.pa)} al ${fmtD(D.pb)}</div><b>Elabora</b><div>${esc(D.cont?.nombre || 'Contadora')} · generado por ${esc(cu.nombre)}</div></div>`;
-  c += h('1. Resumen financiero') + `<table><tbody>
-    ${fila('Ingresos (cierres de caja + cobros)', $$(D.ingT), infVar(D.ingT, D.ingTP))}
-    ${fila('Pagos realizados', `${D.pag.length} · ${$$(S(D.pag))}`, infVar(S(D.pag), S(D.pagP)))}
-    ${fila('Resultado del periodo (ingresos − pagos)', `<b style="color:${D.ingT - S(D.pag) >= 0 ? '#067647' : '#b42318'}">${$$(D.ingT - S(D.pag))}</b>`)}
-    ${fila('Por pagar vencido · vence en 7 días', `<span class="${D.cxpV.length ? 'rojo' : ''}">${D.cxpV.length} · ${$$(sumS(D.cxpV))}</span> · ${D.cxp7.length} · ${$$(sumS(D.cxp7))}`)}
-    ${fila('Por cobrar vencido', `${D.cxcV.length} · ${$$(sumS(D.cxcV))}`)}
-    ${fila('Facturas por solicitar (vencidas)', `${D.fps.length} <span class="${D.fpsV.length ? 'rojo' : ''}">(${D.fpsV.length})</span>`)}
-    ${fila('Facturas por entregar a clientes (vencidas)', `${D.fpeA.length} <span class="${D.fpeV.length ? 'rojo' : ''}">(${D.fpeV.length})</span>`)}
-    ${fila('Inventario: acabados · críticos · caducados · por caducar · sin datos', `${D.inv.acab} · ${D.inv.crit} · <span class="${D.inv.cad ? 'rojo' : ''}">${D.inv.cad}</span> · ${D.inv.xcad} · ${D.inv.falta}`)}</tbody></table>`;
-  if (D.per === 'quincenal' || D.per === 'mensual') {
-    const L = D.nom.flatMap(f => (f.desglose || []).length ? f.desglose.map(x => [x.empleado, x.concepto, num(x.monto), f]) : [[nomEnt(f.entidad_id), f.descripcion, num(f.monto_pagado || f.monto_total), f]]).slice(0, 14);
-    c += h('2. Nómina y honorarios') + (L.length ? `<table><thead><tr><th>Persona</th><th>Concepto</th><th>Pagado</th><th>Factura</th><th class="r">Monto</th></tr></thead><tbody>${L.map(([n, co, m, f]) => `<tr><td>${esc(n)}</td><td>${esc(co || '')}</td><td>${f.fecha_pago ? fmtD(f.fecha_pago) : '<span class="rojo">pendiente</span>'}</td><td>${tieneXML(f) ? '✓' : ent(f.entidad_id)?.no_factura || esNomFijo(f) ? 'no aplica' : '<span class="rojo">falta</span>'}</td><td class="r">${$$(m)}</td></tr>`).join('')}</tbody></table>` : '<div class="p" style="color:#778">Sin nómina u honorarios en el periodo.</div>');
+  const h = s => `<h3 style="font-size:12px;margin:9px 0 3px;border-bottom:1px solid #1d2733;padding-bottom:2px">${s}</h3>`;
+  const S = D.S, sem = infSem(D.global), pc = (x, y) => y ? Math.round(x / y * 100) : null, P = (x, y) => y ? `<b style="color:${infSem(pc(x, y))[1]}">${pc(x, y)} %</b>` : '—';
+  const lista = (L, max = 6) => L.length ? esc(L.slice(0, max).join(', ')) + (L.length > max ? ` y ${L.length - max} más` : '') : '—';
+  let c = `<div class="kv"><b>Periodo</b><div>${fmtD(D.a)} al ${fmtD(D.b)}${D.corte < D.b ? ' · corte al ' + fmtD(D.corte) : ''}</div><b>Contadora</b><div>${esc(D.cont?.nombre || '')} · generado por ${esc(cu.nombre)}</div></div>`;
+  // 1. Desempeño de la empresa: egresos y cumplimientos
+  const top = Object.entries(D.cat).sort((x, y) => y[1] - x[1]).slice(0, 5);
+  c += h('1. Desempeño de la empresa · egresos y cumplimientos') + `<table><thead><tr><th>Indicador</th><th>Resultado</th><th class="r">Cumplimiento</th></tr></thead><tbody>
+    <tr><td>Egresos pagados</td><td>${D.pag.length} pagos · <b>${$$(S(D.pag))}</b>${infVar(S(D.pag), S(D.pagP))} vs periodo anterior${top.length ? `<div style="font-size:10px;color:#556">${top.map(([k, v]) => esc(k) + ' ' + $$(v)).join(' · ')}</div>` : ''}</td><td class="r">—</td></tr>
+    <tr><td>Pagos hechos en su fecha (no después del vencimiento)</td><td>${D.pagAT.length} de ${D.pag.length}</td><td class="r">${P(D.pagAT.length, D.pag.length)}</td></tr>
+    <tr><td>Recurrentes del periodo pagados (servicios, rentas)</td><td>${D.recPag.length} de ${D.recNo.length}${D.recNo.length > D.recPag.length ? `<div style="font-size:10px" class="rojo">sin pagar: ${lista(D.recNo.filter(o => !D.recPag.includes(o)).map(o => nomEnt(o.rec.entidad_id) + ' ' + fmtD(isoD(o.fecha)).slice(0, 5)), 4)}</div>` : ''}</td><td class="r">${P(D.recPag.length, D.recNo.length)}</td></tr>
+    <tr><td>Pendientes del equipo cumplidos a tiempo</td><td>${D.eqAT.length} de ${D.eqT.length}</td><td class="r">${P(D.eqAT.length, D.eqT.length)}</td></tr>
+    <tr><td>Compras: pedidos solicitados · autorizados · recibidos</td><td>${D.pedSol.length} · ${D.pedAut.length} · ${D.pedRec.length}</td><td class="r">—</td></tr></tbody></table>`;
+  // 2. Facturas por solicitar
+  c += h('2. Facturas por solicitar a proveedores') + `<div class="p" style="margin:3px 0">Pendientes: <b>${D.fps.length}</b> por ${$$(D.fps.reduce((s, f) => s + num(f.monto_pagado), 0))} · <span class="${D.fpsV.length ? 'rojo' : ''}"><b>${D.fpsV.length}</b> fuera de plazo</span> · conseguidas en el periodo (XML subidos): <b>${D.xmlP.length}</b></div>`
+    + (D.fpsProv.length ? `<table><thead><tr><th>Proveedor con más facturas pendientes</th><th class="r">Facturas</th><th class="r">Vencidas</th><th class="r">Monto</th></tr></thead><tbody>${D.fpsProv.map(([e, x]) => `<tr><td>${esc(nomEnt(e))}</td><td class="r">${x.n}</td><td class="r ${x.v ? 'rojo' : ''}">${x.v}</td><td class="r">${$$(x.m)}</td></tr>`).join('')}</tbody></table>` : '');
+  // 3. Facturas por entregar
+  c += h('3. Facturas por entregar a clientes') + `<div class="p" style="margin:3px 0">Registradas en el periodo: <b>${D.fpeReg.length}</b> · entregadas: <b>${D.fpeEnt.length}</b> (${D.fpeEntAT.length} a tiempo) · por entregar: <b>${D.fpeA.length}</b> · <span class="${D.fpeV.length ? 'rojo' : ''}">vencidas: <b>${D.fpeV.length}</b></span>${D.fpeV.length ? `<div style="font-size:10px" class="rojo">${lista(D.fpeV.map(x => x.cliente + ' ' + $$(x.monto)), 5)}</div>` : ''}</div>`;
+  // 4. Inventarios
+  c += h('4. Inventarios') + `<table><thead><tr><th>Área</th><th>Acabados y críticos</th><th>Bajo mínimo</th><th>Caducados · por caducar (90 d)</th><th class="r">Sin datos</th></tr></thead><tbody>${D.invA.map(x => `<tr><td><b>${esc(x.n)}</b><div style="font-size:9.5px;color:#556">${x.tot} productos</div></td><td class="${x.acab.length + x.crit.length ? 'rojo' : ''}" style="font-size:10px">${x.acab.length + x.crit.length ? (x.acab.length ? '<b>Acabados:</b> ' + lista(x.acab, 4) + ' ' : '') + (x.crit.length ? '<b>Críticos:</b> ' + lista(x.crit, 4) : '') : '—'}</td><td style="font-size:10px">${lista(x.bajo, 4)}</td><td style="font-size:10px"><span class="${x.cad.length ? 'rojo' : ''}">${x.cad.length ? lista(x.cad, 3) : 'ninguno'}</span> · ${x.xcad.length ? lista(x.xcad, 3) : 'nada por caducar'}</td><td class="r" style="font-size:10px">${x.falta}${x.sinmin ? `<div>${x.sinmin} sin mínimo</div>` : ''}</td></tr>`).join('')}</tbody></table>`
+    + `<div class="p" style="margin:2px 0;font-size:10.5px"><b>Inventarios físicos:</b> ${D.ctl.map(x => `${esc(x.t)} ${x.e.hecho ? '<span class="verde">✓ hecho</span>' : x.e.venc ? '<span class="rojo">vencido</span>' : 'pendiente'}`).join(' · ') || '—'}</div>`;
+  // 5. Nómina
+  if (D.nomP.length) {
+    const tq = {}; D.nomP.forEach(p => p.q.forEach(q => { const k = q.d.slice(8) <= '15' ? 'Quincena 15' : 'Fin de mes'; tq[k] = (tq[k] || 0) + q.m; }));
+    const ex = D.nomP.flatMap(p => p.extras.map(e => p.n + ' · ' + e));
+    c += h('5. Nómina y honorarios') + `<table><thead><tr><th>Persona</th>${['Quincena 15', 'Fin de mes'].map(t => `<th>${t}: pagado · factura</th>`).join('')}<th class="r">Total</th></tr></thead><tbody>${D.nomP.map(p => { const q1 = p.q.find(q => q.d.slice(8) <= '15'), q2 = p.q.find(q => q.d.slice(8) > '15'), cel = q => !q ? '<td>—</td>' : `<td>${q.pag ? '<span class="verde">✓ pagado</span>' : '<span class="rojo">✗ sin pagar</span>'} · ${q.fac === 'sí' ? '<span class="verde">facturado</span>' : q.fac === 'no' ? (q.pag ? '<span class="rojo">sin factura</span>' : '—') : 'no aplica'}</td>`;
+      return `<tr><td>${esc(p.n)}</td>${cel(q1)}${cel(q2)}<td class="r">${$$(p.q.reduce((s, q) => s + q.m, 0))}</td></tr>`; }).join('')}
+      <tr class="tot"><td>Total pagado</td><td>${$$(tq['Quincena 15'] || 0)}</td><td>${$$(tq['Fin de mes'] || 0)}</td><td class="r">${$$(Object.values(tq).reduce((s, x) => s + x, 0))}</td></tr></tbody></table>`
+      + `<div class="p" style="margin:2px 0;font-size:10.5px"><b>Bonos, extras y descuentos:</b> ${ex.length ? esc(ex.join(' · ')) : 'ninguno'}</div>`;
   }
-  if (D.per === 'mensual' || D.per === 'trimestral') {
-    const top = Object.entries(D.cat).sort((x, y) => y[1] - x[1]).slice(0, 8);
-    c += h(D.per === 'mensual' ? '3. Estado de resultados y antigüedad de saldos' : '2. Tendencia, gastos por categoría y saldos') + `<div style="display:flex;gap:12px"><div style="flex:1"><table><thead><tr><th>Egresos por categoría</th><th class="r">Monto</th></tr></thead><tbody>${top.map(([k, v]) => `<tr><td>${esc(k)}</td><td class="r">${$$(v)}</td></tr>`).join('') || '<tr><td colspan="2">Sin pagos</td></tr>'}</tbody></table></div>
-      <div style="flex:1"><table><thead><tr><th>Antigüedad · proveedores</th><th class="r">Ctas</th><th class="r">Saldo</th></tr></thead><tbody>${D.ant.map(([t, n, s]) => `<tr><td>${t}</td><td class="r">${n}</td><td class="r ${t !== 'Al corriente' && n ? 'rojo' : ''}">${$$(s)}</td></tr>`).join('')}</tbody></table></div></div>`;
-    if (D.meses.length > 1) c += `<table><thead><tr><th>Mes</th><th class="r">Ingresos</th><th class="r">Pagos</th><th class="r">Resultado</th></tr></thead><tbody>${D.meses.map(m => `<tr><td style="text-transform:capitalize">${m.n}</td><td class="r">${$$(m.ing)}</td><td class="r">${$$(m.egr)}</td><td class="r ${m.ing - m.egr < 0 ? 'rojo' : 'verde'}">${$$(m.ing - m.egr)}</td></tr>`).join('')}</tbody></table>`;
-    c += `<div class="p" style="margin:4px 0"><b>Inventarios físicos:</b> ${D.ctl.map(x => `${esc(x.t)} ${x.e.hecho ? '✓' : x.e.venc ? '<span class="rojo">vencido</span>' : 'pendiente'}`).join(' · ') || '—'} · <b>Compras:</b> ${D.pedidos.length} pedido(s), ${D.pedRec.length} recibido(s)</div>`;
-  }
-  c += h('Desempeño de la Contadora') + `<div style="display:flex;gap:12px;align-items:center;margin:4px 0"><div style="font-size:30px;font-weight:800;color:${sem[1]}">${D.global ?? '—'}<span style="font-size:12px">/100</span></div><div><b style="color:${sem[1]}">● ${sem[0]}</b><div style="font-size:10px;color:#556">60 % evaluación del Manual del Contador (${D.ev?.calificacion ?? '—'}) + 40 % orden y control (${D.orden ?? '—'})</div></div></div>
-    <table><thead><tr><th>Indicador</th><th>Resultado</th><th>Meta</th><th class="r">%</th></tr></thead><tbody>${D.met.map(([t, r, p, m]) => `<tr><td>${t}</td><td>${r}</td><td>${m}</td><td class="r" style="color:${infSem(p)[1]};font-weight:700">${p ?? '—'}</td></tr>`).join('')}</tbody></table>`;
-  c += `<div style="margin-top:8px"><b style="font-size:10px;color:#556;text-transform:uppercase">Comentarios de Dirección</b><div style="border-bottom:1px solid #bbb;height:18px"></div><div style="border-bottom:1px solid #bbb;height:18px"></div></div>
-    <div class="firmas" style="margin-top:26px"><div>Elaboró · Contadora<br><b>${esc(D.cont?.nombre || '')}</b></div><div>Dirección General<br><b>Dr. José Antonio Villegas Ávila</b></div><div>Subdirección<br>&nbsp;</div></div>`;
+  // 6. Desempeño de la Contadora (Manual de Responsabilidades del Contador)
+  const E = D.ev || {}, R = E.resumen || {}, Tm = (E.tareas || []).filter(t => ['crit', 'noreal', 'nodem', 'tarde'].includes(t.clase));
+  const bien = (E.indicadores || []).filter(x => x.pct >= 90).map(x => x.t), mal = (E.indicadores || []).filter(x => x.pct !== null && x.pct !== undefined && x.pct < 70).map(x => x.t);
+  c += h(`${D.nomP.length ? 6 : 5}. Desempeño de la Contadora · Manual de Responsabilidades del Contador`) + `<div style="display:flex;gap:12px;align-items:center;margin:4px 0"><div style="font-size:30px;font-weight:800;color:${sem[1]}">${D.global ?? '—'}<span style="font-size:12px">/100</span></div><div style="flex:1"><b style="color:${sem[1]}">● ${sem[0]}</b> <span style="font-size:10px;color:#556">· 60 % evaluación del Manual (${E.calificacion ?? '—'}) + 40 % orden y control (${D.orden ?? '—'}) · ${E.dias_activos ?? '—'} de ${E.habiles ?? '—'} días hábiles con actividad</span>
+      <div style="font-size:10.5px;margin-top:3px">${Object.entries(EV_CLASE).filter(([k]) => R[k]).map(([k, [t]]) => `${t}: <b>${R[k]}</b>`).join(' · ') || 'Sin responsabilidades evaluables en el periodo'}</div>
+      <div style="font-size:10.5px;margin-top:2px">${bien.length ? '<span class="verde">Cumple: ' + esc(bien.slice(0, 4).join('; ')) + '.</span> ' : ''}${mal.length ? '<span class="rojo">Por mejorar: ' + esc(mal.slice(0, 4).join('; ')) + '.</span>' : ''}</div></div></div>`
+    + ((E.indicadores || []).length ? `<table><thead><tr><th>Indicador del Manual</th><th>Meta</th><th>Resultado</th><th class="r">%</th></tr></thead><tbody>${E.indicadores.map(x => `<tr><td>${esc(x.t)}</td><td style="font-size:10px">${esc(x.meta)}</td><td>${x.id === 'cxc' ? (x.real ?? 0) + ' %' : x.den === null || x.den === undefined ? x.num : x.num + ' de ' + x.den}</td><td class="r" style="color:${infSem(x.pct)[1]};font-weight:700">${x.pct ?? '—'}</td></tr>`).join('')}</tbody></table>` : '')
+    + `<table><thead><tr><th>Orden y control</th><th>Resultado</th><th>Meta</th><th class="r">%</th></tr></thead><tbody>${D.met.map(([t, r, p, m]) => `<tr><td>${t}</td><td>${r}</td><td style="font-size:10px">${m}</td><td class="r" style="color:${infSem(p)[1]};font-weight:700">${p ?? '—'}</td></tr>`).join('')}</tbody></table>`
+    + (Tm.length ? `<div style="font-size:10px;margin:3px 0"><b>Responsabilidades no cumplidas o fuera de regla (${Tm.length}):</b> ${Tm.slice(0, 8).map(t => `${esc(t.titulo)} <span style="color:${EV_CLASE[t.clase][1]}">(${EV_CLASE[t.clase][0].toLowerCase()})</span>`).join(' · ')}${Tm.length > 8 ? ` y ${Tm.length - 8} más` : ''}</div>` : '');
+  c += `<div style="margin-top:6px"><b style="font-size:10px;color:#556;text-transform:uppercase">Comentarios de Dirección</b><div style="border-bottom:1px solid #bbb;height:16px"></div><div style="border-bottom:1px solid #bbb;height:16px"></div></div>
+    <div class="firmas" style="margin-top:22px"><div>Elaboró · Contadora<br><b>${esc(D.cont?.nombre || '')}</b></div><div>Dirección General<br><b>Dr. José Antonio Villegas Ávila</b></div><div>Subdirección<br>&nbsp;</div></div>`;
   return c;
 }
-// Texto para WhatsApp: el resumen que se lee en el teléfono
 function infTexto(D) {
-  const S = D.S, sem = infSem(D.global), pct = (x, y) => y ? ` (${x >= y ? '+' : '−'}${Math.abs(Math.round((x - y) / y * 100))}% vs anterior)` : '';
-  return `*${INF_T[D.per]} · COE Finanzas*\n${fmtD(D.a)} al ${fmtD(D.b)}\n\n`
-    + `💰 Ingresos: ${$$(D.ingT)}${pct(D.ingT, D.ingTP)}\n💸 Pagos: ${D.pag.length} · ${$$(S(D.pag))}\n📊 Resultado: ${$$(D.ingT - S(D.pag))}\n`
-    + `⏰ Por pagar vencido: ${D.cxpV.length} · ${$$(sumS(D.cxpV))}\n🧾 Facturas por solicitar: ${D.fps.length} (${D.fpsV.length} vencidas)\n📨 Facturas por entregar: ${D.fpeA.length} (${D.fpeV.length} vencidas)\n`
-    + `📦 Inventario: ${D.inv.acab} acabados, ${D.inv.crit} críticos, ${D.inv.cad} caducados\n\n`
-    + `*Desempeño de la Contadora: ${D.global ?? '—'}/100 · ${sem[0]}*\n` + D.met.slice(0, 6).map(([t, r]) => `• ${t}: ${r}`).join('\n')
-    + `\n\nInforme completo e imprimible en COE Finanzas › Desempeño › Informes.`;
+  const S = D.S, sem = infSem(D.global), pc = (x, y) => y ? Math.round(x / y * 100) + '%' : '—';
+  const nomNo = D.nomP.flatMap(p => p.q.filter(q => !q.pag).map(q => p.n)), nomSinF = D.nomP.flatMap(p => p.q.filter(q => q.pag && q.fac === 'no').map(q => p.n));
+  const inv = D.invA.map(x => `${x.n}: ${x.acab.length} acabados, ${x.crit.length} críticos, ${x.cad.length} caducados`).join('\n');
+  return `*${INF_T[D.per]} · COE Finanzas*\n${fmtD(D.a)} al ${fmtD(D.b)}\n\n*Empresa*\n💸 Egresos: ${D.pag.length} pagos · ${$$(S(D.pag))}\n✅ Pagos en su fecha: ${pc(D.pagAT.length, D.pag.length)} · recurrentes pagados ${D.recPag.length}/${D.recNo.length}\n📋 Pendientes del equipo a tiempo: ${pc(D.eqAT.length, D.eqT.length)}\n\n`
+    + `🧾 Facturas por solicitar: ${D.fps.length} (${D.fpsV.length} vencidas) · conseguidas ${D.xmlP.length}\n📨 Facturas por entregar: ${D.fpeA.length} (${D.fpeV.length} vencidas) · entregadas ${D.fpeEnt.length}\n📦 ${inv}\n`
+    + (D.nomP.length ? `👥 Nómina: ${nomNo.length ? 'sin pagar ' + nomNo.join(', ') : 'todo pagado'}${nomSinF.length ? ' · sin factura ' + nomSinF.join(', ') : ''}\n` : '')
+    + `\n*Contadora: ${D.global ?? '—'}/100 · ${sem[0]}*\nManual ${D.ev?.calificacion ?? '—'} · orden y control ${D.orden ?? '—'}\n` + D.met.slice(0, 5).map(([t, r]) => `• ${t}: ${r}`).join('\n')
+    + `\n\nInforme completo e imprimible en COE Finanzas › Desempeño.`;
 }
 VIEW.infPer = VIEW.infPer || 'semanal'; VIEW.infOff = VIEW.infOff ?? -1;
 async function generarInforme(per, off) {
@@ -7275,7 +7313,7 @@ async function generarInforme(per, off) {
 }
 async function infGuardar() {
   if (window._infId) return window._infId; const D = window._inf;
-  const datos = { per: D.per, a: D.a, b: D.b, ingT: D.ingT, ingTP: D.ingTP, pagos: D.S(D.pag), npagos: D.pag.length, cxpV: sumS(D.cxpV), fps: D.fps.length, fpsV: D.fpsV.length, fpe: D.fpeA.length, fpeV: D.fpeV.length, inv: D.inv, met: D.met, orden: D.orden, eval: D.ev?.calificacion ?? null };
+  const datos = { per: D.per, a: D.a, b: D.b, pagos: D.S(D.pag), npagos: D.pag.length, pagAT: D.pagAT.length, recPag: D.recPag.length, recNo: D.recNo.length, fps: D.fps.length, fpsV: D.fpsV.length, fpe: D.fpeA.length, fpeV: D.fpeV.length, inv: D.inv, met: D.met, orden: D.orden, eval: D.ev?.calificacion ?? null };
   try { const { data } = await sb.rpc('fin_informe_guardar', { p_usuario: cu.id, p_tipo: D.per, p_desde: D.a, p_hasta: D.b, p_cal: D.global, p_datos: datos }); if (data?.ok) window._infId = data.id; } catch (e) { }
   return window._infId;
 }
