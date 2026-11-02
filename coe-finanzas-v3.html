@@ -623,6 +623,11 @@ tr.trsep td{background:var(--dd);color:var(--dg);font-size:11px;font-weight:800;
 @media (hover:none){.pcard-a{display:flex}}
 
 .cattab td{padding:5px 6px;vertical-align:top}.cattab input,.cattab select{padding:4px 6px;font-size:12px}
+.infprev{background:#fff;color:#1d2733;border-radius:var(--rs);padding:14px 18px;font-size:12px}
+.infprev table{width:100%;border-collapse:collapse;margin:6px 0}.infprev th{background:#eef1f4;color:#1d2733;text-align:left;font-size:10px;text-transform:uppercase;padding:5px}
+.infprev td{padding:5px;border-bottom:1px solid #dde2e7;color:#1d2733}.infprev .r{text-align:right}.infprev .rojo{color:#b42318}.infprev .verde{color:#067647}
+.infprev .kv{display:grid;grid-template-columns:120px 1fr;gap:3px 10px}.infprev .kv b{color:#556;font-size:10px;text-transform:uppercase}
+.infprev .firmas{display:flex;gap:24px}.infprev .firmas div{flex:1;border-top:1px solid #1d2733;padding-top:5px;text-align:center;font-size:10.5px}
 
 /* ===== Temas COE (mismo sistema que COE Quirófano): colores sobrios; el semáforo se reserva para alertas reales ===== */
 :root,[data-tema="grafito"]{--bg:#141517;--sf:#1B1D20;--sf2:#202327;--sf3:#272A2F;--br:#2F3338;--br2:#454A52;--tx:#E7E5E0;--tm:#9A9C9F;--td:#74777B;
@@ -2918,7 +2923,7 @@ function dashDirectorFin(sel) {
   const d = datosCumplimiento('mensual'), pct = d.tar.length ? Math.round(d.aTiempo.length / d.tar.length * 100) : 100;
   const topProv = Object.entries(cxp.reduce((o, f) => { o[f.entidad_id] = (o[f.entidad_id] || 0) + saldo(f); return o; }, {})).sort((a, b) => b[1] - a[1]).slice(0, 6);
   const ult = CIE[0];
-  return cabDash('Tablero del Director · Finanzas', esc(RS[0]?.nombre || ''), segDir() + sel + (puede('cxp') ? `<button class="btn btn-p btn-sm" onclick="openSubirPagos()">⬆ Subir pagos</button><button class="btn btn-s btn-sm" onclick="openTransferencias()">Honorarios y nómina</button>` : '')) + `<div class="pad">
+  return cabDash('Tablero del Director · Finanzas', esc(RS[0]?.nombre || ''), segDir() + sel + `<button class="btn btn-s btn-sm" onclick="generarInforme('semanal')">📊 Informe</button>` + (puede('cxp') ? `<button class="btn btn-p btn-sm" onclick="openSubirPagos()">⬆ Subir pagos</button><button class="btn btn-s btn-sm" onclick="openTransferencias()">Honorarios y nómina</button>` : '')) + `<div class="pad">
     <div class="dg">
       ${kpi('Requiere tu firma', String(pedAut.length + prop.length), `${pedAut.length} pedidos · ${prop.length} pagos propuestos`, (pedAut.length + prop.length) ? 'var(--wn)' : 'var(--sc)')}
       ${kpi('Propuesta de pagos', $$(sumS(prop)), prop.length ? 'preparada por la contadora' : 'sin propuesta', '', "VIEW.dirTab='prop';renderTab()")}
@@ -3150,7 +3155,7 @@ function dashContadora(sel) {
   const avisos = I.slice().sort((a, b) => (b.crit - a.crit) || (a.d - b.d)).slice(0, 8);
   window._pp = new Set();
   const enPreview = U.id !== cu.id ? `<span class="bdg bdg-pnd">Vista de ${esc(U.nombre)}</span>` : '';
-  return cabDash('Mi día · Contadora', `faltan ${diasA(finMes)} días para fin de mes`, sel + enPreview + botonCierre() + (puede('cxp') ? `<button class="btn btn-p btn-sm" onclick="openUpload()">⬆ Subir factura de proveedor</button>` : '')) + `<div class="pad"><div class="cdash cdash-full"><div class="cdash-main">
+  return cabDash('Mi día · Contadora', `faltan ${diasA(finMes)} días para fin de mes`, sel + enPreview + botonCierre() + `<button class="btn btn-s btn-sm" onclick="generarInforme('semanal')">📊 Generar informe</button>` + (puede('cxp') ? `<button class="btn btn-p btn-sm" onclick="openUpload()">⬆ Subir factura de proveedor</button>` : '')) + `<div class="pad"><div class="cdash cdash-full"><div class="cdash-main">
     <div class="dg dg6 kgrid">
       ${kcard('crit', 'Críticos', crit, 'var(--dg)', [['cad', 'Caducados'], ['med', 'Medicamento sin pedido'], ['ped', 'Pedidos farmacia/quirófano'], ['pend', 'Pendientes críticos/contables']])}
       ${kcard('venc', 'Vencidos', venc, 'var(--dg)', [['fact', 'Facturas no pedidas'], ['pago', 'Pagos no hechos'], ['med', 'Medicamento no pedido'], ['pend', 'Pendientes vencidos']])}
@@ -3709,7 +3714,7 @@ function rRep() {
   const chips = chipsP;
   const lst = (arr, f) => arr.length ? arr.map(f).join('') : '<div class="mini">Ninguno</div>';
   return `<div class="ph"><div><div class="ptit">Desempeño</div><div class="psub">Del ${fmtD(d.a)} al ${fmtD(d.b)} · ${d.hab} días hábiles · a tiempo = cumplido en la fecha original</div></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><div class="chips">${chips}</div><button class="btn btn-s btn-sm" onclick="reporteDia()">Reporte del día</button><button class="btn btn-p btn-sm" onclick="imprimirCumplimiento('${per}')">🖨 Imprimir (1 página)</button></div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><div class="chips">${chips}</div><button class="btn btn-p btn-sm" onclick="generarInforme('${per === 'quincenal' || per === 'mensual' ? per : 'semanal'}')">📊 Generar informe</button><button class="btn btn-s btn-sm" onclick="reporteDia()">Reporte del día</button><button class="btn btn-s btn-sm" onclick="imprimirCumplimiento('${per}')">🖨 Imprimir (1 página)</button></div></div>
   <div class="pad"><div class="dg">
     ${kpi('Cumplimiento a tiempo', pct + '%', `${d.aTiempo.length} a tiempo · ${d.tarde.length} tarde · ${d.noCump.length} no cumplidos`, colPct(pct))}
     ${kpi('Críticos no cumplidos', String(d.noCump.filter(t => t.prioridad === 'critico').length), 'vencidos sin cerrar', d.noCump.some(t => t.prioridad === 'critico') ? 'var(--dg)' : '')}
@@ -3952,7 +3957,7 @@ function rRepDiario(chips) {
   const U = contaU();
   const fecha = cdFechaDe(VIEW.cdDia);
   const head = `<div class="ph"><div><div class="ptit">Desempeño · Diario</div><div class="psub">Qué trabajó la Contadora cada día, según lo que registró en el sistema · toca un día para verlo</div></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><div class="chips">${chips}</div><button class="btn btn-s btn-sm" onclick="reporteDia('${fecha}')">Reporte del equipo</button></div></div>`;
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><div class="chips">${chips}</div><button class="btn btn-p btn-sm" onclick="generarInforme('semanal')">📊 Generar informe</button><button class="btn btn-s btn-sm" onclick="reporteDia('${fecha}')">Reporte del equipo</button></div></div>`;
   if (!U) return head + '<div class="pad"><div class="emp">No hay usuario con rol Contadora.</div></div>';
   // Resumen de los últimos 30 días hábiles
   const R = Array.from({ length: 30 }, (_, i) => cdFechaDe(-i)).filter(f => new Date(f + 'T12:00:00').getDay() !== 0).map(f => datosContaDia(U, f));
@@ -7147,6 +7152,140 @@ function fpeAlertas() {
   if (p.length) out.push({ n: 'a', t: `Facturas por entregar: ${p.length} vencen en 2 días`, m: p.slice(0, 3).map(x => x.cliente + ' · ' + fmtD(x.factura_limite)).join(' · '), go: () => { VIEW.fpeF = 'abiertas'; goTab('fpe'); } });
   return out;
 }
+// ══ INFORMES A DIRECCIÓN: semanal, quincenal, mensual y trimestral ══
+// Un botón genera el informe con los datos del sistema, lo muestra, lo imprime en una hoja con logo y lo envía por WhatsApp
+// a Dirección y Subdirección. Incluye la evaluación de la Contadora (fin_eval_contadora, conforme al Manual) y métricas de orden.
+const INF_T = { semanal: 'Informe semanal', quincenal: 'Informe quincenal', mensual: 'Informe mensual', trimestral: 'Informe trimestral' };
+const INF_WA = () => { let s = {}; try { s = JSON.parse(localStorage.getItem('coe_inf_wa') || '{}'); } catch { } return [['Dirección General', s.dir || CFG.wa_direccion || '4432068194'], ['Subdirección', s.sub || CFG.wa_subdireccion || '6643036225']]; };
+function infPeriodo(per, off = 0) {
+  if (per !== 'trimestral') return evPeriodo(per, off);
+  const h = hoyD(), q = Math.floor(h.getMonth() / 3) + off, y = h.getFullYear() + Math.floor(q / 4), qq = ((q % 4) + 4) % 4;
+  return [isoD(new Date(y, qq * 3, 1)), isoD(new Date(y, qq * 3 + 3, 0))];
+}
+const infPrevio = (a, b) => { const d = Math.round((new Date(b) - new Date(a)) / 864e5) + 1; return [isoD(new Date(new Date(a + 'T12:00:00').getTime() - d * 864e5)), isoD(new Date(new Date(a + 'T12:00:00').getTime() - 864e5))]; };
+const infVar = (x, y) => !y ? '' : ` <span style="color:${x >= y ? '#067647' : '#b42318'}">${x >= y ? '▲' : '▼'} ${Math.abs(Math.round((x - y) / y * 100))}%</span>`;
+const infSem = p => p === null || p === undefined ? ['Sin datos', '#8a94a3'] : p >= 90 ? ['Óptimo', '#067647'] : p >= 70 ? ['Regular', '#a86b00'] : ['Crítico', '#b42318'];
+
+async function infDatos(per, off) {
+  const [a, b] = infPeriodo(per, off), [pa, pb] = infPeriodo(per, off - 1), hoy = hoyISO(), corte = b < hoy ? b : hoy;
+  const en = (d, x = a, y = b) => d && String(d).slice(0, 10) >= x && String(d).slice(0, 10) <= y;
+  const [rc, re] = await Promise.all([
+    sb.from('con_cierres_dia').select('fecha,corte_total,diferencia').gte('fecha', pa).lte('fecha', b),
+    sb.rpc('fin_eval_contadora', { p_desde: a, p_hasta: b })]);
+  const cierres = rc.data || [], ev = re.error ? null : re.data;
+  const caja = cierres.filter(c => en(c.fecha)).reduce((s, c) => s + num(c.corte_total), 0), cajaP = cierres.filter(c => en(c.fecha, pa, pb)).reduce((s, c) => s + num(c.corte_total), 0);
+  const ab = ABO.filter(x => !x.anulado).map(x => ({ ...x, f: FAC.find(f => f.id === x.factura_id) || {} }));
+  const pag = ab.filter(x => x.f.tipo === 'egreso' && en(x.fecha_pago)), pagP = ab.filter(x => x.f.tipo === 'egreso' && en(x.fecha_pago, pa, pb));
+  const cob = ab.filter(x => x.f.tipo === 'ingreso' && en(x.fecha_pago)), cobP = ab.filter(x => x.f.tipo === 'ingreso' && en(x.fecha_pago, pa, pb));
+  const S = L => L.reduce((s, x) => s + num(x.monto), 0);
+  const cxp = abiertas('egreso'), cxpV = cxp.filter(f => semaforo(f) === 'r'), cxp7 = cxp.filter(f => f.fecha_vencimiento && diasA(f.fecha_vencimiento) >= 0 && diasA(f.fecha_vencimiento) <= 7);
+  const cxc = abiertas('ingreso'), cxcV = cxc.filter(f => semaforo(f) === 'r');
+  const fps = vivas().filter(porSolicitar), fpsV = fps.filter(f => diasA(limFps(f)) < 0);
+  const fpe = (typeof FPE !== 'undefined' ? FPE : []), fpeA = fpe.filter(fpeAbierta), fpeV = fpeA.filter(x => fpeDias(x) < 0);
+  const fpeMes = fpe.filter(x => en(x.fecha_pago)), fpeOk = fpeMes.filter(x => x.estado === 'entregada' && String(x.entregada_at || '').slice(0, 7) === String(x.fecha_pago).slice(0, 7));
+  let inv = { acab: 0, crit: 0, cad: 0, xcad: 0, falta: 0 }; try { ['alm', 'far'].forEach(A => { const R = almFilas(A); inv.acab += R.filter(r => r.est === 'acabado').length; inv.crit += R.filter(r => r.est === 'critico').length; inv.cad += R.reduce((s, r) => s + r.caducado.length, 0); inv.xcad += R.reduce((s, r) => s + r.xCad.length, 0); inv.falta += R.filter(r => almFaltaInfo(r, A).length).length; }); } catch (e) { }
+  let ctl = []; try { ctl = CTL_INV.map(c => ({ t: c.t, e: ctlEstado(c) })); } catch (e) { }
+  // Nómina y honorarios del periodo con su desglose
+  const nom = vivas().filter(f => f.tipo === 'egreso' && (/n[oó]mina|honorario/i.test(f.categoria || '') || esNomFijo(f)) && en(f.fecha_pago || f.fecha_vencimiento));
+  // Antigüedad de saldos con proveedores
+  const ant = [['Al corriente', f => !f.fecha_vencimiento || diasA(f.fecha_vencimiento) >= 0], ['1 a 30 días', f => diasA(f.fecha_vencimiento) < 0 && diasA(f.fecha_vencimiento) >= -30], ['31 a 60', f => diasA(f.fecha_vencimiento) < -30 && diasA(f.fecha_vencimiento) >= -60], ['61 a 90', f => diasA(f.fecha_vencimiento) < -60 && diasA(f.fecha_vencimiento) >= -90], ['Más de 90', f => diasA(f.fecha_vencimiento) < -90]].map(([t, fn]) => { const L = cxp.filter(fn); return [t, L.length, L.reduce((s, f) => s + saldo(f), 0)]; });
+  // Egresos por categoría (estado de resultados simplificado)
+  const cat = {}; pag.forEach(x => { const k = x.f.categoria || 'Sin categoría'; cat[k] = (cat[k] || 0) + num(x.monto); });
+  const meses = []; if (per === 'mensual' || per === 'trimestral') for (let d = new Date(a + 'T12:00:00'); isoD(d) <= b; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) { const i = isoD(new Date(d.getFullYear(), d.getMonth(), 1)), f = isoD(new Date(d.getFullYear(), d.getMonth() + 1, 0)); meses.push({ n: MESES[d.getMonth()], ing: cierres.filter(c => en(c.fecha, i, f)).reduce((s, c) => s + num(c.corte_total), 0) + S(ab.filter(x => x.f.tipo === 'ingreso' && en(x.fecha_pago, i, f))), egr: S(ab.filter(x => x.f.tipo === 'egreso' && en(x.fecha_pago, i, f))) }); }
+  const pedidos = PED.filter(p => en(p.solicitado_at || p.created_at)), pedRec = pedidos.filter(p => ['recibido', 'facturado'].includes(p.estado));
+  // Desempeño (orden y control) de la Contadora
+  const esC = t => t.responsable_rol === 'contadora' || USR.find(u => u.id === t.responsable_id)?.rol === 'contadora';
+  const T = TAR.filter(t => esC(t) && t.estado !== 'cancelada' && fOrig(t) && fOrig(t) <= corte && (en(fOrig(t)) || (abiertaT(t) && fOrig(t) < a)));
+  const aT = T.filter(t => t.estado === 'cumplida' && String(t.cumplida_at).slice(0, 10) <= fOrig(t)), tard = T.filter(t => t.estado === 'cumplida' && String(t.cumplida_at).slice(0, 10) > fOrig(t)), noC = T.filter(t => abiertaT(t) && diasA(fOrig(t)) < 0);
+  const atrs = T.map(atraso).filter(x => x > 0), repro = T.reduce((s, t) => s + num(t.reprogramaciones), 0), sinSeg = TAR.filter(t => esC(t) && abiertaT(t) && sinSeguimiento(t) >= 3).length;
+  const pagC = pag.filter(x => x.comprobante_url), dups = (() => { try { const D = pagosDuplicados(); return pag.filter(x => D.has(x.id)).length; } catch { return 0; } })();
+  const fpsCons = vivas().filter(f => f.tipo === 'egreso' && tieneXML(f) && en(f.fecha_pago)), fpsAT = fpsCons.length + fpsV.length ? Math.round(fpsCons.length / (fpsCons.length + fpsV.length) * 100) : null;
+  const cont = USR.find(u => u.rol === 'contadora' && u.activo !== false);
+  const hab = (() => { let n = 0; for (let d = new Date(a + 'T12:00:00'); isoD(d) <= corte; d.setDate(d.getDate() + 1)) if (d.getDay() && d.getDay() !== 6) n++; return n; })();
+  const cierresC = cont ? CJ.filter(c => c.usuario_id === cont.id && en(c.fecha)).length : 0;
+  const obsC = vivas().filter(f => f.revision === 'revisado' && en(f.revision_at)).length, obsP = vivas().filter(f => f.revision === 'observado').length;
+  const pc = (x, y) => y ? Math.round(x / y * 100) : null;
+  const met = [
+    ['Pendientes cumplidos a tiempo', `${aT.length} de ${T.length}`, pc(aT.length, T.length), 'meta 90 %'],
+    ['Atraso promedio', atrs.length ? Math.round(atrs.reduce((s, x) => s + x, 0) / atrs.length) + ' días' : '0 días', atrs.length ? Math.max(0, 100 - Math.round(atrs.reduce((s, x) => s + x, 0) / atrs.length) * 5) : 100, 'meta 0 días'],
+    ['Reprogramaciones · sin seguimiento (3+ días)', `${repro} · ${sinSeg}`, Math.max(0, 100 - repro * 5 - sinSeg * 10), 'meta 0'],
+    ['Facturas de proveedores conseguidas en plazo', fpsAT === null ? 'sin movimiento' : `${fpsCons.length} conseguidas · ${fpsV.length} vencidas`, fpsAT, 'meta 100 %'],
+    ['Facturas a clientes entregadas en el mes del pago', fpeMes.length ? `${fpeOk.length} de ${fpeMes.length}` : 'sin pagos con factura', pc(fpeOk.length, fpeMes.length), 'meta 100 %'],
+    ['Pagos con comprobante completo', `${pagC.length} de ${pag.length}`, pc(pagC.length, pag.length), 'meta 100 %'],
+    ['Pagos duplicados', String(dups), dups ? Math.max(0, 100 - dups * 25) : 100, 'meta 0'],
+    ['Cierres de día', `${cierresC} de ${hab} días hábiles`, pc(Math.min(cierresC, hab), hab), 'meta 100 %'],
+    ['Movimientos revisados · observaciones abiertas', `${obsC} · ${obsP}`, obsP ? Math.max(0, 100 - obsP * 10) : 100, 'meta 0 abiertas']];
+  const conD = met.filter(m => m[2] !== null && m[2] !== undefined), orden = conD.length ? Math.round(conD.reduce((s, m) => s + m[2], 0) / conD.length) : null;
+  const global = ev && ev.calificacion !== null && ev.calificacion !== undefined && orden !== null ? Math.round(ev.calificacion * 0.6 + orden * 0.4) : ev?.calificacion ?? orden;
+  return { per, a, b, pa, pb, corte, caja, cajaP, pag, pagP, cob, cobP, S, cxp, cxpV, cxp7, cxc, cxcV, fps, fpsV, fpeA, fpeV, inv, ctl, nom, ant, cat, meses, pedidos, pedRec, met, orden, ev, global, cont, ingT: caja + S(cob), ingTP: cajaP + S(cobP) };
+}
+function infCuerpo(D) {
+  const h = s => `<h3 style="font-size:12px;margin:10px 0 3px;border-bottom:1px solid #1d2733;padding-bottom:2px">${s}</h3>`;
+  const fila = (t, v, extra = '') => `<tr><td>${t}</td><td class="r">${v}${extra}</td></tr>`;
+  const S = D.S, sem = infSem(D.global);
+  let c = `<div class="kv"><b>Periodo</b><div>${fmtD(D.a)} al ${fmtD(D.b)}${D.corte < D.b ? ' · corte al ' + fmtD(D.corte) : ''} · comparado con ${fmtD(D.pa)} al ${fmtD(D.pb)}</div><b>Elabora</b><div>${esc(D.cont?.nombre || 'Contadora')} · generado por ${esc(cu.nombre)}</div></div>`;
+  c += h('1. Resumen financiero') + `<table><tbody>
+    ${fila('Ingresos (cierres de caja + cobros)', $$(D.ingT), infVar(D.ingT, D.ingTP))}
+    ${fila('Pagos realizados', `${D.pag.length} · ${$$(S(D.pag))}`, infVar(S(D.pag), S(D.pagP)))}
+    ${fila('Resultado del periodo (ingresos − pagos)', `<b style="color:${D.ingT - S(D.pag) >= 0 ? '#067647' : '#b42318'}">${$$(D.ingT - S(D.pag))}</b>`)}
+    ${fila('Por pagar vencido · vence en 7 días', `<span class="${D.cxpV.length ? 'rojo' : ''}">${D.cxpV.length} · ${$$(sumS(D.cxpV))}</span> · ${D.cxp7.length} · ${$$(sumS(D.cxp7))}`)}
+    ${fila('Por cobrar vencido', `${D.cxcV.length} · ${$$(sumS(D.cxcV))}`)}
+    ${fila('Facturas por solicitar (vencidas)', `${D.fps.length} <span class="${D.fpsV.length ? 'rojo' : ''}">(${D.fpsV.length})</span>`)}
+    ${fila('Facturas por entregar a clientes (vencidas)', `${D.fpeA.length} <span class="${D.fpeV.length ? 'rojo' : ''}">(${D.fpeV.length})</span>`)}
+    ${fila('Inventario: acabados · críticos · caducados · por caducar · sin datos', `${D.inv.acab} · ${D.inv.crit} · <span class="${D.inv.cad ? 'rojo' : ''}">${D.inv.cad}</span> · ${D.inv.xcad} · ${D.inv.falta}`)}</tbody></table>`;
+  if (D.per === 'quincenal' || D.per === 'mensual') {
+    const L = D.nom.flatMap(f => (f.desglose || []).length ? f.desglose.map(x => [x.empleado, x.concepto, num(x.monto), f]) : [[nomEnt(f.entidad_id), f.descripcion, num(f.monto_pagado || f.monto_total), f]]).slice(0, 14);
+    c += h('2. Nómina y honorarios') + (L.length ? `<table><thead><tr><th>Persona</th><th>Concepto</th><th>Pagado</th><th>Factura</th><th class="r">Monto</th></tr></thead><tbody>${L.map(([n, co, m, f]) => `<tr><td>${esc(n)}</td><td>${esc(co || '')}</td><td>${f.fecha_pago ? fmtD(f.fecha_pago) : '<span class="rojo">pendiente</span>'}</td><td>${tieneXML(f) ? '✓' : ent(f.entidad_id)?.no_factura || esNomFijo(f) ? 'no aplica' : '<span class="rojo">falta</span>'}</td><td class="r">${$$(m)}</td></tr>`).join('')}</tbody></table>` : '<div class="p" style="color:#778">Sin nómina u honorarios en el periodo.</div>');
+  }
+  if (D.per === 'mensual' || D.per === 'trimestral') {
+    const top = Object.entries(D.cat).sort((x, y) => y[1] - x[1]).slice(0, 8);
+    c += h(D.per === 'mensual' ? '3. Estado de resultados y antigüedad de saldos' : '2. Tendencia, gastos por categoría y saldos') + `<div style="display:flex;gap:12px"><div style="flex:1"><table><thead><tr><th>Egresos por categoría</th><th class="r">Monto</th></tr></thead><tbody>${top.map(([k, v]) => `<tr><td>${esc(k)}</td><td class="r">${$$(v)}</td></tr>`).join('') || '<tr><td colspan="2">Sin pagos</td></tr>'}</tbody></table></div>
+      <div style="flex:1"><table><thead><tr><th>Antigüedad · proveedores</th><th class="r">Ctas</th><th class="r">Saldo</th></tr></thead><tbody>${D.ant.map(([t, n, s]) => `<tr><td>${t}</td><td class="r">${n}</td><td class="r ${t !== 'Al corriente' && n ? 'rojo' : ''}">${$$(s)}</td></tr>`).join('')}</tbody></table></div></div>`;
+    if (D.meses.length > 1) c += `<table><thead><tr><th>Mes</th><th class="r">Ingresos</th><th class="r">Pagos</th><th class="r">Resultado</th></tr></thead><tbody>${D.meses.map(m => `<tr><td style="text-transform:capitalize">${m.n}</td><td class="r">${$$(m.ing)}</td><td class="r">${$$(m.egr)}</td><td class="r ${m.ing - m.egr < 0 ? 'rojo' : 'verde'}">${$$(m.ing - m.egr)}</td></tr>`).join('')}</tbody></table>`;
+    c += `<div class="p" style="margin:4px 0"><b>Inventarios físicos:</b> ${D.ctl.map(x => `${esc(x.t)} ${x.e.hecho ? '✓' : x.e.venc ? '<span class="rojo">vencido</span>' : 'pendiente'}`).join(' · ') || '—'} · <b>Compras:</b> ${D.pedidos.length} pedido(s), ${D.pedRec.length} recibido(s)</div>`;
+  }
+  c += h('Desempeño de la Contadora') + `<div style="display:flex;gap:12px;align-items:center;margin:4px 0"><div style="font-size:30px;font-weight:800;color:${sem[1]}">${D.global ?? '—'}<span style="font-size:12px">/100</span></div><div><b style="color:${sem[1]}">● ${sem[0]}</b><div style="font-size:10px;color:#556">60 % evaluación del Manual del Contador (${D.ev?.calificacion ?? '—'}) + 40 % orden y control (${D.orden ?? '—'})</div></div></div>
+    <table><thead><tr><th>Indicador</th><th>Resultado</th><th>Meta</th><th class="r">%</th></tr></thead><tbody>${D.met.map(([t, r, p, m]) => `<tr><td>${t}</td><td>${r}</td><td>${m}</td><td class="r" style="color:${infSem(p)[1]};font-weight:700">${p ?? '—'}</td></tr>`).join('')}</tbody></table>`;
+  c += `<div style="margin-top:8px"><b style="font-size:10px;color:#556;text-transform:uppercase">Comentarios de Dirección</b><div style="border-bottom:1px solid #bbb;height:18px"></div><div style="border-bottom:1px solid #bbb;height:18px"></div></div>
+    <div class="firmas" style="margin-top:26px"><div>Elaboró · Contadora<br><b>${esc(D.cont?.nombre || '')}</b></div><div>Dirección General<br><b>Dr. José Antonio Villegas Ávila</b></div><div>Subdirección<br>&nbsp;</div></div>`;
+  return c;
+}
+// Texto para WhatsApp: el resumen que se lee en el teléfono
+function infTexto(D) {
+  const S = D.S, sem = infSem(D.global), pct = (x, y) => y ? ` (${x >= y ? '+' : '−'}${Math.abs(Math.round((x - y) / y * 100))}% vs anterior)` : '';
+  return `*${INF_T[D.per]} · COE Finanzas*\n${fmtD(D.a)} al ${fmtD(D.b)}\n\n`
+    + `💰 Ingresos: ${$$(D.ingT)}${pct(D.ingT, D.ingTP)}\n💸 Pagos: ${D.pag.length} · ${$$(S(D.pag))}\n📊 Resultado: ${$$(D.ingT - S(D.pag))}\n`
+    + `⏰ Por pagar vencido: ${D.cxpV.length} · ${$$(sumS(D.cxpV))}\n🧾 Facturas por solicitar: ${D.fps.length} (${D.fpsV.length} vencidas)\n📨 Facturas por entregar: ${D.fpeA.length} (${D.fpeV.length} vencidas)\n`
+    + `📦 Inventario: ${D.inv.acab} acabados, ${D.inv.crit} críticos, ${D.inv.cad} caducados\n\n`
+    + `*Desempeño de la Contadora: ${D.global ?? '—'}/100 · ${sem[0]}*\n` + D.met.slice(0, 6).map(([t, r]) => `• ${t}: ${r}`).join('\n')
+    + `\n\nInforme completo e imprimible en COE Finanzas › Desempeño › Informes.`;
+}
+VIEW.infPer = VIEW.infPer || 'semanal'; VIEW.infOff = VIEW.infOff ?? -1;
+async function generarInforme(per, off) {
+  if (per) VIEW.infPer = per; if (off !== undefined) VIEW.infOff = off;
+  const sel = `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px"><div class="chips">${Object.entries(INF_T).map(([k, t]) => `<span class="chip ${VIEW.infPer === k ? 'act' : ''}" onclick="generarInforme('${k}')">${t.replace('Informe ', '')}</span>`).join('')}</div>
+    <div class="chips"><span class="chip ${VIEW.infOff === -1 ? 'act' : ''}" onclick="generarInforme(null,-1)">Periodo cerrado anterior</span><span class="chip ${VIEW.infOff === 0 ? 'act' : ''}" onclick="generarInforme(null,0)">Periodo en curso</span></div></div>`;
+  modal('📊 Generar informe a Dirección', sel + '<div class="mini">Calculando…</div>', '', 'xl');
+  let D; try { D = await infDatos(VIEW.infPer, VIEW.infOff); } catch (e) { console.error(e); document.getElementById('mGenB').innerHTML = sel + `<div class="errbox">No se pudo generar: ${esc(e.message)}</div>`; return; }
+  window._inf = D; window._infId = null;
+  const W = INF_WA();
+  document.getElementById('mGenB').innerHTML = sel + `<div class="infprev">${infCuerpo(D)}</div>
+    <div class="cfg-section" style="margin-top:12px"><div class="body" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><b style="margin-right:4px">Enviar por WhatsApp:</b>${W.map(([n, t], i) => `<span style="display:inline-flex;gap:4px;align-items:center"><input type="text" id="infW${i}" value="${esc(t)}" inputmode="numeric" style="width:120px" title="${n}"><button class="btn btn-p btn-sm" onclick="infEnviar(${i},'${n}')">🟢 ${n}</button></span>`).join('')}</div></div>`;
+  document.getElementById('mGenF').innerHTML = `<button class="btn btn-s" onclick="CM('mGen')">Cerrar</button><button class="btn btn-s" onclick="navigator.clipboard?.writeText(infTexto(window._inf));toast('Resumen copiado','success')">Copiar resumen</button><button class="btn btn-p" onclick="infImprimir()">🖨 Imprimir (1 hoja)</button>`;
+}
+async function infGuardar() {
+  if (window._infId) return window._infId; const D = window._inf;
+  const datos = { per: D.per, a: D.a, b: D.b, ingT: D.ingT, ingTP: D.ingTP, pagos: D.S(D.pag), npagos: D.pag.length, cxpV: sumS(D.cxpV), fps: D.fps.length, fpsV: D.fpsV.length, fpe: D.fpeA.length, fpeV: D.fpeV.length, inv: D.inv, met: D.met, orden: D.orden, eval: D.ev?.calificacion ?? null };
+  try { const { data } = await sb.rpc('fin_informe_guardar', { p_usuario: cu.id, p_tipo: D.per, p_desde: D.a, p_hasta: D.b, p_cal: D.global, p_datos: datos }); if (data?.ok) window._infId = data.id; } catch (e) { }
+  return window._infId;
+}
+async function infEnviar(i, quien) {
+  const tel = String(document.getElementById('infW' + i).value || '').replace(/\D/g, ''); if (tel.length < 10) return toast('Número de WhatsApp no válido', 'warning');
+  try { const s = JSON.parse(localStorage.getItem('coe_inf_wa') || '{}'); s[i ? 'sub' : 'dir'] = tel; localStorage.setItem('coe_inf_wa', JSON.stringify(s)); } catch { }
+  window.open('https://wa.me/' + (tel.length === 10 ? '52' + tel : tel) + '?text=' + encodeURIComponent(infTexto(window._inf)), '_blank');
+  const id = await infGuardar(); if (id) sb.rpc('fin_informe_guardar', { p_usuario: cu.id, p_tipo: '', p_desde: window._inf.a, p_hasta: window._inf.b, p_cal: null, p_datos: {}, p_id: id, p_envio: quien + ' ' + tel }).then(() => {}, () => {});
+}
+async function infImprimir() { const D = window._inf; await infGuardar(); imprimir(`${INF_T[D.per]} a Dirección · ${fmtD(D.a)} al ${fmtD(D.b)}`, `<div style="font-size:10.5px">${infCuerpo(D)}</div>`); }
 
 // ══ WIDGET PARA IPHONE (Scriptable) ══
 // Enlace de solo lectura por usuario (fin_widget_tokens) → RPC fin_widget(p_token) → script de Scriptable.
