@@ -1124,7 +1124,7 @@ const ERR = {
   comprobante: 'Falta el comprobante', monto_saldo: 'El monto excede el saldo de la cuenta (no se permite descuadrar)', ya_solicitada: 'Ya hay una solicitud de baja pendiente', cuenta: 'Cuenta no encontrada',
   comprobante_entrada: 'Sube la factura, remisión, recibo o comprobante de pago de la entrada', descuento: 'Escribe el descuento', descuento_alto: 'El descuento no puede pasar del 30% de la cuenta', monto: 'Monto no válido', proveedor: 'Falta el proveedor', descripcion: 'Falta la descripción',
   dividir_min: 'Asigna al menos dos proveedores', dividir_vacio: 'Hay un grupo sin productos', dividir_idx: 'Partidas inválidas', dividir_faltan: 'Faltan productos por asignar', lote_existe: 'Ese lote ya existe para este producto: corrige ese lote', producto: 'Producto no encontrado', cantidad: 'Cantidad no válida',
-  solo_director: 'Solo el Director General puede hacer esto', solo_contadora: 'Solo la Contadora (o Dirección General) puede eliminar', motivo: 'Escribe el motivo', tiene_pagos: 'Tiene pagos; anula primero los pagos',
+  cobro_sin_comprobante: 'Una cuenta por cobrar solo sale de la lista al registrar su cobro con comprobante; quitarla de otro modo lo autoriza el Director', solo_director: 'Solo el Director General puede hacer esto', solo_contadora: 'Solo la Contadora (o Dirección General) puede eliminar', motivo: 'Escribe el motivo', tiene_pagos: 'Tiene pagos; anula primero los pagos',
   uuid_duplicado: 'Esta factura (UUID) ya está registrada', sin_permiso: 'Tu perfil no tiene permiso para esta acción',
   estado: 'El estado actual no permite esta acción', no_autorizado: 'El pedido aún no está autorizado', sede: 'Pedido de otra sede',
   evidencia: 'Sube la evidencia de la tarea', nombre: 'Falta el nombre', tabla: 'Operación no permitida',
@@ -1695,7 +1695,7 @@ function verCuenta(id) {
     puede(mod) ? `<button class="btn btn-s" onclick="correoProveedor('${f.entidad_id}','${id}')">✉ Correo</button>` : '',
     puede('revision') ? `<button class="btn btn-s" onclick="revisar('${id}','revisado')">✓ Revisado</button><button class="btn btn-w" onclick="revisar('${id}','observado')">Observar</button>` : '',
     egr && f.estado !== 'pagado' && puede('cxc') ? `<button class="btn btn-s" onclick="registrarDevolucion('${id}')">Devolución</button>` : '',
-    puedeEliminar() && !f.anulado ? `<button class="btn btn-d" onclick="anular('fin_facturas','${id}')">Anular</button>` : !f.anulado && !solF && puede(mod) ? `<button class="btn btn-d" onclick="solicitarBaja('fin_facturas','${id}')">Solicitar baja</button>` : '',
+    puedeEliminar() && !f.anulado && (egr || esAdmin()) ? `<button class="btn btn-d" onclick="anular('fin_facturas','${id}')">Anular</button>` : !f.anulado && !solF && puede(mod) ? `<button class="btn btn-d" onclick="solicitarBaja('fin_facturas','${id}')">Solicitar baja</button>` : '',
   ].join('');
   modal(`${egr ? 'Cuenta por pagar' : 'Cuenta por cobrar'} · ${nomEnt(f.entidad_id)}`, b, ft, 'xl');
 }
@@ -1805,7 +1805,7 @@ function nuevaCuenta(tipo, pre = {}) {
       <div class="fgrp sp2"><label>${egr ? 'Proveedor' : 'Quién debe'}</label><select id="ncE">${optsEnt(pre.entidad_id)}</select></div>
       <div class="fgrp sp2"><label>Concepto</label><input type="text" id="ncD" value="${esc(pre.descripcion || '')}"></div>
       <div class="fgrp"><label>Monto</label><div class="ipfx"><span>$</span><input type="number" step="0.01" id="ncM" value="${pre.monto || ''}"></div></div>
-      <div class="fgrp"><label>Vence</label><input type="date" id="ncV" value="${pre.vence || ''}"><span class="fhint">Vacío = días de crédito del proveedor</span></div>
+      <div class="fgrp"><label>${egr ? 'Vence' : 'Fecha de cobro (obligatoria)'}</label><input type="date" id="ncV" value="${pre.vence || ''}"><span class="fhint">${egr ? 'Vacío = días de crédito del proveedor' : 'Se agenda en el calendario y avisa al vencer'}</span></div>
       <div class="fgrp"><label>Categoría</label><select id="ncC">${catOpts(pre.categoria)}</select></div>
       <div class="fgrp"><label>Sede</label><select id="ncS"><option>Tacámbaro</option><option ${cu.sede === 'Morelia' ? 'selected' : ''}>Morelia</option></select></div>
       ${egr ? `<div class="fgrp sp2"><label>Documento</label><select id="ncT"><option value="por_pagar">Tengo factura (la subiré)</option><option value="sin_factura">Sin factura todavía → Facturas por solicitar</option></select></div>` : `<div class="fgrp sp2"><label>Tipo</label><select id="ncTM"><option value="normal">Cuenta por cobrar</option><option value="devolucion" ${pre.tipo_movimiento === 'devolucion' ? 'selected' : ''}>Devolución pendiente de proveedor</option></select></div>`}
@@ -1814,6 +1814,7 @@ function nuevaCuenta(tipo, pre = {}) {
     `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="guardarCuenta('${tipo}','${pre.factura_origen_id || ''}')">Firmar y guardar</button>`);
 }
 async function guardarCuenta(tipo, origen) {
+  if (tipo === 'ingreso' && !ncV.value) { toast('Agenda la fecha de cobro', 'warning'); return; }
   const d = {
     tipo, entidad_id: ncE.value, descripcion: ncD.value, monto_total: ncM.value, fecha_vencimiento: ncV.value,
     categoria: ncC.value, sede: ncS.value, notas: ncN.value,
@@ -1960,8 +1961,9 @@ function rPagos() {
     const P = Object.entries(G).map(([eid, F2]) => ({ eid, F: F2.sort((a, b) => String(b.a.fecha_pago).localeCompare(String(a.a.fecha_pago))), n: nomEnt(eid), m: F2.filter(x => !x.a.anulado).reduce((s, x) => s + num(x.a.monto), 0) })).sort((a, b) => b.m - a.m);
     return `<tr class="grp-hdr" style="cursor:pointer" onclick="VIEW.pgMes['${k}']=!${abM};renderTab()"><td colspan="2"><div class="grp-name">${abM ? '▾' : '▸'} ${k === 'sin-fecha' ? 'Sin fecha' : MES_TXT(k)} <span class="mini">${vivos.length} pago(s) · ${P.length} proveedor(es)</span></div></td><td class="amt" style="text-align:right">${$$(tm)}</td><td colspan="3" class="mini">✓ ${ok} completos${sf ? ` · <b style="color:var(--dg)">${sf} sin factura</b>` : ''}${sc ? ` · <b style="color:var(--wn)">${sc} sin comprobante</b>` : ''}</td></tr>` + (!abM ? '' : P.map(p => { const pk = k + '|' + p.eid, ab = VIEW.pgProv[pk] ?? (buscando && L.length <= 60), v2 = p.F.filter(x => !x.a.anulado), sf2 = v2.filter(x => x.est === 'sinfac').length, sc2 = v2.filter(x => x.est === 'sincomp').length;
       return `<tr style="cursor:pointer" onclick="VIEW.pgProv['${pk}']=!${ab};renderTab()"><td colspan="2" style="padding-left:18px">${ab ? '▾' : '▸'} <b>${esc(p.n)}</b> <span class="mini">${v2.length} pago(s)${sf2 ? ` · <b style="color:var(--dg)">${sf2} sin factura</b>` : ''}${sc2 ? ` · <b style="color:var(--wn)">${sc2} sin comprobante</b>` : ''}${!sf2 && !sc2 && v2.length ? ' · ✓ completos' : ''}</span></td><td class="amt" style="text-align:right">${$$(p.m)}</td><td colspan="3" onclick="event.stopPropagation()">${(() => { const sinC = v2.filter(x => !x.comp); return sinC.length && puede('cxp') ? `<button class="btn btn-p btn-sm" style="padding:2px 8px" onclick="${sinC.length === 1 ? `pgAnexar('${sinC[0].a.id}')` : `VIEW.pgProv['${pk}']=true;renderTab()`}">⬆ ${sinC.length === 1 ? 'Anexar comprobante' : sinC.length + ' sin comprobante'}</button>` : `<button class="btn btn-s btn-sm" style="padding:2px 8px" onclick="${v2.length === 1 ? `pgAnexar('${v2[0].a.id}')` : `VIEW.pgProv['${pk}']=true;renderTab()`}">⬆ Anexar</button>`; })()}</td></tr>${ab ? p.F.map(fila).join('') : ''}`; }).join('')); }).join('');
+  const cobrosCaja = B.tipo !== 'egreso' ? cobrosProgramados() : '';
   return `<div class="ph"><div><div class="ptit">Pagos y cobros</div><div class="psub">Por mes y proveedor · toca un mes o un proveedor para desplegarlo</div></div><button class="btn btn-s btn-sm" onclick="expPagos()">Excel (lo filtrado)</button></div>
-  <div class="pad"><div class="tc"><div class="ttb" style="gap:10px;flex-wrap:wrap">
+  <div class="pad">${cobrosCaja}<div class="tc"><div class="ttb" style="gap:10px;flex-wrap:wrap">
     <div class="chips">${[['egreso', 'Pagos realizados'], ['ingreso', 'Cobros'], ['', 'Todos']].map(([k, t]) => `<span class="chip ${B.tipo === k ? 'act' : ''}" onclick="pgBusca('tipo','${k}',1)">${t}</span>`).join('')}</div>
     <input class="sbox" id="pgB_q" type="text" placeholder="Buscar proveedor, concepto, folio, monto, referencia…" value="${esc(B.q || '')}" oninput="pgBusca('q',this.value)" style="min-width:240px;flex:1">
     <select class="fsel" style="width:auto" onchange="pgBusca('forma',this.value,1)"><option value="">Toda forma de pago</option>${formas.map(f => `<option value="${esc(f)}" ${B.forma === f ? 'selected' : ''}>${esc(f)}</option>`).join('')}</select>
@@ -1993,6 +1995,20 @@ async function pgAxGuardar(aid) {
   let u; try { u = await subirArchivo(file, 'pagos'); } catch (e) { return toast(e.message, 'error'); }
   const r = await rpcFirmado('fin_abono_comprobante', { p_abono: aid, p_url: u.url, p_sha256: u.sha }, { titulo: 'Firmar comprobante del pago' });
   if (!r) return; CM('mGen'); toast(r.principal ? 'Comprobante anexado' : 'Documento anexado al pago', 'success'); await cargarTodo(true); renderTab();
+}
+// Cobros programados: cada cuenta por cobrar con su fecha de cobro; solo sale de aquí al registrarse con comprobante
+function cobrosProgramados() {
+  const L = abiertas('ingreso').sort((a, b) => String(a.fecha_vencimiento || '9999').localeCompare(String(b.fecha_vencimiento || '9999')));
+  const sinC = ABO.filter(a => !a.anulado && !a.comprobante_url).map(a => ({ a, f: FAC.find(f => f.id === a.factura_id) })).filter(x => x.f && x.f.tipo === 'ingreso' && !x.f.anulado);
+  if (!L.length && !sinC.length) return '';
+  const fila = f => { const d = f.fecha_vencimiento ? diasA(f.fecha_vencimiento) : null;
+    return `<tr style="cursor:pointer" onclick="verCuenta('${f.id}')"><td><span class="sem ${d === null ? 'g' : d < 0 ? 'r' : d <= 5 ? 'a' : 'v'}"></span></td><td><b>${esc(nomEnt(f.entidad_id))}</b><div class="mini">${esc(f.descripcion || '')}${num(f.monto_pagado) > 0 ? ' · abonado ' + $$(f.monto_pagado) : ''}</div></td>
+      <td>${f.fecha_vencimiento ? fmtD(f.fecha_vencimiento) + `<div class="mini" style="${d < 0 ? 'color:var(--dg);font-weight:700' : d <= 5 ? 'color:var(--wn)' : ''}">${d < 0 ? 'vencido hace ' + -d + ' d' : d === 0 ? 'hoy' : 'en ' + d + ' d'}</div>` : '<b style="color:var(--wn)">sin fecha de cobro</b>'}</td>
+      <td class="amt" style="text-align:right">${$$(saldo(f))}</td>
+      <td onclick="event.stopPropagation()">${puede('cxc') ? `<div class="rowact"><button class="btn btn-s btn-sm" onclick="cambiarFechaPago(['${f.id}'])">📅 ${f.fecha_vencimiento ? 'Cambiar fecha' : 'Agendar cobro'}</button><button class="btn btn-p btn-sm" onclick="pagarCuenta('${f.id}')">⬆ Registrar cobro</button></div>` : ''}</td></tr>`; };
+  return `<div class="cfg-section" style="margin-bottom:14px"><h3 style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">📅 Cobros programados <span class="mini">${L.length} por cobrar · ${$$(L.reduce((s, f) => s + saldo(f), 0))} · solo salen de aquí al registrar el cobro con su comprobante</span></h3><div class="body" style="padding:0">
+    ${L.length ? `<table><thead><tr><th></th><th>Deudor · concepto</th><th>Fecha de cobro</th><th style="text-align:right">Saldo</th><th></th></tr></thead><tbody>${L.map(fila).join('')}</tbody></table>` : ''}
+    ${sinC.length ? `<div class="warnbox" style="margin:10px">Cobros registrados sin comprobante (${sinC.length}): ${sinC.map(x => `<a href="#" style="color:var(--wn);text-decoration:underline" onclick="event.preventDefault();pgAnexar('${x.a.id}')">${esc(nomEnt(x.f.entidad_id))} ${$$(x.a.monto)}</a>`).join(' · ')} — anexa su comprobante.</div>` : ''}</div></div>`;
 }
 function expPagos() {
   xls(pgFiltrados().map(x => { const { a, f } = x; return { Fecha: a.fecha_pago, Tipo: f.tipo, Proveedor: nomEnt(f.entidad_id), Concepto: f.descripcion, Folio: f.numero_factura || '', Forma: a.metodo, Monto: num(a.monto), Referencia: a.referencia || '', Estatus: PG_EST[x.est][0], Factura: x.fac === 'fac' ? 'Sí' : x.fac === 'noreq' ? 'No requiere' : 'Falta', Comprobante: x.comp || '', Anulado: a.anulado ? 'Sí' : '' }; }), 'Pagos_' + isoD(new Date()));
@@ -6687,7 +6703,7 @@ function cambiarFechaPago(ids) {
   const F = ids.map(id => FAC.find(f => f.id === id)).filter(Boolean); if (!F.length) return;
   const base = fpBase(F[0]), un = F.length === 1, prov = [...new Set(F.map(f => f.entidad_id))];
   window._fpIds = ids;
-  modal('Fecha de pago', `<div class="mini" style="margin-bottom:10px">${un ? `${esc(nomEnt(F[0].entidad_id))} · ${esc(F[0].descripcion)} · ${$$(saldo(F[0]))}<br>Factura del ${fmtD(base)} · hoy vence ${fmtD(F[0].fecha_vencimiento)}` : `${F.length} cuentas · ${$$(sumS(F))}`}</div>
+  modal(F.every(f => f.tipo === 'ingreso') ? 'Fecha de cobro' : 'Fecha de pago', `<div class="mini" style="margin-bottom:10px">${un ? `${esc(nomEnt(F[0].entidad_id))} · ${esc(F[0].descripcion)} · ${$$(saldo(F[0]))}<br>Factura del ${fmtD(base)} · hoy vence ${fmtD(F[0].fecha_vencimiento)}` : `${F.length} cuentas · ${$$(sumS(F))}`}</div>
     <div class="mini" style="margin-bottom:6px">Plazo desde la fecha de la factura${un ? '' : ' (cada una con su propia fecha)'}:</div>
     <div class="chips" style="margin-bottom:12px">${PLAZOS.map(d => `<span class="chip" onclick="fpPlazo(${d})">${d ? d + ' días' : 'Contado'}</span>`).join('')}</div>
     <div class="fgrd"><div class="fgrp"><label>${un ? 'Fecha de pago' : 'O una misma fecha para todas'}</label><input type="date" id="fpF" value="${un ? F[0].fecha_vencimiento || '' : ''}" onchange="window._fpDias=null;document.getElementById('fpTx').textContent=''"></div>
