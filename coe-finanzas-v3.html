@@ -1688,6 +1688,7 @@ function verCuenta(id) {
     f.estado !== 'pagado' && !f.anulado && puedePagar(f) ? `<button class="btn btn-p" onclick="pagarCuenta('${id}')">${egr ? 'Pagar' : 'Registrar cobro'}</button>` : '',
     egr && f.estado !== 'pagado' && !f.anulado && puede('cxp') ? (f.propuesta_pago ? `<button class="btn btn-s" onclick="quitarPropuesta('${id}')">Quitar de propuesta</button>` : `<button class="btn btn-s" onclick="proponerUna('${id}')">Proponer pago</button>`) : '',
     f.estado !== 'pagado' && !f.anulado && puede('cxp') ? `<button class="btn btn-s" onclick="cambiarFechaPago(['${id}'])">📅 Fecha de pago</button>` : '',
+    esAdmin() && !f.anulado && f.tipo === 'egreso' ? `<button class="btn btn-s" title="Corregir cuánto se ha pagado de esta factura (por ejemplo, un complemento con parcialidad)" onclick="corregirSaldo('${id}')">✎ Corregir saldo</button>` : '',
     puede(mod) && egr && esNomFijo(f) && !f.nomina_grupo && num(f.monto_pagado) <= 0.009 ? `<button class="btn btn-p" onclick="nomCxp('${f.recurrente_id || ''}','${f.recurrente_periodo || f.fecha_vencimiento || ''}','${id}')">☰ Desglosar en personas</button>` : '',
     puede(mod) && egr && !tieneXML(f) ? `<button class="btn btn-s" onclick="notaFoto('${id}')">📷 Foto de la nota / recibo</button>` : '',
     puede(mod) ? `<button class="btn btn-s" onclick="openUpload('${id}')">⬆ Factura, complemento o nota de crédito</button>` : '',
@@ -1878,6 +1879,23 @@ const cxCol = tipo => { VIEW.cxCol = VIEW.cxCol || {}; if (!VIEW.cxCol[tipo]) { 
 const cxGuardar = tipo => { try { localStorage.setItem('coe_fin_col_' + tipo, JSON.stringify(cxCol(tipo))); } catch { } };
 function cxToggle(tipo, eid) { const c = cxCol(tipo); if (c[eid]) delete c[eid]; else c[eid] = 1; cxGuardar(tipo); renderTab(); }
 function cxTodos(tipo, colapsar) { const c = cxCol(tipo); Object.keys(c).forEach(k => delete c[k]); if (colapsar) vivas().filter(f => f.tipo === tipo).forEach(f => { c[f.entidad_id] = 1; }); cxGuardar(tipo); renderTab(); }
+
+// Director: corregir lo pagado de una factura (importadas como "pagadas" o con parcialidades de un complemento)
+function corregirSaldo(id) {
+  const f = FAC.find(x => x.id === id); if (!f) return;
+  const ab = ABO.filter(a => a.factura_id === id && !a.anulado).reduce((s, a) => s + num(a.monto), 0);
+  modal('Corregir saldo · ' + nomEnt(f.entidad_id), `<div class="prop" style="margin-top:0"><div class="row"><span>Factura</span><span>${esc(f.numero_factura || f.descripcion || '')}</span></div><div class="row"><span>Total</span><span class="amt">${$$(f.monto_total)}</span></div><div class="row"><span>Registrado como pagado</span><span class="amt">${$$(f.monto_pagado)}</span></div><div class="row"><span>Pagos con comprobante</span><span class="amt">${$$(ab)}</span></div></div>
+    <div class="fgrd" style="margin-top:12px"><div class="fgrp"><label>Pagado realmente</label><div class="ipfx"><span>$</span><input type="number" step="0.01" id="csP" value="${num(f.monto_pagado).toFixed(2)}" oninput="csS.textContent=$$(Math.max(0,${num(f.monto_total)}-num(this.value)))"></div></div>
+      <div class="fgrp"><label>Saldo que queda pendiente</label><div style="padding-top:10px"><b id="csS">${$$(saldo(f))}</b></div></div>
+      <div class="fgrp sp2"><label>Motivo</label><input type="text" id="csM" placeholder="Ej. complemento de pago 303: parcialidad de $3,502.88"></div></div>
+    <div class="mini">Si queda saldo, la cuenta vuelve a <b>Por pagar</b> como abonada; el siguiente pago se registra normal con su comprobante.${ab > 0 ? ` No puede quedar debajo de los pagos con comprobante (${$$(ab)}).` : ''}</div>`,
+  `<button class="btn btn-s" onclick="verCuenta('${id}')">Volver</button><button class="btn btn-p" onclick="corregirSaldoFirmar('${id}')">Firmar corrección</button>`);
+}
+async function corregirSaldoFirmar(id) {
+  const p = num(csP.value), m = csM.value.trim(); if (!m) return toast('Escribe el motivo', 'warning');
+  const r = await rpcDirector('fin_corregir_saldo', { p_factura: id, p_pagado: p, p_motivo: m }, { titulo: 'Corregir saldo · Director' });
+  if (!r) return; toast('Saldo corregido', 'success'); await cargarTodo(true); verCuenta(id);
+}
 
 // ══ INGRESO DIARIO (desde COE Conciliación) ════
 function rIngDiario() {
@@ -4953,6 +4971,7 @@ async function spAgregar(lista) {
       if (rep) it.dup = `Es el mismo archivo que «${rep.file.name}»`;
       else if (ya) { const f = FAC.find(x => x.id === ya.factura_id); it.dup = `Este comprobante ya está registrado: ${f ? nomEnt(f.entidad_id) + ' · ' : ''}${$$(ya.monto)} el ${fmtD(ya.fecha_pago)}`; }
       it.lect = await leerComprobante(it.file, p => { it.estado = p; spPintar(); });
+      { const T = String(it.lect?.texto || ''), u = T.match(RX_UUID); if (u && /FOLIO FISCAL|COMPROBANTE FISCAL DIGITAL|SELLO DIGITAL|CFDI|USO CFDI/i.test(T) && !/CLAVE DE RASTREO|SPEI|COMPROBANTE DE (PAGO|TRANSFERENCIA|OPERACI)/i.test(T)) { it.esFactura = u[0].toUpperCase(); const ff = FAC.find(f => !f.anulado && String(f.uuid_cfdi || '').toUpperCase() === it.esFactura); it.dup = ff ? `Este archivo es la FACTURA ${ff.numero_factura || ''} de ${nomEnt(ff.entidad_id)} (ya registrada), no un comprobante de pago. Para registrar su pago sube la transferencia; si se pagó por partes, usa su complemento de pago.` : 'Este archivo parece una FACTURA (CFDI), no un comprobante de pago. Súbela en «Subir factura de proveedor»; aquí van solo transferencias, vouchers o recibos.'; } }
     } catch (e) { it.lect = {}; }
     const L = it.lect || {};
     it.monto = L.monto || ''; it.fecha = L.fecha || hoyISO(); it.metodo = L.metodo || 'Transferencia'; it.ref = L.referencia || '';
