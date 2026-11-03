@@ -4563,7 +4563,12 @@ function upProponer() {
       if (target) {
         P.opciones.push({ k: 'ligar', f: target, txt: `Aplicar a la cuenta elegida: ${target.descripcion}` });
       } else if (yaUuid) {
-        P.opciones.push({ k: 'ligar', f: yaUuid, txt: `Ya registrada: ${yaUuid.descripcion}. Solo completar documentos.` });
+        const dz = DOCS.filter(d => d.tabla === 'fin_facturas' && d.registro_id === yaUuid.id), tx = t => dz.some(d => d.tipo === t) || (t === 'xml' ? yaUuid.xml_url : yaUuid.pdf_url);
+        const est = yaUuid.estado === 'pagado' ? 'pagada' : saldo(yaUuid) > 0.01 ? 'pendiente, saldo ' + $$(saldo(yaUuid)) : yaUuid.estado;
+        P.ya = { f: yaUuid, est, completa: tx('xml') && (tx('pdf') || !pdf) };
+        P.titulo = `YA REGISTRADA · ${P.titulo}`;
+        P.opciones.push(P.ya.completa ? { k: 'ya', f: yaUuid, txt: `Esta factura ya está en el sistema desde el ${fmtD(String(yaUuid.created_at || '').slice(0, 10))} (${est}) con su XML${tx('pdf') ? ' y PDF' : ''}. No se vuelve a registrar.` }
+          : { k: 'ligar', f: yaUuid, txt: `Ya está en el sistema (${est}): solo se le agrega el ${!tx('xml') ? 'XML' : 'PDF'} que le falta.` });
       } else {
         const cand = e ? vivas().filter(f => f.entidad_id === e.id && f.tipo === tipo && !f.uuid_cfdi) : [];
         cand.filter(f => porSolicitar(f) && (casi(f.monto_total, c.total, 1) || casi(f.monto_pagado, c.total, 1)))
@@ -4647,9 +4652,10 @@ function upPintarProps() {
     </div>` : ''}</div>`).join('');
   const rs = document.getElementById('upRes');
   if (rs) { const lis = UP.props.filter(P => P.multi ? P.opciones.some(o => o.k === 'complemento') : P.opciones[P.sel] && P.opciones[P.sel].k !== 'nada'), err = UP.files.filter(f => f.kind === 'error');
-    rs.innerHTML = UP.files.length ? `<b>${UP.files.length}</b> archivo(s) · <b style="color:var(--sc)">${lis.length}</b> listo(s) para aplicar · ${UP.props.length - lis.length} sin aplicar${err.length ? ` · <b style="color:var(--dg)">${err.length} con error</b>: ${err.map(f => esc(f.file.name) + ' (' + esc(f.estado) + ')').join(', ')}` : ''}` : ''; }
+    const yaN = UP.props.filter(P => P.ya).length;
+    rs.innerHTML = UP.files.length ? `<b>${UP.files.length}</b> archivo(s) · <b style="color:var(--sc)">${lis.filter(P => !P.ya).length}</b> nueva(s) por registrar${yaN ? ` · <b style="color:var(--wn)">${yaN} ya estaban registradas</b> (no se duplican)` : ''} · ${UP.props.length - lis.length} sin aplicar${err.length ? ` · <b style="color:var(--dg)">${err.length} con error</b>: ${err.map(f => esc(f.file.name) + ' (' + esc(f.estado) + ')').join(', ')}` : ''}` : ''; }
   const go = document.getElementById('upGo');
-  if (go) go.disabled = !UP.props.some(P => P.multi ? P.opciones.some(o => o.k === 'complemento') : P.opciones[P.sel] && P.opciones[P.sel].k !== 'nada');
+  if (go) go.disabled = !UP.props.some(P => P.multi ? P.opciones.some(o => o.k === 'complemento') : P.opciones[P.sel] && !['nada', 'ya'].includes(P.opciones[P.sel].k));
   const leyendo = UP.files.some(i => i.kind === '?' || /leyendo|preparando/.test(i.estado));
   if (go && leyendo) go.disabled = true;
 }
@@ -4677,6 +4683,7 @@ async function upAplicar() {
         ok.push('Complemento adjuntado'); continue;
       }
       const o = P.opciones[P.sel]; if (!o || o.k === 'nada') continue;
+      if (o.k === 'ya') { ok.push(`Ya estaba registrada (${P.ya.est}): ${P.otroNom} ${(P.c.serie || '') + (P.c.folio || '')} · ${$$(P.c.total)} — no se duplicó`); continue; }
       if (o.k === 'adjuntar_pdf') { await adj(o.f.id, P.solo, 'pdf'); ok.push('PDF adjuntado'); continue; }
       if (o.k === 'ligar_pdf') {
         const r = await R('fin_aplicar_cfdi', { p_factura: o.f.id, p_datos: { uuid_cfdi: P.solo.uuid, rfc_emisor: P.solo.dat?.rfc || '' } });
@@ -4739,7 +4746,7 @@ async function upAplicar() {
         if (s > 0.01) await pagar(fid, P.pago, Math.min(num(P.pago.pago.monto), s), P.metodo || P.pago.pago.metodo || 'Transferencia', P.pago.pago.fecha, P.pago.pago.referencia);
       }
       if (P.pedido) await R('fin_pedido_estado', { p_pedido: P.pedido.id, p_estado: 'facturado', p_datos: { factura_id: fid } });
-      ok.push(o.k === 'ligar' ? 'Factura ligada: ' + P.otroNom : 'Factura registrada: ' + P.otroNom + (P.pedido ? ' · pedido ' + P.pedido.folio + ' facturado' : ''));
+      ok.push(o.k === 'ligar' ? (P.ya ? `Ya estaba registrada (${P.ya.est}): ${P.otroNom} ${(P.c.serie || '') + (P.c.folio || '')} · se completaron sus documentos` : `Factura ligada a la cuenta «${o.f.descripcion}»: ${P.otroNom} ${(P.c.serie || '') + (P.c.folio || '')} · ${$$(P.c.total)}`) : 'Factura registrada: ' + P.otroNom + (P.pedido ? ' · pedido ' + P.pedido.folio + ' facturado' : ''));
     } catch (e) { fallaP.add(P); fallas.push((P.titulo || (P.solo || P.x || P.pagoSolo)?.file?.name || '') + ': ' + e.message); if (/PIN incorrecto|bloqueado/.test(e.message)) break; }
   }
   await cargarTodo();
