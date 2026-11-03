@@ -1638,7 +1638,7 @@ function rCuentas(tipo) {
     .map(([k, l]) => `<span class="chip ${F === k ? 'act' : ''}" onclick="VIEW.cxpF='${k}';renderTab()">${l}</span>`).join('');
   return `<div class="ph"><div><div class="ptit">${egr ? 'Por pagar' : 'Por cobrar'}</div><div class="psub">${L.length} cuentas · saldo ${$$(tot)} · agrupado por ${egr ? 'proveedor' : 'deudor'}</div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">${puede(egr ? 'cxp' : 'cxc') ? `<button class="btn btn-s btn-sm" onclick="nuevaCuenta('${tipo}')">${egr ? '+ Captura manual' : '+ Cuenta por cobrar'}</button>` : ''}
-    <button class="btn btn-s btn-sm" onclick="cxTodos('${tipo}',true)">▸ Colapsar todos</button><button class="btn btn-s btn-sm" onclick="cxTodos('${tipo}',false)">▾ Expandir todos</button><button class="btn btn-s btn-sm" onclick="expCuentas('${tipo}')">Excel</button>${egr && puede('cxp') ? `<button class="btn btn-s btn-sm" onclick="nomCxp()">＋ Nómina COE por persona</button>` : ''}${puede(egr ? 'cxp' : 'cxc') ? `<button class="btn btn-d btn-sm" onclick="openEliminar('${tipo}')">🗑 Eliminar mal capturados</button>` : ''}${puede(egr ? 'cxp' : 'cxc') ? `<button class="btn btn-p btn-sm" onclick="openUpload()">⬆ ${egr ? 'Subir factura de proveedor' : 'Subir factura emitida'}</button>` : ''}</div></div>
+    <button class="btn btn-s btn-sm" onclick="cxTodos('${tipo}',true)">▸ Colapsar todos</button><button class="btn btn-s btn-sm" onclick="cxTodos('${tipo}',false)">▾ Expandir todos</button><button class="btn btn-s btn-sm" onclick="expCuentas('${tipo}')">Excel</button>${egr && puede('cxp') ? `<button class="btn btn-s btn-sm" onclick="nomCxp()">＋ Nómina COE por persona</button>` : ''}${puede(egr ? 'cxp' : 'cxc') ? `<button class="btn btn-d btn-sm" onclick="openEliminar('${tipo}')">🗑 Eliminar mal capturados</button>` : ''}${egr && puede('cxp') ? `<button class="btn btn-p btn-sm" onclick="openUpload(null,true)" title="Varias facturas a la vez: todos los XML y PDF del mes">⬆⬆ Subir en volumen</button>` : ''}${puede(egr ? 'cxp' : 'cxc') ? `<button class="btn btn-p btn-sm" onclick="openUpload()">⬆ ${egr ? 'Subir factura de proveedor' : 'Subir factura emitida'}</button>` : ''}</div></div>
   <div class="pad"><div class="tc">
     <div class="ttb"><input class="sbox" placeholder="Buscar proveedor, concepto, folio, UUID o monto" value="${esc(egr ? VIEW.cxpQ : VIEW.cxcQ)}" oninput="VIEW.${egr ? 'cxpQ' : 'cxcQ'}=this.value;clearTimeout(window._bq);window._bq=setTimeout(()=>{renderTab();const s=document.querySelector('.sbox');s.focus();s.setSelectionRange(s.value.length,s.value.length)},350)"><div class="chips">${chips}</div></div>
     ${L.length ? `<table><thead><tr><th>Estatus</th><th>Concepto</th><th>Factura</th><th>Vence</th><th style="text-align:right">Total</th><th style="text-align:right">Saldo</th><th>Documentos</th><th></th></tr></thead><tbody>
@@ -2031,9 +2031,9 @@ const PED_EST = { solicitado: ['Por autorizar', 'bdg-pnd'], autorizado: ['Autori
 const AREAS = ['Quirófano', 'Farmacia', 'Óptica', 'Consulta', 'Limpieza', 'Papelería', 'Mantenimiento', 'Administración', 'Laboratorio'];
 function rPedidos() {
   let L = PED.filter(enMiSede);
-  if (VIEW.pedF === 'activos') L = L.filter(p => ['solicitado', 'autorizado', 'enviado', 'recibido'].includes(p.estado));
+  if (VIEW.pedF === 'activos') L = L.filter(p => ['solicitado', 'autorizado', 'enviado'].includes(p.estado));
   else if (VIEW.pedF !== 'todos') L = L.filter(p => p.estado === VIEW.pedF);
-  const chips = [['activos', 'Activos'], ['solicitado', 'Por autorizar'], ['autorizado', 'Autorizados'], ['enviado', 'Enviados'], ['recibido', 'Recibidos'], ['todos', 'Todos']]
+  const chips = [['activos', 'Pendientes'], ['solicitado', 'Por autorizar'], ['autorizado', 'Autorizados'], ['enviado', 'Enviados'], ['recibido', 'Recibidos'], ['todos', 'Todos']]
     .map(([k, l]) => `<span class="chip ${VIEW.pedF === k ? 'act' : ''}" onclick="VIEW.pedF='${k}';renderTab()">${l}</span>`).join('');
   VIEW.pedV = VIEW.pedV || 'prov';
   const vista = `<div class="seg">${[['prov', 'Por proveedor'], ['ped', 'Por pedido']].map(([k, t]) => `<button class="${VIEW.pedV === k ? 'on' : ''}" onclick="VIEW.pedV='${k}';renderTab()">${t}</button>`).join('')}</div>`;
@@ -2050,7 +2050,7 @@ function pedProvDe(p, l) { if (p.entidad_id) return p.entidad_id; const fp = (IN
 function pedLineas(L) {
   const out = [];
   L.forEach(p => { const pt = Array.isArray(p.partidas) && p.partidas.length ? p.partidas : [{ cantidad: 1, descripcion: p.descripcion, precio: p.monto_estimado, unidad: '' }];
-    pt.forEach(l => out.push({ p, l, prov: pedProvDe(p, l), k: l.far_producto_id ? 'f' + l.far_producto_id : l.material_id ? 'm' + l.material_id : 'd' + normTx(l.descripcion), pr: num(l.precio ?? l.costo) })); });
+    pt.forEach(l => { if (['solicitado', 'autorizado', 'enviado'].includes(p.estado) && num(l.recibido) >= num(l.cantidad) && num(l.cantidad) > 0) return; if (num(l.recibido) > 0 && ['solicitado', 'autorizado', 'enviado'].includes(p.estado)) l = { ...l, cantidad: num(l.cantidad) - num(l.recibido) }; out.push({ p, l, prov: pedProvDe(p, l), k: l.far_producto_id ? 'f' + l.far_producto_id : l.material_id ? 'm' + l.material_id : 'd' + normTx(l.descripcion), pr: num(l.precio ?? l.costo) }); }); });
   return out;
 }
 VIEW.pedAbre = VIEW.pedAbre || {};
@@ -2154,12 +2154,12 @@ function verPedido(id) {
     <b>Correos</b><div class="mini">${corr.length ? corr.map(c => fmtDT(c.enviado_at) + ' ' + esc(c.motivo || '') + ' → ' + esc(c.para || '')).join('<br>') : '—'}</div>
     ${p.factura_id ? `<b>Factura</b><div><a href="#" onclick="event.preventDefault();verCuenta('${p.factura_id}')" style="color:var(--pr)">Ver cuenta ligada</a></div>` : ''}
   </div>
-  ${pt.length ? `<table style="margin-top:14px"><thead><tr><th>Cant.</th><th>Producto</th><th style="text-align:right">Precio</th><th style="text-align:right">Importe</th></tr></thead><tbody>${pt.map(l => `<tr><td>${l.cantidad}</td><td>${esc(l.descripcion)}</td><td class="amt" style="text-align:right">${$$(l.precio)}</td><td class="amt" style="text-align:right">${$$(l.cantidad * l.precio)}</td></tr>`).join('')}<tr><td colspan="3"><b>Total estimado</b></td><td class="amt" style="text-align:right;font-weight:800">${$$(p.monto_estimado)}</td></tr></tbody></table>` : ''}`;
+  ${pt.length ? `<table style="margin-top:14px"><thead><tr><th>Cant.</th><th>Producto</th><th style="text-align:right">Precio</th><th style="text-align:right">Importe</th></tr></thead><tbody>${pt.map(l => `<tr><td>${l.cantidad}</td><td>${esc(l.descripcion)}${num(l.recibido) > 0 ? ` <span class="bdg ${num(l.recibido) >= num(l.cantidad) ? 'bdg-apr' : 'bdg-pnd'}">${num(l.recibido) >= num(l.cantidad) ? 'llegó' : 'llegaron ' + num(l.recibido)}${l.recibido_at ? ' ' + fmtD(String(l.recibido_at).slice(0, 10)) : ''}</span>` : ''}</td><td class="amt" style="text-align:right">${$$(l.precio)}</td><td class="amt" style="text-align:right">${$$(l.cantidad * l.precio)}</td></tr>`).join('')}<tr><td colspan="3"><b>Total estimado</b></td><td class="amt" style="text-align:right;font-weight:800">${$$(p.monto_estimado)}</td></tr></tbody></table>` : ''}`;
   const ft = [
     p.estado === 'solicitado' && puede('pedidos', 3) ? `<button class="btn btn-p" onclick="autorizarPedido('${id}','autorizar')">Autorizar</button><button class="btn btn-d" onclick="autorizarPedido('${id}','rechazar')">Rechazar</button>` : '',
     ['autorizado', 'enviado', 'recibido', 'facturado'].includes(p.estado) ? `<button class="btn btn-s" onclick="imprimirOC('${id}')">🖨 Orden de compra</button>` : '',
     ['autorizado', 'enviado'].includes(p.estado) && puede('pedidos') ? `<button class="btn btn-p" onclick="enviarPedido('${id}')">📤 ${p.estado === 'enviado' ? 'Reenviar' : 'Enviar'} orden de compra</button>` : '',
-    ['autorizado', 'enviado'].includes(p.estado) ? `<button class="btn btn-s" onclick="estadoPedido('${id}','recibido')">Recibido</button>` : '',
+    ['solicitado', 'autorizado', 'enviado'].includes(p.estado) && puede('pedidos') ? `<button class="btn btn-p" onclick="estadoPedido('${id}','recibido')" title="La mercancía ya llegó: sale de pedidos pendientes">✓ Ya llegó</button>` : '',
     ['enviado', 'recibido'].includes(p.estado) ? `<button class="btn btn-s" onclick="correoProveedor('${p.entidad_id}',null,'${id}','aclaracion')">✉ Aclaración</button>` : '',
     p.entidad_id ? `<button class="btn btn-s" onclick="cartaProveedor('${p.entidad_id}','devolucion','${id}')">Carta de devolución</button><button class="btn btn-s" onclick="cartaProveedor('${p.entidad_id}','garantia','${id}')">Carta de garantía</button>` : '',
     ['solicitado', 'autorizado', 'enviado'].includes(p.estado) && pt.length > 1 && puede('pedidos') ? `<button class="btn btn-s" onclick="dividirPedido('${id}')">✂ Separar por proveedor</button>` : '',
@@ -4335,8 +4335,8 @@ function revisarTuDia() {
 let UP = { files: [], target: null, props: [] };
 const RX_UUID = /[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}/i;
 
-function openUpload(targetId) {
-  UP = { files: [], target: targetId || null, props: [] };
+function openUpload(targetId, vol) {
+  UP = { files: [], target: targetId || null, props: [], vol: !!vol };
   const f = targetId ? FAC.find(x => x.id === targetId) : null;
   const pagos = f ? ABO.filter(a => a.factura_id === f.id && !a.anulado) : [];
   const cab = f ? `<div class="prop" style="margin-top:0;margin-bottom:14px;border-color:var(--in)"><h4 style="color:var(--in)">Todo lo que subas aquí queda solo en esta cuenta</h4>
@@ -4346,12 +4346,16 @@ function openUpload(targetId) {
       <div class="row"><span>Tiene</span><span>${docsDe(f)} <span class="mini">${pagos.length} pago(s)</span></span></div></div>
       ${ent(f.entidad_id)?.no_factura && f.tipo === 'egreso' ? `<div style="margin-bottom:10px;padding:10px 12px;border-radius:var(--rs);background:var(--sf2);border:1px solid var(--br);display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span style="flex:1">Este proveedor <b>no da factura</b>. Sube aquí la foto de su nota, recibo o ticket: queda como su comprobante y <b>no registra un pago</b>.</span><button class="btn btn-p btn-sm" onclick="notaFoto('${f.id}')">📷 Subir foto de la nota</button></div>` : ''}
       <div class="mini" style="margin-bottom:10px">Comprobante = se registra como pago o abono parcial de esta cuenta · XML/PDF = su factura · Complemento de pago = se archiva con sus pagos · Nota de crédito = se descuenta del saldo</div>`
+    : vol ? `<div class="prop" style="margin-top:0;margin-bottom:14px;border-color:var(--in)"><h4 style="color:var(--in)">Subir facturas en volumen</h4>
+      <div class="mini">Selecciona <b>todos</b> los XML y PDF del mes a la vez (o la carpeta completa). Cada XML se empareja solo con su PDF por folio fiscal; si solo tienes el PDF, se registra con sus datos y queda pendiente el XML. Al final verás qué se aplicó y qué no, con el motivo de cada uno.</div></div>`
     : `<div class="prop" style="margin-top:0;margin-bottom:14px;border-color:var(--in)"><h4 style="color:var(--in)">Registrar factura(s) de proveedor</h4>
       <div class="mini">Sube el XML y el PDF de la factura. Si ya se pagó, agrega su comprobante: se registra completa o como abono parcial y el saldo queda pendiente. Para pagar una cuenta que ya existe, usa "Pagar" en esa cuenta.</div></div>`;
-  modal(f ? 'Documentos de la cuenta' : 'Registrar factura de proveedor', cab + `
+  modal(f ? 'Documentos de la cuenta' : vol ? 'Subir facturas en volumen' : 'Registrar factura de proveedor', cab + `
     <div class="drop" id="upDrop"><input type="file" multiple accept=".xml,.pdf,image/*,text/xml,application/pdf" onchange="upAgregar(this.files);this.value=''">
       <div class="big">⬆</div><div><b>Arrastra o elige los archivos</b></div>
-      <div class="mini">${f ? 'Comprobante, XML, PDF, complemento o nota de crédito de esta cuenta' : 'XML + PDF de la factura · comprobante opcional'}</div></div>
+      <div class="mini">${f ? 'Comprobante, XML, PDF, complemento o nota de crédito de esta cuenta' : 'XML + PDF de la factura · comprobante opcional · puedes elegir muchos archivos a la vez'}</div></div>
+    ${!f ? `<div style="margin:-6px 0 10px;text-align:right"><label class="btn btn-s btn-sm" style="cursor:pointer">📁 Elegir carpeta completa<input type="file" webkitdirectory multiple style="display:none" onchange="upAgregar([...this.files].filter(x=>/\.(xml|pdf|jpe?g|png)$/i.test(x.name)));this.value=''"></label></div>` : ''}
+    <div id="upRes" class="mini" style="margin:6px 0"></div>
     <div id="upList" class="flist"></div><div id="upProps"></div>`,
     `<button class="btn btn-s" onclick="CM('mGen')">Cerrar</button><button class="btn btn-p" id="upGo" onclick="upAplicar()" disabled>Firmar y aplicar</button>`, 'xl');
   const dz = document.getElementById('upDrop');
@@ -4376,7 +4380,7 @@ function upPintarLista() {
 async function upClasificar(it) {
   const n = it.file.name.toLowerCase(), t = it.file.type;
   if (n.endsWith('.xml') || t.includes('xml')) {
-    it.cfdi = parseCFDI(await it.file.text());
+    it.cfdi = parseCFDI(await leerXml(it.file));
     if (!it.cfdi) { it.kind = 'error'; it.estado = 'XML no es un CFDI'; return; }
     it.kind = 'xml';
     const c = it.cfdi;
@@ -4386,7 +4390,7 @@ async function upClasificar(it) {
   if (n.endsWith('.pdf') || t === 'application/pdf') {
     const tx = await pdfTexto(it.file);
     const u = tx.match(RX_UUID);
-    if (u && /FOLIO FISCAL|CFDI|COMPROBANTE FISCAL|SELLO DIGITAL/i.test(tx)) { it.kind = 'pdf_factura'; it.uuid = u[0].toUpperCase(); it.estado = 'PDF de factura · ' + it.uuid.slice(0, 8); return; }
+    if (u && /FOLIO FISCAL|CFDI|COMPROBANTE FISCAL|SELLO DIGITAL/i.test(tx)) { it.kind = 'pdf_factura'; it.uuid = u[0].toUpperCase(); it.dat = parsePdfFactura(tx); it.estado = 'PDF de factura · ' + it.uuid.slice(0, 8) + (it.dat.total ? ' · ' + $$(it.dat.total) : ''); return; }
     it.kind = 'pago'; it.pago = parsePago(tx); it.estado = it.pago.monto ? `Comprobante · ${$$(it.pago.monto)}${it.pago.metodo ? ' · ' + it.pago.metodo : ''}` : 'Comprobante · monto no leído';
     return;
   }
@@ -4398,6 +4402,26 @@ async function upClasificar(it) {
     return;
   }
   it.kind = 'otro'; it.estado = 'Documento';
+}
+
+// XML con su codificación declarada (algunos proveedores timbran en ISO-8859-1 / windows-1252)
+async function leerXml(file) {
+  const b = new Uint8Array(await file.arrayBuffer());
+  const cab = new TextDecoder('ascii').decode(b.slice(0, 200)), m = cab.match(/encoding=["']([\w-]+)["']/i);
+  let t; try { t = new TextDecoder(m ? m[1].toLowerCase() : 'utf-8').decode(b); } catch { t = new TextDecoder('utf-8').decode(b); }
+  if (!m && t.includes('\uFFFD')) t = new TextDecoder('windows-1252').decode(b);
+  return t.replace(/^\uFEFF/, '').trimStart();
+}
+// Datos de una factura leídos del PDF (cuando no llega el XML)
+function parsePdfFactura(tx) {
+  const T = String(tx || '').toUpperCase(), mios = miRFCs();
+  const rfcs = [...new Set((T.match(/\b[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}\b/g) || []))];
+  const rfc = rfcs.find(r => !mios.includes(r)) || '';
+  const tots = [...T.matchAll(/(?<!SUB)TOTAL\b[^\d\n]{0,30}?([\d,]+\.\d{2})/g)].map(m => num(m[1].replace(/,/g, ''))).filter(x => x > 0);
+  const f = T.match(/(20\d{2}-\d{2}-\d{2})T\d{2}:\d{2}/) || T.match(/(\d{2})\/(\d{2})\/(20\d{2})/);
+  const fecha = !f ? '' : f[1].length === 10 ? f[1] : `${f[3]}-${f[2]}-${f[1]}`;
+  const ppd = /\bPPD\b/.test(T);
+  return { rfc, total: tots.length ? tots[tots.length - 1] : 0, fecha, metodo: ppd ? 'PPD' : /\bPUE\b/.test(T) ? 'PUE' : '' };
 }
 
 // ── Lectura de CFDI 3.3 / 4.0 ────────────────────
@@ -4505,7 +4529,7 @@ function upProponer() {
 
   xs.forEach(x => {
     const c = x.cfdi;
-    const pdf = pdfs.find(p => p.uuid === c.uuid) || pdfs.find(p => p.file.name.replace(/\.pdf$/i, '').toLowerCase() === x.file.name.replace(/\.xml$/i, '').toLowerCase()) || (xs.length === 1 && pdfs.length === 1 ? pdfs[0] : null);
+    const pdf = pdfs.find(p => p.uuid === c.uuid) || pdfs.find(p => p.file.name.replace(/\.pdf$/i, '').toLowerCase() === x.file.name.replace(/\.xml$/i, '').toLowerCase()) || (xs.length === 1 && pdfs.length === 1 && !pdfs[0].uuid ? pdfs[0] : null);
     if (pdf) usados.add(pdf.id);
     const nuestro = mios.includes(c.receptorRfc), emitido = mios.includes(c.emisorRfc);
     const tipo = emitido ? 'ingreso' : 'egreso';
@@ -4566,8 +4590,18 @@ function upProponer() {
 
   // PDF de factura sin XML
   pdfs.filter(p => !usados.has(p.id)).forEach(p => {
-    const f = FAC.find(z => (z.uuid_cfdi || '').toUpperCase() === p.uuid) || target;
-    props.push({ solo: p, titulo: 'PDF de factura ' + p.uuid.slice(0, 8), opciones: f ? [{ k: 'adjuntar_pdf', f, txt: 'Adjuntar a ' + f.descripcion }] : [{ k: 'nada', txt: 'Sube también el XML de esta factura para registrarla' }], sel: 0, avisos: [] });
+    const f = FAC.find(z => (z.uuid_cfdi || '').toUpperCase() === p.uuid && !z.anulado) || target;
+    const d = p.dat || {}, e = d.rfc ? entPorRfc(d.rfc, '') : null;
+    const P = { solo: p, titulo: 'PDF de factura ' + p.uuid.slice(0, 8) + (e ? ' · ' + e.nombre : d.rfc ? ' · RFC ' + d.rfc : '') + (d.total ? ' · ' + $$(d.total) : ''), sel: 0, avisos: [], ent: e?.id || '', monto: d.total || 0, venc: d.fecha && d.metodo !== 'PPD' ? d.fecha : isoD(new Date(Date.now() + (num(e?.dias_credito) || 28) * 864e5)) };
+    if (f) P.opciones = [{ k: 'adjuntar_pdf', f, txt: 'Adjuntar a ' + f.descripcion }];
+    else {
+      const cand = e ? vivas().filter(z => z.entidad_id === e.id && z.tipo === 'egreso' && !z.uuid_cfdi && d.total && (casi(z.monto_total, d.total, 1) || casi(z.monto_pagado, d.total, 1))) : [];
+      P.opciones = [...cand.map(z => ({ k: 'ligar_pdf', f: z, txt: `Completa la cuenta ${z.descripcion} · ${$$(z.monto_total)}` })),
+        { k: 'nueva_pdf', txt: 'Registrar como cuenta por pagar con los datos del PDF (queda pendiente el XML)' }, { k: 'nada', txt: 'Esperar el XML' }];
+      P.avisos.push('Llegó el PDF sin su XML. Si tienes el XML súbelo junto; si no, revisa proveedor, monto y fecha y regístrala.');
+      if (!e) P.avisos.push(d.rfc ? `El RFC ${d.rfc} no está en tus proveedores: elígelo de la lista.` : 'No se leyó el RFC del emisor: elige el proveedor.');
+    }
+    props.push(P);
   });
 
   // Comprobantes de pago sueltos
@@ -4602,11 +4636,18 @@ function upPintarProps() {
       P.opciones.map((o, j) => `<label class="opt ${P.sel === j ? 'sel' : ''}"><input type="radio" name="up${i}" ${P.sel === j ? 'checked' : ''} onchange="UP.props[${i}].sel=${j};upPintarProps()"><span>${esc(o.txt)}</span></label>`).join('')}
     ${P.c && P.venc && !(P.pago && !P.parcial) && P.opciones[P.sel]?.k === 'nueva' ? `<div class="fgrd" style="margin-top:10px;align-items:end"><div class="fgrp"><label>Fecha de pago</label><input type="date" value="${P.venc}" onchange="upVenc(${i},this.value)"></div>
       <div class="fgrp sp2"><div class="chips">${[0, 15, 28, 30, 45, 60].map(d => { const x = isoD(new Date(new Date(P.c.fecha + 'T00:00:00').getTime() + d * 864e5)); return `<span class="chip ${x === P.venc ? 'act' : ''}" onclick="upVenc(${i},'${x}')">${d ? d + ' días' : 'Contado'}</span>`; }).join('')}</div></div></div>` : ''}
+    ${P.solo && P.opciones[P.sel]?.k === 'nueva_pdf' ? `<div class="fgrd" style="margin-top:10px">
+      <div class="fgrp"><label>Proveedor</label><select onchange="UP.props[${i}].ent=this.value">${optsEnt(P.ent)}</select></div>
+      <div class="fgrp"><label>Total de la factura</label><div class="ipfx"><span>$</span><input type="number" step="0.01" value="${P.monto || ''}" onchange="UP.props[${i}].monto=+this.value"></div></div>
+      <div class="fgrp"><label>Fecha de pago</label><input type="date" value="${P.venc || ''}" onchange="UP.props[${i}].venc=this.value"></div></div>` : ''}
     ${P.pagoSolo || P.pago ? `<div class="fgrd" style="margin-top:10px">
       <div class="fgrp"><label>Monto del pago</label><div class="ipfx"><span>$</span><input type="number" step="0.01" value="${(P.pagoSolo ? P.monto : P.pago.pago.monto) || ''}" onchange="UP.props[${i}].${P.pagoSolo ? 'monto' : 'pago.pago.monto'}=+this.value"></div></div>
       <div class="fgrp"><label>Forma de pago</label><select onchange="UP.props[${i}].metodo=this.value">${['Transferencia', 'Tarjeta', 'Efectivo', 'Cheque', 'Domiciliado'].map(x => `<option ${(P.metodo || (P.pagoSolo || P.pago).pago?.metodo) === x ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
       ${P.pagoSolo && P.opciones[P.sel]?.k === 'sin_factura' ? `<div class="fgrp"><label>Proveedor</label><select onchange="UP.props[${i}].ent=this.value">${optsEnt(P.ent)}</select></div><div class="fgrp"><label>Concepto</label><input type="text" value="${esc(P.concepto || '')}" onchange="UP.props[${i}].concepto=this.value" placeholder="Ej. Reparación de aire acondicionado"></div>` : ''}
     </div>` : ''}</div>`).join('');
+  const rs = document.getElementById('upRes');
+  if (rs) { const lis = UP.props.filter(P => P.multi ? P.opciones.some(o => o.k === 'complemento') : P.opciones[P.sel] && P.opciones[P.sel].k !== 'nada'), err = UP.files.filter(f => f.kind === 'error');
+    rs.innerHTML = UP.files.length ? `<b>${UP.files.length}</b> archivo(s) · <b style="color:var(--sc)">${lis.length}</b> listo(s) para aplicar · ${UP.props.length - lis.length} sin aplicar${err.length ? ` · <b style="color:var(--dg)">${err.length} con error</b>: ${err.map(f => esc(f.file.name) + ' (' + esc(f.estado) + ')').join(', ')}` : ''}` : ''; }
   const go = document.getElementById('upGo');
   if (go) go.disabled = !UP.props.some(P => P.multi ? P.opciones.some(o => o.k === 'complemento') : P.opciones[P.sel] && P.opciones[P.sel].k !== 'nada');
   const leyendo = UP.files.some(i => i.kind === '?' || /leyendo|preparando/.test(i.estado));
@@ -4637,6 +4678,18 @@ async function upAplicar() {
       }
       const o = P.opciones[P.sel]; if (!o || o.k === 'nada') continue;
       if (o.k === 'adjuntar_pdf') { await adj(o.f.id, P.solo, 'pdf'); ok.push('PDF adjuntado'); continue; }
+      if (o.k === 'ligar_pdf') {
+        const r = await R('fin_aplicar_cfdi', { p_factura: o.f.id, p_datos: { uuid_cfdi: P.solo.uuid, rfc_emisor: P.solo.dat?.rfc || '' } });
+        if (!r.ok && !/fin_aplicar_cfdi/.test(r.error || '')) throw new Error(ERR[r.error] || r.error);
+        await adj(o.f.id, P.solo, 'pdf'); ok.push('PDF ligado: ' + o.f.descripcion); continue;
+      }
+      if (o.k === 'nueva_pdf') {
+        if (!P.ent) throw new Error('elige el proveedor');
+        if (!num(P.monto)) throw new Error('escribe el total');
+        const r = await R('fin_crear_cxp', { p_datos: { tipo: 'egreso', entidad_id: P.ent, descripcion: 'Factura ' + P.solo.uuid.slice(0, 8) + ' (PDF, falta XML)', monto_total: num(P.monto), uuid_cfdi: P.solo.uuid, rfc_emisor: P.solo.dat?.rfc || '', fecha_vencimiento: P.venc || null, categoria: ent(P.ent)?.categoria || '', documento_tipo: 'factura', metodo_pago: P.solo.dat?.metodo || '', notas: 'Registrada con el PDF; falta el XML', sede: cu.sede || '' } });
+        if (!r.ok) throw new Error(ERR[r.error] || r.error);
+        await adj(r.id, P.solo, 'pdf'); ok.push('Factura registrada con PDF: ' + nomEnt(P.ent)); continue;
+      }
       if (o.k === 'pagar') {
         const m = num(P.monto) || saldo(o.f);
         await pagar(o.f.id, P.pagoSolo, Math.min(m, saldo(o.f)), P.metodo || P.pagoSolo.pago?.metodo || 'Transferencia', P.pagoSolo.pago?.fecha, P.pagoSolo.pago?.referencia);
@@ -4687,7 +4740,7 @@ async function upAplicar() {
       }
       if (P.pedido) await R('fin_pedido_estado', { p_pedido: P.pedido.id, p_estado: 'facturado', p_datos: { factura_id: fid } });
       ok.push(o.k === 'ligar' ? 'Factura ligada: ' + P.otroNom : 'Factura registrada: ' + P.otroNom + (P.pedido ? ' · pedido ' + P.pedido.folio + ' facturado' : ''));
-    } catch (e) { fallaP.add(P); fallas.push((P.titulo || '') + ': ' + e.message); if (/PIN incorrecto|bloqueado/.test(e.message)) break; }
+    } catch (e) { fallaP.add(P); fallas.push((P.titulo || (P.solo || P.x || P.pagoSolo)?.file?.name || '') + ': ' + e.message); if (/PIN incorrecto|bloqueado/.test(e.message)) break; }
   }
   await cargarTodo();
   document.getElementById('mGenB').innerHTML = `${ok.length ? `<div class="okbox">${ok.map(esc).join('<br>')}</div>` : ''}${fallas.length ? `<div class="errbox">${fallas.map(esc).join('<br>')}</div>` : ''}`;
@@ -5714,7 +5767,7 @@ async function almAplicarUp() {
 // ── Agregar manualmente (pestaña) ──
 let ALM_N = { filas: [], pedido: '' };
 function almVistaAgregar(A) {
-  const qx = A === 'adm', P = qx ? (INV.qxMat || []) : (INV.farProd || []), pend = PED.filter(p => (qx ? /quir/i : /farm/i).test(p.area || '') && ['autorizado', 'enviado', 'recibido'].includes(p.estado) && !(qx && p.recibido_at));
+  const qx = A === 'adm', P = qx ? (INV.qxMat || []) : (INV.farProd || []), pend = PED.filter(p => (qx ? /quir/i : /farm/i).test(p.area || '') && ['solicitado', 'autorizado', 'enviado', 'recibido'].includes(p.estado) && !(qx && p.recibido_at));
   ALM_N.area = A;
   return `<div class="pad"><div class="cfgg" style="grid-template-columns:minmax(0,1.25fr) minmax(0,1fr)">
     <div class="cfg-section"><h3>${qx ? 'Llegada al Almacén de Contabilidad (Quirófano)' : 'Agregar al almacén'}</h3><div class="body">
@@ -6187,7 +6240,7 @@ window._lr = window._lr || [];
 function almRapida() {
   if (!window._lr.length) window._lr = [lrFila()];
   setTimeout(lrPintar, 0);
-  const pend = PED.filter(p => /farm/i.test(p.area || '') && ['autorizado', 'enviado', 'recibido'].includes(p.estado));
+  const pend = PED.filter(p => /farm/i.test(p.area || '') && ['solicitado', 'autorizado', 'enviado', 'recibido'].includes(p.estado));
   return `<div class="pad"><div class="cfg-section"><h3>⚡ Llegada de insumos al almacén de farmacia</h3><div class="body">
     <div class="mini" style="margin-bottom:10px">Escribe o elige el producto: si ya existe se llenan solos sus datos; si es nuevo, define sus características en la misma fila. Lote y caducidad son obligatorios.</div>
     <div class="fgrd" style="margin-bottom:10px">
