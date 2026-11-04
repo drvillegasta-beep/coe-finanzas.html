@@ -1505,6 +1505,7 @@ function calcAlertas() {
   });
   if (puede('pedidos', 3)) PED.filter(p => p.estado === 'solicitado' && enMiSede(p)).forEach(p => A.push({ n: p.urgente ? 'r' : 'i', t: `${p.urgente ? 'URGENTE · ' : ''}Pedido por autorizar ${p.folio}`, m: `${p.area} · ${p.descripcion} · ${$$(p.monto_estimado)}`, go: () => verPedido(p.id) }));
   PED.filter(p => p.estado === 'autorizado' && enMiSede(p)).forEach(p => A.push({ n: 'i', t: `Pedido autorizado sin enviar ${p.folio}`, m: `${nomEnt(p.entidad_id)} · enviar al proveedor`, go: () => verPedido(p.id) }));
+  if (puedeEliminar()) { const vistos = new Set(); vivas().filter(f => f.origen === 'conciliacion' && f.tipo === 'egreso').forEach(c => cajaGemelas(c).forEach(g => { if (vistos.has(g.id)) return; vistos.add(g.id); A.push({ n: 'r', t: `Pago duplicado con la caja: ${nomEnt(c.entidad_id)}`, m: `${c.descripcion} (caja ${fmtD(c.fecha_pago)}) y ${g.descripcion} (Finanzas) · ${$$(c.monto_total)} · ábrelo y únelos`, go: () => verCuenta(g.id) }); })); }
   const fps = vivas().filter(porSolicitar);
   const fpsU = fps.filter(f => diasA(limFps(f)) <= 5);
   if (fpsU.length > 3) { const v = fpsU.filter(f => diasA(limFps(f)) < 0).length; A.push({ n: v ? 'r' : 'a', t: `Facturas por solicitar: ${fpsU.length} con límite próximo`, m: `${v ? v + ' ya vencidas · ' : ''}${$$(fpsU.reduce((s, f) => s + num(f.monto_pagado), 0))} pagados sin factura`, go: () => goTab('fps') }); }
@@ -1680,6 +1681,7 @@ function verCuenta(id) {
     <b>Revisión</b><div class="mini">${!sinRevisar(f) ? esc(f.revision) + ' por ' + esc(nomUsr(f.revision_por)) + ' ' + fmtDT(f.revision_at) + (f.revision_nota ? ' — ' + esc(f.revision_nota) : '') : 'Sin revisar'}</div>
   </div>
   ${esNomFijo(f) ? `<h4 style="margin:18px 0 8px;display:flex;justify-content:space-between;align-items:center">Desglose de la nómina${puede('recurrentes') ? `<button class="btn btn-s btn-sm" onclick="nomDesglose('${f.id}')">✎ ${f.desglose?.length ? 'Editar' : 'Desglosar'}</button>` : ''}</h4>${nomDesgTabla(f.desglose, num(f.monto_pagado) || num(f.monto_total))}` : ''}
+  ${(G => G.length && puedeEliminar() ? `<div class="warnbox" style="margin-top:14px"><b>Posible duplicado con la caja (COE Conciliación)</b>${G.map(g => `<div style="display:flex;gap:10px;align-items:center;margin-top:6px;flex-wrap:wrap"><span style="flex:1">${g.origen === 'conciliacion' ? 'Pago en caja' : 'Cuenta en Finanzas'}: ${esc(g.descripcion)} · ${$$(g.monto_total)} · ${g.estado === 'pagado' ? 'pagada ' + fmtD(g.fecha_pago) : 'pendiente'}</span><button class="btn btn-w btn-sm" onclick="unirCaja('${f.origen === 'conciliacion' ? g.id : f.id}','${f.origen === 'conciliacion' ? f.id : g.id}')">🔗 Es el mismo: unir</button></div>`).join('')}</div>` : '')(cajaGemelas(f))}
   <h4 style="margin:18px 0 8px">Documentos probatorios</h4>
   ${docs.length || f.xml_url || f.pdf_url ? `<div class="flist">${docs.map(d => `<div class="fitem"><span class="fk">${esc(d.tipo.toUpperCase())}</span><a class="fn" href="${esc(d.url)}" target="_blank">${esc(d.url.split('/').pop())}</a><span class="mini">${esc(nomUsr(d.subido_por))} · ${fmtDT(d.subido_at)}</span><span class="mini" title="Huella SHA-256">#${esc((d.sha256 || '').slice(0, 8))}</span></div>`).join('')}</div>` : '<div class="mini">Sin documentos</div>'}
   <h4 style="margin:18px 0 8px">${egr ? 'Pagos' : 'Cobros'}</h4>
@@ -1698,6 +1700,25 @@ function verCuenta(id) {
     puedeEliminar() && !f.anulado && (egr || esAdmin()) ? `<button class="btn btn-d" onclick="anular('fin_facturas','${id}')">Anular</button>` : !f.anulado && !solF && puede(mod) ? `<button class="btn btn-d" onclick="solicitarBaja('fin_facturas','${id}')">Solicitar baja</button>` : '',
   ].join('');
   modal(`${egr ? 'Cuenta por pagar' : 'Cuenta por cobrar'} · ${nomEnt(f.entidad_id)}`, b, ft, 'xl');
+}
+
+// Pagos hechos en la caja de COE Conciliación que crearon su propia cuenta cuando ya existía la de Finanzas
+const ENT_GEN = /^(OTROS|VARIOS|GENERAL|PROVEEDOR GENERAL)$/i;
+function cajaGemelas(f) {
+  if (!f || f.anulado || f.tipo !== 'egreso') return [];
+  const pal = t => new Set(normTx(t).toLowerCase().split(' ').filter(w => w.length >= 4 && !['pago', 'para', 'pagos', 'servicio', 'compra'].includes(w)));
+  const P = pal(f.descripcion), gen = ENT_GEN.test(nomEnt(f.entidad_id).trim());
+  const fe = x => x.fecha_pago || x.fecha_vencimiento || String(x.created_at || '').slice(0, 10);
+  return FAC.filter(g => g.id !== f.id && !g.anulado && g.tipo === 'egreso' && g.entidad_id === f.entidad_id && ((f.origen === 'conciliacion') !== (g.origen === 'conciliacion'))
+    && Math.abs(num(g.monto_total) - num(f.monto_total)) <= 1 && Math.abs((new Date(fe(g)) - new Date(fe(f))) / 864e5) <= 20
+    && (!gen || [...pal(g.descripcion)].some(w => P.has(w))));
+}
+async function unirCaja(cuenta, caja) {
+  const r = FAC.find(x => x.id === cuenta), c = FAC.find(x => x.id === caja); if (!r || !c) return;
+  const pagada = saldo(r) < num(c.monto_pagado) - 1;
+  if (!confirm(`¿Unir el pago de caja con la cuenta de Finanzas?\n\nCaja: ${c.descripcion} · ${$$(c.monto_pagado)} (${fmtD(c.fecha_pago)})\nFinanzas: ${r.descripcion} · ${$$(r.monto_total)}\n\n${pagada ? 'La cuenta de Finanzas ya está pagada: era el mismo pago registrado dos veces. Se anula la copia de caja y su comprobante se guarda en la cuenta.' : 'El pago de caja se aplica a la cuenta de Finanzas.'} La cuenta duplicada de caja queda anulada.`)) return;
+  const x = await rpcFirmado('fin_unir_caja', { p_cuenta: cuenta, p_caja: caja }, { titulo: 'Unir pago de caja', sub: r.descripcion });
+  if (!x) return; CM('mGen'); toast(x.modo === 'duplicado' ? 'Duplicado anulado · queda una sola cuenta' : 'Pago de caja aplicado a la cuenta', 'success'); await cargarTodo(); verCuenta(cuenta);
 }
 
 // Pago o cobro con la mínima captura: solo el comprobante
@@ -1753,6 +1774,8 @@ async function confirmarPago(id, extra = {}) {
   if (dc > num(f.monto_total) * 0.3 + 0.01) { toast('El descuento no puede pasar del 30% de la cuenta', 'warning'); return; }
   if (dc) { const pct = num(document.getElementById('pgDp').value), esp = Math.round(saldo(f) * pct) / 100;
     if (Math.abs(dc - esp) > Math.max(1, saldo(f) * 0.005) && !confirm(`Con este monto el descuento sería ${$$(dc)} (${Math.round(dc / saldo(f) * 1000) / 10}%), distinto del ${pct || 0}% capturado.\n\n¿Liquidar la cuenta con ese descuento? (Cancelar si es un abono parcial: desmarca «Descuento por pronto pago»)`)) return; }
+  { const cj = cajaGemelas(f).find(g => g.origen === 'conciliacion' && g.estado === 'pagado');
+    if (cj) { if (confirm(`Este pago ya se registró en la caja de COE Conciliación:\n${cj.descripcion} · ${$$(cj.monto_pagado)} el ${fmtD(cj.fecha_pago)}.\n\n¿Unirlo a esta cuenta en lugar de registrar otro pago? (Aceptar = unir · Cancelar = seguir con un pago nuevo)`)) { CM('mGen'); return unirCaja(id, cj.id); } } }
   { const ref = document.getElementById('pgR').value, yr = pagoRefDup(ref, monto, [f.entidad_id], id);
     if (yr) { const o = FAC.find(x => x.id === yr.factura_id); if (!confirm(`La referencia ${ref} ya está registrada en otro pago: ${nomEnt(o?.entidad_id)} · ${o?.descripcion || ''} · ${$$(yr.monto)} del ${fmtD(yr.fecha_pago)}.
 
