@@ -3534,7 +3534,15 @@ async function guardarEdicionPend(id) {
   const r = await rpcDirector('fin_tarea_editar', { p_tarea: id, p_datos: d }, { titulo: 'Firmar edición · Director', sub: t.titulo });
   if (r) { toast(r.sin_cambios ? 'Sin cambios' : 'Pendiente actualizado', 'success'); await cargarTodo(); verPendiente(id); }
 }
-function eliminarPendiente(id) {
+// Eliminar: solo el Director, con una ventana de confirmación
+async function eliminarPendiente(id) {
+  const t = TAR.find(x => x.id === id); if (!t || !esAdmin()) return;
+  const cump = t.estado === 'cumplida';
+  if (!confirm(`¿Está seguro que desea eliminar este pendiente?\n\n«${t.titulo}»\n${respNom(respKey(t))} · vence ${fmtD(t.fecha_limite)}${cump ? '\n\nOJO: ya está cumplido; deja de contar en la evaluación.' : ''}`)) return;
+  const r = await rpcDirector('fin_tarea_eliminar', { p_tarea: id, p_motivo: 'Eliminado por Dirección' }, { titulo: 'Eliminar pendiente · Director', sub: t.titulo });
+  if (r) { CM('mGen'); toast('Pendiente eliminado', 'success'); await cargarTodo(); }
+}
+function eliminarPendienteDetalle(id) {
   const t = TAR.find(x => x.id === id); if (!t) return;
   const av = AVA.filter(a => a.tarea_id === id && a.tipo !== 'creacion');
   const evs = AVA.filter(a => a.tarea_id === id && a.evidencia_url).map(a => a.evidencia_url);
@@ -4066,7 +4074,7 @@ function pendTarjeta(t) {
       <div>${ven ? `<b style="color:var(--dg)">Venció hace ${-dv} d</b> (${fmtD(t.fecha_limite)})` : dv === null ? 'Sin fecha' : `Vence ${fmtD(t.fecha_limite)}${dv <= 3 ? ` · <b style="color:var(--wn)">${dv === 0 ? 'hoy' : 'en ' + dv + ' d'}</b>` : ''}`}${t.reprogramaciones ? ` · reprogramado ${t.reprogramaciones}×` : ''}</div>
       <div>${RUB_LBL[rubroDe(t)][1]} ${esc(RUB_LBL[rubroDe(t)][2])}${t.entregable ? ' · entrega: ' + esc(t.entregable) : ''}</div>
       ${t.ultimo_avance ? `<div>Último avance: ${esc(String(t.ultimo_avance).slice(0, 120))} <span style="color:var(--td)">${t.ultimo_avance_at ? fmtDT(t.ultimo_avance_at) : ''}</span></div>` : abiertaT(t) && ss >= 3 ? `<div style="color:var(--or)">Sin seguimiento hace ${ss} d</div>` : ''}
-      <div class="pcard-btn"><button class="btn btn-s btn-sm" onclick="verPendiente('${t.id}')">Ver todo</button>${abiertaT(t) && puede('tareas') ? `<button class="btn btn-s btn-sm" onclick="avancePendiente('${t.id}')">Avance</button><button class="btn btn-p btn-sm" onclick="cumplirTarea('${t.id}')">Cumplir</button>` : ''}${esAdmin() && t.estado !== 'cancelada' ? `<button class="btn btn-s btn-sm" title="Modificar" onclick="editarPendiente('${t.id}')">✎</button><button class="btn btn-s btn-sm" title="Eliminar" onclick="eliminarPendiente('${t.id}')">🗑</button>` : ''}</div>
+      <div class="pcard-btn"><button class="btn btn-s btn-sm" onclick="verPendiente('${t.id}')">Ver todo</button>${esAdmin() && t.estado !== 'cancelada' ? `<button class="btn btn-d btn-sm" title="Eliminar (solo Director)" onclick="event.stopPropagation();eliminarPendiente('${t.id}')">🗑</button>` : ''}${abiertaT(t) && puede('tareas') ? `<button class="btn btn-s btn-sm" onclick="avancePendiente('${t.id}')">Avance</button><button class="btn btn-p btn-sm" onclick="cumplirTarea('${t.id}')">Cumplir</button>` : ''}${esAdmin() && t.estado !== 'cancelada' ? `<button class="btn btn-s btn-sm" title="Modificar" onclick="editarPendiente('${t.id}')">✎</button><button class="btn btn-s btn-sm" title="Eliminar" onclick="eliminarPendiente('${t.id}')">🗑</button>` : ''}</div>
     </div>` : ''}</div>`;
 }
 VIEW.pColAb = VIEW.pColAb || {};
@@ -4084,11 +4092,22 @@ function pendTablero(L) {
   }).join('')}</div>`;
 }
 // Director: con su sesión segura edita/elimina sin PIN; si no hay sesión, pide PIN
+// Director: en un equipo de confianza no se pide PIN (el equipo se registró una vez con su PIN)
+const DISP_K = () => 'coe_fin_disp_' + (cu && cu.id);
 async function rpcDirector(fn, args, opts) {
+  let tok = null; try { tok = localStorage.getItem(DISP_K()); } catch { }
+  const conDisp = ['fin_tarea_eliminar', 'fin_tarea_editar'].includes(fn); if (!conDisp) tok = 'x';
+  if (esAdmin() && conDisp && tok) {
+    try { const { data, error } = await sb.rpc(fn, { ...args, p_usuario: cu.id, p_pin: 'dev:' + tok }); if (!error && data?.ok) return data; if (!error && data && data.error !== 'pin') { toast(ERR[data.error] || data.error, 'error'); return null; } if (data?.error === 'pin') { tok = null; try { localStorage.removeItem(DISP_K()); } catch { } } } catch (e) { }
+  }
   if (esAdmin()) {
     try { const { data, error } = await sb.rpc(fn, { ...args, p_usuario: cu.id, p_pin: null }); if (!error && data?.ok) return data; if (!error && data && !['pin', 'sesion', 'usuario'].includes(data.error)) { toast(ERR[data.error] || data.error, 'error'); return null; } } catch (e) { }
   }
-  return rpcFirmado(fn, args, opts);
+  const r = await rpcFirmado(fn, args, opts);
+  if (r && esAdmin() && !tok && confirm('¿Confiar en este equipo?\n\nEn este equipo ya no se pedirá tu PIN para eliminar o editar pendientes; solo la ventana de confirmación.')) {
+    try { const { data } = await sb.rpc('fin_disp_confiar', { p_usuario: cu.id, p_pin: r._pin, p_nombre: (navigator.userAgent || '').slice(0, 110) }); if (data?.ok) { localStorage.setItem(DISP_K(), data.token); toast('Equipo de confianza registrado', 'success'); } } catch { }
+  }
+  return r;
 }
 
 // ══ DOCUMENTOS IMPRIMIBLES (una página, con logo) ══
@@ -4265,11 +4284,11 @@ async function activarAvisos() {
   try { if (!sub) sub = await SWREG.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(VAPID_PUB) }); }
   catch (e) { toast('No se pudo suscribir: ' + e.message, 'error'); return; }
   const disp = (esIOS() ? 'iPhone/iPad' : /Android/i.test(navigator.userAgent) ? 'Teléfono Android' : 'Computadora') + ' · ' + (/Edg\//.test(navigator.userAgent) ? 'Edge' : /Chrome\//.test(navigator.userAgent) ? 'Chrome' : /Safari\//.test(navigator.userAgent) ? 'Safari' : 'Navegador');
-  const r = await rpcDirector('fin_push_suscribir', { p_usuario: cu.id, p_sub: sub.toJSON(), p_dispositivo: disp }, 'Activar avisos para ' + cu.nombre + ' en este equipo');
+  const r = await rpcPinDirector('fin_push_suscribir', { p_usuario: cu.id, p_sub: sub.toJSON(), p_dispositivo: disp }, 'Activar avisos para ' + cu.nombre + ' en este equipo');
   if (r) { AVISOS_ON = true; toast('Avisos activados en este equipo para ' + cu.nombre, 'success'); renderTab(); }
 }
 // Autorización con el PIN del Director General (aunque la sesión abierta sea de otra persona)
-async function rpcDirector(fn, args, sub) {
+async function rpcPinDirector(fn, args, sub) {
   let pin; try { pin = await askPin('PIN del Director General', sub || ''); } catch { return null; }
   const { data, error } = await sb.rpc(fn, { ...args, p_pin: pin });
   if (error) { toast('Error: ' + error.message, 'error'); return null; }
@@ -4282,7 +4301,7 @@ async function probarAvisos() {
 }
 async function desactivarAvisos() {
   const s = SWREG && await SWREG.pushManager.getSubscription().catch(() => null);
-  if (s) { const r = await rpcDirector('fin_push_quitar', { p_usuario: cu.id, p_endpoint: s.endpoint }, 'Quitar avisos de este equipo'); if (!r) return; try { await s.unsubscribe(); } catch { } }
+  if (s) { const r = await rpcPinDirector('fin_push_quitar', { p_usuario: cu.id, p_endpoint: s.endpoint }, 'Quitar avisos de este equipo'); if (!r) return; try { await s.unsubscribe(); } catch { } }
   AVISOS_ON = false; toast('Avisos desactivados en este equipo', 'info'); renderTab();
 }
 function bannerAvisos() {
@@ -4302,23 +4321,43 @@ const MOMENTOS = [['manana', 9, 0], ['mediodia', 13, 0], ['tarde', 17, 30]];
 function itemsTuDia() {
   if (['contadora', 'administracion'].includes(cu.rol) || (puede('tareas') && !esAdmin() && cu.rol !== 'direccion')) return faltantesContadora(cu);
   const I = [], hoy = hoyISO();
-  TAR.filter(t => esDe(t, cu) && abiertaT(t)).forEach(t => { const d = diasA(t.fecha_limite); if (d <= 0) I.push({ cat: 'pend', d, crit: t.prioridad === 'critico', t: t.titulo, m: d < 0 ? `venció ${fmtD(t.fecha_limite)}` : 'vence hoy', go: `verPendiente('${t.id}')` }); });
-  TAR.filter(t => t.requiere_conformidad && t.estado === 'cumplida' && !t.conformidad_at && puedeConformidad(t)).forEach(t => I.push({ cat: 'pend', d: 0, crit: false, t: 'Firmar de conformidad: ' + t.titulo, m: `${respNom(respKey(t))} lo entregó ${fmtDT(t.cumplida_at)}`, go: `verPendiente('${t.id}')` }));
-  TAR.filter(t => abiertaT(t) && t.prioridad === 'critico' && diasA(t.fecha_limite) < -2 && !esDe(t, cu)).forEach(t => I.push({ cat: 'pend', d: -1, crit: true, t: 'ESCALADO · ' + t.titulo, m: `${respNom(respKey(t))} · ${-diasA(t.fecha_limite)} días de atraso · ${t.ultimo_avance || 'sin avance'}`, go: `verPendiente('${t.id}')` }));
-  propuestas().forEach(f => { if (diasA(f.propuesta_pago) <= 0) I.push({ cat: 'pago', d: diasA(f.propuesta_pago), crit: false, t: `Pago propuesto · ${nomEnt(f.entidad_id)} · ${$$(saldo(f))}`, m: `para el ${fmtD(f.propuesta_pago)}`, go: `verCuenta('${f.id}')` }); });
-  PED.filter(p => p.estado === 'solicitado' && enMiSede(p) && puede('pedidos', 3)).forEach(p => I.push({ cat: 'ped', d: 0, crit: !!p.urgente, t: `Pedido por autorizar ${p.folio}${p.urgente ? ' · URGENTE' : ''}`, m: `${p.area} · ${$$(p.monto_estimado)}`, go: `verPedido('${p.id}')` }));
+  TAR.filter(t => esDe(t, cu) && abiertaT(t)).forEach(t => { const d = diasA(t.fecha_limite); if (d <= 0) I.push({ cat: 'pend', d, crit: t.prioridad === 'critico', auto: ['quirofano', 'farmacia'].includes(t.origen), id: t.id, t: t.titulo, m: (d < 0 ? `venció ${fmtD(t.fecha_limite)}` : 'vence hoy') + (num(t.repeticiones) > 1 ? ` · se repite desde el ${fmtD(t.primer_aviso)} (${t.repeticiones} avisos)` : ''), mot: motivoTarea(t), go: `verPendiente('${t.id}')` }); });
+  TAR.filter(t => t.requiere_conformidad && t.estado === 'cumplida' && !t.conformidad_at && puedeConformidad(t)).forEach(t => I.push({ cat: 'pend', d: 0, crit: false, t: 'Firmar de conformidad: ' + t.titulo, mot: 'Ya lo entregaron; falta que lo revises y firmes', m: `${respNom(respKey(t))} lo entregó ${fmtDT(t.cumplida_at)}`, go: `verPendiente('${t.id}')` }));
+  TAR.filter(t => abiertaT(t) && t.prioridad === 'critico' && diasA(t.fecha_limite) < -2 && !esDe(t, cu)).forEach(t => I.push({ cat: 'pend', d: -1, crit: true, t: 'ESCALADO · ' + t.titulo, id: t.id, auto: ['quirofano', 'farmacia'].includes(t.origen), m: `${respNom(respKey(t))} · ${-diasA(t.fecha_limite)} días de atraso · ${t.ultimo_avance || 'sin avance'}`, mot: 'Es crítico y lleva más de 2 días vencido sin cumplirse; por eso sube a Dirección. ' + motivoTarea(t), go: `verPendiente('${t.id}')` }));
+  propuestas().forEach(f => { if (diasA(f.propuesta_pago) <= 0) I.push({ cat: 'pago', d: diasA(f.propuesta_pago), crit: false, t: `Pago propuesto · ${nomEnt(f.entidad_id)} · ${$$(saldo(f))}`, m: `para el ${fmtD(f.propuesta_pago)}`, mot: 'Se propuso pagarlo en esa fecha y sigue sin pago registrado', go: `verCuenta('${f.id}')` }); });
+  PED.filter(p => p.estado === 'solicitado' && enMiSede(p) && puede('pedidos', 3)).forEach(p => I.push({ cat: 'ped', d: 0, crit: !!p.urgente, t: `Pedido por autorizar ${p.folio}${p.urgente ? ' · URGENTE' : ''}`, m: `${p.area} · ${$$(p.monto_estimado)}`, mot: 'Falta tu autorización' + (p.urgente ? '; el área lo marcó urgente' : ''), go: `verPedido('${p.id}')` }));
   return I;
+}
+// Por qué aparece cada aviso: quién lo generó y qué falta
+function motivoTarea(t) {
+  const desc = String(t.descripcion || '').split('\n').map(x => x.replace(/^[•\-\s]+/, '').trim()).filter(x => x && !/^Aviso automático/i.test(x));
+  const de = t.origen === 'quirofano' ? 'Aviso automático de COE Quirófano' : t.origen === 'farmacia' ? 'Aviso automático de COE Farmacia' : t.origen === 'cronograma' ? 'Cronograma contable' : t.origen === 'fpe' ? 'Factura por entregar' : t.creada_por ? 'Asignado por ' + nomUsr(t.creada_por) : 'Pendiente asignado';
+  return de + (desc.length ? ': ' + desc.slice(0, 2).join(' · ').slice(0, 160) : '');
+}
+async function descartarAviso(id) {
+  const t = TAR.find(x => x.id === id); if (!t) return;
+  const m = prompt(`Descartar «${t.titulo}»\n\nMotivo (opcional):`, t.origen === 'quirofano' || t.origen === 'farmacia' ? 'Ya se atendió' : 'Ya no aplica');
+  if (m === null) return;
+  const r = await rpcDirector('fin_tarea_eliminar', { p_tarea: id, p_motivo: m.trim() || 'Descartado por Dirección' }, { titulo: 'Descartar aviso · Director', sub: t.titulo });
+  if (r) { toast('Aviso descartado', 'success'); await cargarTodo(); ventanaTuDia('aviso', true); }
 }
 function ventanaTuDia(momento, forzar) {
   if (!cu) return;
-  const I = itemsTuDia(), venc = I.filter(x => x.d < 0), hoy = I.filter(x => x.d === 0), crit = I.filter(x => x.crit && x.d >= 0);
-  if (!forzar && !venc.length && !hoy.length && !crit.length) return;
-  const sec = (t, L, cls) => L.length ? `<h4 style="margin:6px 0 8px;font-size:13px">${t} (${L.length})</h4><div class="alist" style="margin-bottom:12px">${L.slice(0, 8).map(x => `<div class="aitem ${cls}" onclick="CM('mGen');${x.go}"><div><div class="at">${esc(x.t)}</div><div class="am">${x.m}</div></div></div>`).join('')}${L.length > 8 ? `<div class="mini">y ${L.length - 8} más…</div>` : ''}</div>` : '';
+  const T = itemsTuDia(), auto = T.filter(x => x.auto), I = T.filter(x => !x.auto);
+  // Urgente de verdad: lo crítico vencido o de hoy; luego lo de hoy; luego lo vencido no crítico; los avisos automáticos aparte
+  const crit = I.filter(x => x.crit && x.d <= 0), hoy = I.filter(x => !x.crit && x.d === 0), venc = I.filter(x => !x.crit && x.d < 0), critF = I.filter(x => x.crit && x.d > 0);
+  if (!forzar && !venc.length && !hoy.length && !crit.length && !critF.length && !auto.length) return;
+  const sec = (t, L, cls, sub) => L.length ? `<h4 style="margin:6px 0 ${sub ? 2 : 8}px;font-size:13px">${t} (${L.length})</h4>${sub ? `<div class="mini" style="margin-bottom:8px">${sub}</div>` : ''}<div class="alist" style="margin-bottom:12px">${L.slice(0, 8).map(x => `<div class="aitem ${cls}" style="display:flex;gap:8px;align-items:flex-start" onclick="CM('mGen');${x.go}"><div style="flex:1"><div class="at">${esc(x.t)}</div><div class="am">${x.m}</div>${x.mot ? `<div class="am" style="margin-top:2px"><b>Motivo:</b> ${esc(x.mot)}</div>` : ''}</div>${esAdmin() && x.id ? `<button class="btn btn-s btn-sm" title="Descartar con motivo" onclick="event.stopPropagation();descartarAviso('${x.id}')">✕</button>` : ''}</div>`).join('')}${L.length > 8 ? `<div class="mini">y ${L.length - 8} más…</div>` : ''}</div>` : '';
   const tit = { manana: 'Buenos días · tu día', mediodia: 'Revisión de mediodía', tarde: 'Antes de cerrar el día', apertura: 'Tu día', aviso: 'Tu día' }[momento] || 'Tu día';
-  const cuerpo = (venc.length + hoy.length + crit.length) ? sec('⛔ Vencido', venc, 'r') + sec('📌 Para hoy', hoy, 'a') + sec('⚠ Crítico', crit, 'r') : '<div class="emp"><div class="ic">✓</div><p>Nada vencido ni pendiente para hoy</p></div>';
+  const nUrg = crit.length + hoy.length;
+  const cuerpo = (venc.length + hoy.length + crit.length + critF.length + auto.length)
+    ? `<div class="mini" style="margin-bottom:10px">${nUrg ? `<b style="color:var(--dg)">Urgente de verdad: ${nUrg}</b>` : '<b style="color:var(--sc)">Nada urgente hoy</b>'}${venc.length ? ` · ${venc.length} atrasado(s) no crítico(s)` : ''}${auto.length ? ` · ${auto.length} aviso(s) automático(s)` : ''}</div>`
+      + sec('🔴 Urgente: crítico vencido o de hoy', crit, 'r') + sec('📌 Para hoy', hoy, 'a') + sec('⚠ Crítico próximo', critF, 'a') + sec('⏳ Atrasado, no crítico', venc, '')
+      + sec('🤖 Avisos automáticos de quirófano y farmacia', auto, '', 'Los genera el sistema cada día hasta que se resuelve; ya no se repiten: se juntan en uno solo. Descártalos con ✕ cuando estén atendidos.')
+    : '<div class="emp"><div class="ic">✓</div><p>Nada vencido ni pendiente para hoy</p></div>';
   const pie = `${momento === 'tarde' && puede('tareas') && !esAdmin() && !yaCerre() ? `<button class="btn btn-w" onclick="CM('mGen');cerrarDia()">Cerrar mi día</button>` : ''}<button class="btn btn-s" onclick="CM('mGen')">Entendido</button><button class="btn btn-p" onclick="CM('mGen');goTab('dash')">Ir a mi tablero</button>`;
   modalAviso(`${tit} · ${new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}`, cuerpo, pie, 'lg');
-  if (document.hidden) notificar(`${venc.length} vencido(s) · ${hoy.length} para hoy · ${crit.length} crítico(s)`);
+  if (document.hidden) notificar(`${nUrg} urgente(s) · ${venc.length} atrasado(s) · ${auto.length} aviso(s) automático(s)`);
 }
 function revisarTuDia() {
   if (!cu || document.getElementById('mGen').style.display === 'flex' || document.getElementById('pinOv').style.display === 'flex') return;
