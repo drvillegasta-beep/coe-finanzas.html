@@ -2083,18 +2083,18 @@ function calDia(k) {
 }
 
 // ══ PEDIDOS / ÓRDENES DE COMPRA ════════════════
-const PED_EST = { solicitado: ['Por autorizar', 'bdg-pnd'], autorizado: ['Autorizado', 'bdg-aut'], rechazado: ['Rechazado', 'bdg-can'], enviado: ['Enviado al proveedor', 'bdg-ped-env'], recibido: ['Recibido', 'bdg-ped-rec'], facturado: ['Facturado', 'bdg-apr'], cancelado: ['Cancelado', 'bdg-can'] };
+const PED_EST = { cotizacion: ['Cotización (borrador)', 'bdg-aut'], solicitado: ['Por autorizar', 'bdg-pnd'], autorizado: ['Autorizado', 'bdg-aut'], rechazado: ['Rechazado', 'bdg-can'], enviado: ['Enviado al proveedor', 'bdg-ped-env'], recibido: ['Recibido', 'bdg-ped-rec'], facturado: ['Facturado', 'bdg-apr'], cancelado: ['Cancelado', 'bdg-can'] };
 const AREAS = ['Quirófano', 'Farmacia', 'Óptica', 'Consulta', 'Limpieza', 'Papelería', 'Mantenimiento', 'Administración', 'Laboratorio'];
 function rPedidos() {
   let L = PED.filter(enMiSede);
   if (VIEW.pedF === 'activos') L = L.filter(p => ['solicitado', 'autorizado', 'enviado'].includes(p.estado));
   else if (VIEW.pedF !== 'todos') L = L.filter(p => p.estado === VIEW.pedF);
-  const chips = [['activos', 'Pendientes'], ['solicitado', 'Por autorizar'], ['autorizado', 'Autorizados'], ['enviado', 'Enviados'], ['recibido', 'Recibidos'], ['todos', 'Todos']]
+  const chips = [['cotizacion', `Cotizaciones${(n => n ? ' · ' + n : '')(PED.filter(p => p.estado === 'cotizacion' && enMiSede(p)).length)}`], ['activos', 'Pendientes'], ['solicitado', 'Por autorizar'], ['autorizado', 'Autorizados'], ['enviado', 'Enviados'], ['recibido', 'Recibidos'], ['todos', 'Todos']]
     .map(([k, l]) => `<span class="chip ${VIEW.pedF === k ? 'act' : ''}" onclick="VIEW.pedF='${k}';renderTab()">${l}</span>`).join('');
   VIEW.pedV = VIEW.pedV || 'prov';
   const vista = `<div class="seg">${[['prov', 'Por proveedor'], ['ped', 'Por pedido']].map(([k, t]) => `<button class="${VIEW.pedV === k ? 'on' : ''}" onclick="VIEW.pedV='${k}';renderTab()">${t}</button>`).join('')}</div>`;
   return `<div class="ph"><div><div class="ptit">Pedidos y órdenes de compra</div><div class="psub">El área solicita · Dirección o Administración autoriza · arriba de ${$$(limiteFirma())} firma el Director General · urgentes con autorización exprés</div></div>
-    ${puede('pedidos') ? `<button class="btn btn-p btn-sm" onclick="nuevoPedido()">+ Nuevo pedido</button>` : ''}</div>
+    ${puede('pedidos') ? `<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-s btn-sm" onclick="nuevoPedido(null,true)" title="Borrador que se modifica libremente; solo pide PIN al autorizarlo">✎ Nueva cotización</button><button class="btn btn-p btn-sm" onclick="nuevoPedido()">+ Nuevo pedido</button></div>` : ''}</div>
   <div class="pad"><div class="tc"><div class="ttb" style="gap:10px">${vista}<div class="chips">${chips}</div></div>
   ${VIEW.pedV === 'prov' ? pedPorProveedor(L) : L.length ? `<table><thead><tr><th>Folio</th><th>Área</th><th>Proveedor</th><th>Descripción</th><th style="text-align:right">Estimado</th><th>Estado</th><th>Solicitó</th><th></th></tr></thead><tbody>
   ${L.map(p => `<tr style="cursor:pointer" onclick="verPedido('${p.id}')"><td><b>${esc(p.folio)}</b>${p.urgente ? ' <span class="bdg bdg-rt-r">URGENTE</span>' : ''}${!p.visto_at && ['solicitado', 'autorizado'].includes(p.estado) ? ' <span class="bdg bdg-aut" title="La Contadora aún no lo abre">NUEVO</span>' : p.visto_at ? `<div class="mini" title="Visto por ${esc(nomUsr(p.visto_por))}">👁 ${fmtDT(p.visto_at)}</div>` : ''}</td><td>${esc(p.area)}<div class="mini">${esc(p.sede || '')}</div></td><td>${esc(nomEnt(p.entidad_id))}</td><td>${esc(p.descripcion)}</td><td class="amt" style="text-align:right">${$$(p.monto_estimado)}</td><td><span class="bdg ${PED_EST[p.estado]?.[1] || ''}">${PED_EST[p.estado]?.[0] || esc(p.estado)}</span></td><td class="mini">${esc(nomUsr(p.solicitado_por))}<br>${fmtDT(p.solicitado_at)}</td>
@@ -2142,25 +2142,28 @@ async function imprimirOCProv(eid) {
     <div class="p"><b>Facturar a:</b> ${esc(RS[0]?.nombre || '')} · RFC ${esc(RS[0]?.rfc || '')}. Enviar XML y PDF a ${esc(CFG.correo_alertas || '')}. Favor de citar los folios <b>${folios.map(esc).join(', ')}</b> en la factura, la remisión y la entrega. En medicamentos y material indicar lote y caducidad.</div>
     <div class="firmas"><div>Elaboró<br><b>${esc(cu.nombre || '')}</b></div><div>Autorizó<br>&nbsp;</div><div>Recibió (proveedor)<br>&nbsp;</div></div>`);
 }
-function nuevoPedido() {
-  window._lineas = [{ c: 1, d: '', p: '' }];
-  modal('Nuevo pedido', `
+function nuevoPedido(cotId, esCot) {
+  const P = cotId ? PED.find(x => x.id === cotId) : null; esCot = esCot || !!P;
+  window._cotId = P?.id || null;
+  window._lineas = P && Array.isArray(P.partidas) && P.partidas.length ? P.partidas.map(l => ({ c: num(l.cantidad) || 1, d: l.descripcion || '', p: num(l.precio ?? l.costo) || '', x: l })) : [{ c: 1, d: '', p: '' }];
+  modal(P ? `Cotización ${P.folio}` : esCot ? 'Nueva cotización' : 'Nuevo pedido', `${esCot ? `<div class="mini" style="margin-bottom:10px;padding:8px 10px;border-radius:var(--rs);background:var(--sf2)">Borrador libre: cambia proveedor, productos, cantidades y precios las veces que quieras, sin PIN. Solo al <b>autorizar pedido</b> se firma con PIN y pasa a orden de compra.</div>` : ''}
     <div class="fgrd">
-      <div class="fgrp"><label>Área que solicita</label><select id="pdA">${AREAS.map(a => `<option>${a}</option>`).join('')}</select></div>
-      <div class="fgrp"><label>Sede</label><select id="pdS"><option>Tacámbaro</option><option ${cu.sede === 'Morelia' ? 'selected' : ''}>Morelia</option></select></div>
-      <div class="fgrp sp2"><label>Proveedor</label><select id="pdE">${optsEnt()}</select></div>
-      <div class="fgrp sp2"><label>Descripción</label><input type="text" id="pdD" placeholder="Ej. LIO monofocal +21.5 para cirugía del jueves"></div>
+      <div class="fgrp"><label>Área que solicita</label><select id="pdA">${AREAS.map(a => `<option ${P && P.area === a ? 'selected' : ''}>${a}</option>`).join('')}</select></div>
+      <div class="fgrp"><label>Sede</label><select id="pdS"><option>Tacámbaro</option><option ${(P ? P.sede : cu.sede) === 'Morelia' ? 'selected' : ''}>Morelia</option></select></div>
+      <div class="fgrp sp2"><label>Proveedor</label><select id="pdE">${optsEnt(P?.entidad_id || '')}</select></div>
+      <div class="fgrp sp2"><label>Descripción</label><input type="text" id="pdD" value="${esc(P?.descripcion && P.descripcion !== 'Cotización' ? P.descripcion : '')}" placeholder="Ej. LIO monofocal +21.5 para cirugía del jueves"></div>
     </div>
     <h4 style="margin:16px 0 6px">Partidas</h4>
     <table class="lines"><thead><tr><th style="width:70px">Cant.</th><th>Producto</th><th style="width:120px">Precio unit.</th><th></th></tr></thead><tbody id="pdL"></tbody></table>
     <button class="btn btn-s btn-sm" style="margin-top:8px" onclick="_lineas.push({c:1,d:'',p:''});pintarLineas()">+ Partida</button>
     <div class="conc-total"><span>Total estimado</span><span id="pdT">$0.00</span></div>
     <div class="fgrd" style="margin-top:14px">
-      <div class="fgrp"><label>Fecha requerida</label><input type="date" id="pdF"></div>
-      <div class="fgrp"><label>&nbsp;</label><label style="text-transform:none;font-size:13px;color:var(--tx)"><input type="checkbox" id="pdU"> Urgente (autorización exprés)</label></div>
-      <div class="fgrp sp2"><label>Notas</label><input type="text" id="pdN"></div>
+      <div class="fgrp"><label>Fecha requerida</label><input type="date" id="pdF" value="${P?.fecha_requerida || ''}"></div>
+      <div class="fgrp"><label>&nbsp;</label><label style="text-transform:none;font-size:13px;color:var(--tx)"><input type="checkbox" id="pdU" ${P?.urgente ? 'checked' : ''}> Urgente (autorización exprés)</label></div>
+      <div class="fgrp sp2"><label>Notas</label><input type="text" id="pdN" value="${esc(P?.notas || '')}"></div>
     </div>`,
-    `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="guardarPedido()">Firmar solicitud</button>`);
+    esCot ? `${P ? `<button class="btn btn-d" onclick="cotBorrar('${P.id}')">Descartar</button>` : ''}<button class="btn btn-s" onclick="CM('mGen')">Cerrar</button><button class="btn btn-s" onclick="cotbGuardar()">💾 Guardar cotización</button><button class="btn btn-p" onclick="cotAutorizar()">✓ Autorizar pedido (PIN)</button>`
+      : `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="guardarPedido()">Firmar solicitud</button>`);
   pintarLineas();
 }
 function pintarLineas() {
@@ -2169,6 +2172,33 @@ function pintarLineas() {
 }
 const totPed = () => _lineas.reduce((s, l) => s + num(l.c) * num(l.p), 0);
 function totLineas() { const e = document.getElementById('pdT'); if (e) e.textContent = $$(totPed()); }
+// Cotización: guardar sin PIN; autorizar con PIN
+function cotDatos() {
+  const partidas = _lineas.filter(l => String(l.d).trim()).map(l => ({ ...(l.x || {}), cantidad: num(l.c), descripcion: String(l.d).trim(), precio: num(l.p) }));
+  return { area: pdA.value, sede: pdS.value, entidad_id: pdE.value, descripcion: pdD.value.trim() || partidas.map(p => p.descripcion).join(', '), partidas, monto_estimado: totPed(), urgente: pdU.checked, fecha_requerida: pdF.value, notas: pdN.value };
+}
+async function cotbGuardar(silencio) {
+  const d = cotDatos();
+  const { data, error } = await sb.rpc('fin_cotizacion_guardar', { p_usuario: cu.id, p_id: window._cotId, p_datos: d });
+  if (error || !data?.ok) { toast(ERR[data?.error] || error?.message || 'No se pudo guardar', 'error'); return null; }
+  window._cotId = data.id; if (!silencio) { toast(`Cotización ${data.folio} guardada`, 'success'); CM('mGen'); await cargarTodo(); }
+  return data;
+}
+async function cotAutorizar() {
+  const d = cotDatos();
+  if (!d.partidas.length && !d.monto_estimado) return toast('Agrega al menos un producto', 'warning');
+  if (!d.entidad_id && !confirm('La cotización no tiene proveedor. ¿Autorizar el pedido así?')) return;
+  const g = await cotbGuardar(true); if (!g) return;
+  const r = await rpcFirmado('fin_cotizacion_autorizar', { p_id: g.id }, { titulo: 'Autorizar pedido', sub: `${g.folio} · ${$$(d.monto_estimado)}`, conDirector: true });
+  if (!r) { await cargarTodo(); return; }
+  CM('mGen'); toast(r.autorizado ? `Pedido ${r.folio} autorizado` : `Pedido ${r.folio} enviado a autorización`, 'success'); await cargarTodo();
+}
+async function cotBorrar(id) {
+  if (!confirm('¿Descartar esta cotización?')) return;
+  const { data } = await sb.rpc('fin_cotizacion_borrar', { p_usuario: cu.id, p_id: id });
+  if (!data?.ok) return toast('No se pudo descartar', 'error');
+  CM('mGen'); toast('Cotización descartada', 'success'); await cargarTodo();
+}
 async function guardarPedido() {
   const partidas = _lineas.filter(l => l.d.trim()).map(l => ({ cantidad: num(l.c), descripcion: l.d.trim(), precio: num(l.p) }));
   const d = { area: pdA.value, sede: pdS.value, entidad_id: pdE.value, descripcion: pdD.value || partidas.map(p => p.descripcion).join(', '), partidas, monto_estimado: totPed(), urgente: pdU.checked, fecha_requerida: pdF.value, notas: pdN.value };
@@ -2195,6 +2225,7 @@ function pedAlmCaja(p) {
 }
 function verPedido(id) {
   const p = PED.find(x => x.id === id); if (!p) return;
+  if (p.estado === 'cotizacion') return nuevoPedido(id, true);
   if (!p.visto_at && ['contadora', 'administracion'].includes(cu.rol)) sb.rpc('fin_pedido_visto', { p_usuario: cu.id, p_pedido: id }).then(({ data }) => { if (data?.ok && !data.ya) { p.visto_at = new Date().toISOString(); p.visto_por = cu.id; } }).catch(() => {});
   const pt = Array.isArray(p.partidas) ? p.partidas : [];
   const corr = CORR.filter(c => c.pedido_id === id);
