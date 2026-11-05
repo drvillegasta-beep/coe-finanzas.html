@@ -629,6 +629,11 @@ tr.trsep td{background:var(--dd);color:var(--dg);font-size:11px;font-weight:800;
 .infprev .kv{display:grid;grid-template-columns:120px 1fr;gap:3px 10px}.infprev .kv b{color:#556;font-size:10px;text-transform:uppercase}
 .infprev .firmas{display:flex;gap:24px}.infprev .firmas div{flex:1;border-top:1px solid #1d2733;padding-top:5px;text-align:center;font-size:10.5px}
 
+.alr-sw{position:relative;overflow:hidden;border-radius:10px}
+.alr-sw .alr-del{position:absolute;inset:0;display:flex;align-items:center;justify-content:flex-end;padding-right:18px;background:var(--dg);color:#fff;font-weight:700;border-radius:10px}
+.alr-sw .aitem{position:relative;touch-action:pan-y}
+.alr-x{padding:2px 8px;align-self:center}
+
 /* ===== Temas COE (mismo sistema que COE Quirófano): colores sobrios; el semáforo se reserva para alertas reales ===== */
 :root,[data-tema="grafito"]{--bg:#141517;--sf:#1B1D20;--sf2:#202327;--sf3:#272A2F;--br:#2F3338;--br2:#454A52;--tx:#E7E5E0;--tm:#9A9C9F;--td:#74777B;
  --pr:#8DB8A5;--pd:rgba(141,184,165,.13);--on-pr:#0F1A15;--in:#A9B7C6;--id:rgba(169,183,198,.12);--pu:#B9AFC9;--pud:rgba(185,175,201,.12);
@@ -1323,6 +1328,7 @@ async function q(tabla, build) {
 }
 async function cargarTodo(silencioso) {
   FALTA_SQL = []; FALLO_CARGA = [];
+  if (cu) sb.rpc('fin_alertas_ocultas_de', { p_usuario: cu.id }).then(({ data }) => { if (Array.isArray(data)) { ALR_OC = new Set(data.map(x => typeof x === 'string' ? x : x.fin_alertas_ocultas_de)); calcAlertas(); if (tab === 'alr') renderTab(); } }).catch(() => { });
   const r = await Promise.all([
     q('fin_entidades', x => x.order('nombre')),
     q('fin_facturas', x => x.order('fecha_vencimiento', { ascending: true, nullsFirst: false })),
@@ -1455,7 +1461,9 @@ async function tick() {
 }
 
 // ══ ALERTAS ════════════════════════════════════
-let ALR = [];
+let ALR = [], ALR_TODAS = [], ALR_OC = new Set();
+// Clave estable de una alerta (sin números que cambian a diario, como «hace 3 días» o el saldo)
+const alrClave = a => normTx((a.t || '') + '|' + (a.m || '')).replace(/[0-9.,$]+/g, '#').replace(/\s+/g, ' ').slice(0, 280);
 const vivas = () => FAC.filter(f => !f.anulado && f.estado !== 'cancelado' && enMiSede(f));
 const saldo = f => Math.max(0, num(f.monto_total) - num(f.monto_pagado) - num(f.descuento_monto));
 // Descuento por pronto pago que ofrece el proveedor (o la factura): % sobre el saldo, vigente hasta captura + días de pronto pago
@@ -1525,7 +1533,9 @@ function calcAlertas() {
   const orden = { r: 0, a: 1, i: 2, v: 3 };
   const modDe = a => /^Almac/.test(a.t) ? 'pedidos' : /^Pago|^Vence/.test(a.t) ? 'cxp' : /^Cobro/.test(a.t) ? 'cxc' : /edido/.test(a.t) ? 'pedidos' : /^Factura/.test(a.t) ? 'fps' : /^Pendiente|cerrado su día/.test(a.t) ? 'tareas' : /^Solicitud de baja/.test(a.t) ? 'cxp' : /^Recurrente/.test(a.t) ? 'recurrentes' : 'revision';
   A.splice(0, A.length, ...A.filter(a => niv(modDe(a)) >= 1));
-  ALR = A.sort((a, b) => orden[a.n] - orden[b.n]);
+  A.forEach(a => a.k = alrClave(a));
+  ALR_TODAS = A.slice();
+  ALR = A.filter(a => !ALR_OC.has(a.k)).sort((a, b) => orden[a.n] - orden[b.n]);
   const urg = ALR.filter(a => a.n === 'r').length;
   const bell = document.getElementById('bellN');
   bell.style.display = ALR.length ? 'block' : 'none'; bell.textContent = ALR.length;
@@ -1564,7 +1574,30 @@ function abrirDestino(h) {
 function alertasHtml(lista) {
   if (!lista.length) return `<div class="emp"><div class="ic">✓</div><p>Sin pendientes. Todo al corriente.</p></div>`;
   window._alrGo = lista.map(a => a.go);
-  return `<div class="alist">${lista.map((a, i) => `<div class="aitem ${a.n}" onclick="CM('mGen');_alrGo[${i}]()"><div style="flex:1"><div class="at">${esc(a.t)}</div><div class="am"><span class="alr-mot ${a.n}">${esc(motivoAlerta(a))}</span> ${esc(a.m)}</div></div><span class="alr-ir">Ir ›</span></div>`).join('')}</div>`;
+  window._alrL = lista;
+  const oc = ALR_TODAS.filter(a => ALR_OC.has(a.k)).length;
+  return `<div class="mini" style="margin:0 0 8px">Desliza una alerta hacia la izquierda (o toca ✕) para eliminarla; te pedirá confirmación.${oc ? ` · ${oc} oculta(s) · <a href="#" onclick="alrMostrarOcultas();return false">mostrarlas otra vez</a>` : ''}</div><div class="alist">${lista.map((a, i) => `<div class="alr-sw" data-i="${i}"><div class="alr-del">🗑 Eliminar</div><div class="aitem ${a.n}" onclick="if(this.dataset.sw){delete this.dataset.sw;return}CM('mGen');_alrGo[${i}]()" ontouchstart="alrTS(event,this)" ontouchmove="alrTM(event,this)" ontouchend="alrTE(event,this,${i})"><div style="flex:1"><div class="at">${esc(a.t)}</div><div class="am"><span class="alr-mot ${a.n}">${esc(motivoAlerta(a))}</span> ${esc(a.m)}</div></div><span class="alr-ir">Ir ›</span><button class="btn btn-s btn-sm alr-x" title="Eliminar alerta" onclick="event.stopPropagation();alrEliminar(${i})">✕</button></div></div>`).join('')}</div>`;
+}
+// Deslizar para eliminar
+let _alrX = null;
+function alrTS(e, el) { const t = e.touches[0]; _alrX = { x: t.clientX, y: t.clientY, dx: 0, h: null }; el.style.transition = 'none'; }
+function alrTM(e, el) { if (!_alrX) return; const t = e.touches[0], dx = t.clientX - _alrX.x, dy = t.clientY - _alrX.y;
+  if (_alrX.h === null && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) _alrX.h = Math.abs(dx) > Math.abs(dy);
+  if (!_alrX.h) return; e.preventDefault(); _alrX.dx = Math.min(0, dx); el.style.transform = `translateX(${_alrX.dx}px)`; el.dataset.sw = '1'; }
+function alrTE(e, el, i) { if (!_alrX) return; const dx = _alrX.dx; _alrX = null; el.style.transition = 'transform .2s'; el.style.transform = '';
+  if (dx < -90) { el.dataset.sw = '1'; setTimeout(() => typeof i === 'number' ? alrEliminar(i) : i(), 150); } else if (Math.abs(dx) < 8) delete el.dataset.sw; }
+async function alrEliminar(i) {
+  const a = (window._alrL || [])[i]; if (!a) return;
+  if (!confirm(`¿Está seguro que desea eliminar esta alerta?\n\n${a.t}\n${a.m || ''}\n\nYa no volverá a aparecer mientras siga igual. El pendiente o la cuenta no se borran.`)) return;
+  const { data, error } = await sb.rpc('fin_alerta_ocultar', { p_usuario: cu.id, p_clave: a.k, p_texto: a.t, p_ocultar: true });
+  if (error || !data?.ok) return toast('No se pudo eliminar la alerta', 'error');
+  ALR_OC.add(a.k); calcAlertas(); toast('Alerta eliminada', 'success');
+  if (document.getElementById('mGen').style.display === 'flex' && /Resumen del día/.test(document.querySelector('#mGen .mh, #mGen h3')?.textContent || '')) mostrarResumen(); else renderTab();
+}
+async function alrMostrarOcultas() {
+  if (!confirm('¿Volver a mostrar todas las alertas que eliminaste?')) return;
+  const { data } = await sb.rpc('fin_alerta_ocultar', { p_usuario: cu.id, p_clave: '*', p_texto: null, p_ocultar: false });
+  if (data?.ok) { ALR_OC = new Set(); calcAlertas(); renderTab(); toast('Alertas restauradas', 'success'); }
 }
 function mostrarResumen() {
   modal(`Resumen del día · ${new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}`, alertasHtml(ALR), `<button class="btn btn-s" onclick="CM('mGen')">Entendido</button>`);
@@ -4370,7 +4403,7 @@ function ventanaTuDia(momento, forzar) {
   // Urgente de verdad: lo crítico vencido o de hoy; luego lo de hoy; luego lo vencido no crítico; los avisos automáticos aparte
   const crit = I.filter(x => x.crit && x.d <= 0), hoy = I.filter(x => !x.crit && x.d === 0), venc = I.filter(x => !x.crit && x.d < 0), critF = I.filter(x => x.crit && x.d > 0);
   if (!forzar && !venc.length && !hoy.length && !crit.length && !critF.length && !auto.length) return;
-  const sec = (t, L, cls, sub) => L.length ? `<h4 style="margin:6px 0 ${sub ? 2 : 8}px;font-size:13px">${t} (${L.length})</h4>${sub ? `<div class="mini" style="margin-bottom:8px">${sub}</div>` : ''}<div class="alist" style="margin-bottom:12px">${L.slice(0, 8).map(x => `<div class="aitem ${cls}" style="display:flex;gap:8px;align-items:flex-start" onclick="CM('mGen');${x.go}"><div style="flex:1"><div class="at">${esc(x.t)}</div><div class="am">${x.m}</div>${x.mot ? `<div class="am" style="margin-top:2px"><b>Motivo:</b> ${esc(x.mot)}</div>` : ''}</div>${esAdmin() && x.id ? `<button class="btn btn-s btn-sm" title="Descartar con motivo" onclick="event.stopPropagation();descartarAviso('${x.id}')">✕</button>` : ''}</div>`).join('')}${L.length > 8 ? `<div class="mini">y ${L.length - 8} más…</div>` : ''}</div>` : '';
+  const sec = (t, L, cls, sub) => L.length ? `<h4 style="margin:6px 0 ${sub ? 2 : 8}px;font-size:13px">${t} (${L.length})</h4>${sub ? `<div class="mini" style="margin-bottom:8px">${sub}</div>` : ''}<div class="alist" style="margin-bottom:12px">${L.slice(0, 8).map(x => `<div class="${esAdmin() && x.id ? 'alr-sw' : ''}">${esAdmin() && x.id ? '<div class="alr-del">🗑 Descartar</div>' : ''}<div class="aitem ${cls}" style="display:flex;gap:8px;align-items:flex-start" onclick="if(this.dataset.sw){delete this.dataset.sw;return}CM('mGen');${x.go}" ${esAdmin() && x.id ? `ontouchstart="alrTS(event,this)" ontouchmove="alrTM(event,this)" ontouchend="alrTE(event,this,()=>descartarAviso('${x.id}'))"` : ''}><div style="flex:1"><div class="at">${esc(x.t)}</div><div class="am">${x.m}</div>${x.mot ? `<div class="am" style="margin-top:2px"><b>Motivo:</b> ${esc(x.mot)}</div>` : ''}</div>${esAdmin() && x.id ? `<button class="btn btn-s btn-sm" title="Descartar con motivo" onclick="event.stopPropagation();descartarAviso('${x.id}')">✕</button>` : ''}</div></div>`).join('')}${L.length > 8 ? `<div class="mini">y ${L.length - 8} más…</div>` : ''}</div>` : '';
   const tit = { manana: 'Buenos días · tu día', mediodia: 'Revisión de mediodía', tarde: 'Antes de cerrar el día', apertura: 'Tu día', aviso: 'Tu día' }[momento] || 'Tu día';
   const nUrg = crit.length + hoy.length;
   const cuerpo = (venc.length + hoy.length + crit.length + critF.length + auto.length)
