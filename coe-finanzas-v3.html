@@ -2144,9 +2144,11 @@ async function imprimirOCProv(eid) {
 }
 function nuevoPedido(cotId, esCot) {
   const P = cotId ? PED.find(x => x.id === cotId) : null; esCot = esCot || !!P;
-  window._cotId = P?.id || null;
+  window._cotId = P?.id || null; window._cotArch = [];
   window._lineas = P && Array.isArray(P.partidas) && P.partidas.length ? P.partidas.map(l => ({ c: num(l.cantidad) || 1, d: l.descripcion || '', p: num(l.precio ?? l.costo) || '', x: l })) : [{ c: 1, d: '', p: '' }];
-  modal(P ? `Cotización ${P.folio}` : esCot ? 'Nueva cotización' : 'Nuevo pedido', `${esCot ? `<div class="mini" style="margin-bottom:10px;padding:8px 10px;border-radius:var(--rs);background:var(--sf2)">Borrador libre: cambia proveedor, productos, cantidades y precios las veces que quieras, sin PIN. Solo al <b>autorizar pedido</b> se firma con PIN y pasa a orden de compra.</div>` : ''}
+  modal(P ? `Cotización ${P.folio}` : esCot ? 'Nueva cotización' : 'Nuevo pedido', `${esCot ? `<div class="mini" style="margin-bottom:10px;padding:8px 10px;border-radius:var(--rs);background:var(--sf2)">Borrador libre: cambia proveedor, productos, cantidades y precios las veces que quieras, sin PIN. Solo al <b>autorizar pedido</b> se firma con PIN y pasa a orden de compra.</div>
+    <div class="prop" style="margin:0 0 12px;border-style:dashed"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><label class="btn btn-s btn-sm" style="cursor:pointer">📄 Subir cotización del proveedor (PDF o foto)<input type="file" accept=".pdf,image/*" multiple style="display:none" onchange="cotbLeer([...this.files]);this.value=''"></label><span class="mini">La leo y lleno proveedor, productos y precios; luego corriges o agregas a mano lo que quieras.</span></div>
+      <div id="cotbArch" class="mini" style="margin-top:6px">${(Array.isArray(P?.cotizaciones) ? P.cotizaciones : []).map(c => `📎 <a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.nombre || 'cotización')}</a>${c.monto ? ' · ' + $$(c.monto) : ''}`).join(' &nbsp; ')}</div></div>` : ''}
     <div class="fgrd">
       <div class="fgrp"><label>Área que solicita</label><select id="pdA">${AREAS.map(a => `<option ${P && P.area === a ? 'selected' : ''}>${a}</option>`).join('')}</select></div>
       <div class="fgrp"><label>Sede</label><select id="pdS"><option>Tacámbaro</option><option ${(P ? P.sede : cu.sede) === 'Morelia' ? 'selected' : ''}>Morelia</option></select></div>
@@ -2173,15 +2175,56 @@ function pintarLineas() {
 const totPed = () => _lineas.reduce((s, l) => s + num(l.c) * num(l.p), 0);
 function totLineas() { const e = document.getElementById('pdT'); if (e) e.textContent = $$(totPed()); }
 // Cotización: guardar sin PIN; autorizar con PIN
+// Leer la cotización del proveedor (PDF con texto, PDF escaneado o foto) y llenar la captura
+window._cotArch = [];
+async function cotbLeer(files) {
+  const box = document.getElementById('cotbArch');
+  for (const f of files) {
+    if (box) box.innerHTML += `<div>⏳ Leyendo ${esc(f.name)}…</div>`;
+    let u = null, tx = '';
+    try { u = await subirArchivo(f, 'cotizaciones'); } catch (e) { toast('No se pudo subir ' + f.name + ': ' + e.message, 'error'); continue; }
+    try { tx = /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name) ? await pdfTexto(f) : await ocrTexto(f, m => { const b = document.getElementById('cotbArch'); if (b) b.lastElementChild && (b.lastElementChild.textContent = '⏳ ' + f.name + ': ' + m); }); } catch (e) { tx = ''; }
+    const R = cotbParse(tx);
+    window._cotArch.push({ url: u.url, sha256: u.sha, nombre: f.name, monto: R.total || null });
+    if (R.ent && document.getElementById('pdE') && !document.getElementById('pdE').value) document.getElementById('pdE').value = R.ent.id;
+    const vacias = _lineas.every(l => !String(l.d).trim());
+    if (R.lineas.length) { if (vacias) _lineas = []; R.lineas.forEach(l => _lineas.push(l)); }
+    else if (R.total) { if (vacias) _lineas = []; _lineas.push({ c: 1, d: 'Según cotización ' + f.name, p: R.total }); }
+    if (document.getElementById('pdD') && !document.getElementById('pdD').value && R.lineas.length) document.getElementById('pdD').value = R.lineas.slice(0, 3).map(l => l.d).join(', ').slice(0, 120);
+    pintarLineas();
+    if (box) { box.lastElementChild.remove(); box.innerHTML += `<div>📎 <a href="${esc(u.url)}" target="_blank" rel="noopener">${esc(f.name)}</a> · ${R.lineas.length ? R.lineas.length + ' producto(s) leídos' : R.total ? 'solo se leyó el total' : 'no se pudo leer: captura a mano'}${R.ent ? ' · proveedor: ' + esc(R.ent.nombre) : ''}${R.total ? ' · total ' + $$(R.total) : ''}${(sm => !R.total || !R.lineas.length || Math.abs(R.total - sm) <= 1 ? '' : Math.abs(R.total - sm * 1.16) <= 1 ? ` <span style="color:var(--wn)">(precios sin IVA: ${$$(sm)} + IVA = ${$$(R.total)}) <a href="#" onclick="event.preventDefault();_lineas.forEach(l=>l.p=Math.round(num(l.p)*116)/100);pintarLineas();this.parentNode.textContent='(precios ya con IVA)'">poner precios con IVA</a></span>` : ' <span style="color:var(--wn)">(la suma de productos no cuadra con el total: revísalo)</span>')(R.lineas.reduce((s, l) => s + l.c * l.p, 0))}</div>`; }
+  }
+}
+function cotbParse(tx) {
+  const T = String(tx || ''), U = T.toUpperCase(), mon = x => num(String(x).replace(/[$,\s]/g, ''));
+  const rfc = (U.match(/\b[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}\b/g) || []).find(r => !miRFCs().includes(r));
+  let ent = rfc ? ENT.find(e => (e.rfc || '').toUpperCase() === rfc) : null;
+  if (!ent) ent = ENT.filter(e => e.nombre && e.nombre.length >= 5 && normTx(U).includes(normTx(e.nombre))).sort((a, b) => b.nombre.length - a.nombre.length)[0] || null;
+  const tots = [...U.matchAll(/(?<!SUB)TOTAL\b[^\d\n]{0,30}?([\d,]+\.\d{2})/g)].map(m => mon(m[1])).filter(x => x > 0);
+  const lineas = [], M = '\\$?\\s?([\\d,]+\\.\\d{1,2})';
+  const re1 = new RegExp('^\\s*(\\d+(?:\\.\\d+)?)\\s+(?:(?:PZA|PZAS|PIEZA|PIEZAS|CAJA|FCO|FRASCO|H87|E48|UN|UNIDAD|SERV|SERVICIO|KIT)\\s+)?(.{3,}?)\\s+' + M + '\\s+' + M + '\\s*$', 'i');
+  const re2 = new RegExp('^\\s*(.{3,}?)\\s+(\\d+(?:\\.\\d+)?)\\s+' + M + '\\s+' + M + '\\s*$', 'i');
+  T.split(/\n/).forEach(ln => {
+    if (/SUBTOTAL|\bTOTAL\b|\bIVA\b|DESCUENTO|SALDO|ANTICIPO/i.test(ln)) return;
+    let m = ln.match(re1), q, d, pu, imp;
+    if (m) { q = num(m[1]); d = m[2]; pu = mon(m[3]); imp = mon(m[4]); }
+    else if ((m = ln.match(re2))) { d = m[1]; q = num(m[2]); pu = mon(m[3]); imp = mon(m[4]); }
+    if (!m || !(q > 0) || !(pu > 0)) return;
+    if (Math.abs(q * pu - imp) > Math.max(1, imp * 0.02)) { if (Math.abs(imp * q - pu) <= Math.max(1, pu * 0.02)) [pu, imp] = [imp, pu]; else return; }
+    d = d.replace(/^[\d\-]{6,}\s+/, '').replace(/\s{2,}/g, ' ').trim();
+    if (d.length >= 3) lineas.push({ c: q, d: d.slice(0, 120), p: Math.round(pu * 100) / 100 });
+  });
+  return { ent, rfc, total: tots.length ? tots[tots.length - 1] : 0, lineas };
+}
 function cotDatos() {
   const partidas = _lineas.filter(l => String(l.d).trim()).map(l => ({ ...(l.x || {}), cantidad: num(l.c), descripcion: String(l.d).trim(), precio: num(l.p) }));
-  return { area: pdA.value, sede: pdS.value, entidad_id: pdE.value, descripcion: pdD.value.trim() || partidas.map(p => p.descripcion).join(', '), partidas, monto_estimado: totPed(), urgente: pdU.checked, fecha_requerida: pdF.value, notas: pdN.value };
+  return { area: pdA.value, sede: pdS.value, entidad_id: pdE.value, descripcion: pdD.value.trim() || partidas.map(p => p.descripcion).join(', '), partidas, monto_estimado: totPed(), urgente: pdU.checked, fecha_requerida: pdF.value, notas: pdN.value, archivos: window._cotArch || [] };
 }
 async function cotbGuardar(silencio) {
   const d = cotDatos();
   const { data, error } = await sb.rpc('fin_cotizacion_guardar', { p_usuario: cu.id, p_id: window._cotId, p_datos: d });
   if (error || !data?.ok) { toast(ERR[data?.error] || error?.message || 'No se pudo guardar', 'error'); return null; }
-  window._cotId = data.id; if (!silencio) { toast(`Cotización ${data.folio} guardada`, 'success'); CM('mGen'); await cargarTodo(); }
+  window._cotId = data.id; window._cotArch = []; if (!silencio) { toast(`Cotización ${data.folio} guardada`, 'success'); CM('mGen'); await cargarTodo(); }
   return data;
 }
 async function cotAutorizar() {
