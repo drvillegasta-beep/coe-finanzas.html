@@ -4378,15 +4378,21 @@ function ventanaTuDia(momento, forzar) {
       + sec('🔴 Urgente: crítico vencido o de hoy', crit, 'r') + sec('📌 Para hoy', hoy, 'a') + sec('⚠ Crítico próximo', critF, 'a') + sec('⏳ Atrasado, no crítico', venc, '')
       + sec('🤖 Avisos automáticos de quirófano y farmacia', auto, '', 'Los genera el sistema cada día hasta que se resuelve; ya no se repiten: se juntan en uno solo. Descártalos con ✕ cuando estén atendidos.')
     : '<div class="emp"><div class="ic">✓</div><p>Nada vencido ni pendiente para hoy</p></div>';
-  const pie = `${momento === 'tarde' && puede('tareas') && !esAdmin() && !yaCerre() ? `<button class="btn btn-w" onclick="CM('mGen');cerrarDia()">Cerrar mi día</button>` : ''}<button class="btn btn-s" onclick="CM('mGen')">Entendido</button><button class="btn btn-p" onclick="CM('mGen');goTab('dash')">Ir a mi tablero</button>`;
+  const pie = `${momento === 'tarde' && puede('tareas') && !esAdmin() && !yaCerre() ? `<button class="btn btn-w" onclick="CM('mGen');cerrarDia()">Cerrar mi día</button>` : ''}${forzar ? '' : `<button class="btn btn-s" onclick="tdCallarHoy()" title="No volver a abrir sola hoy">No mostrar más hoy</button>`}<button class="btn btn-s" onclick="CM('mGen')">Entendido</button><button class="btn btn-p" onclick="CM('mGen');goTab('dash')">Ir a mi tablero</button>`;
   modalAviso(`${tit} · ${new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}`, cuerpo, pie, 'lg');
   if (document.hidden) notificar(`${nUrg} urgente(s) · ${venc.length} atrasado(s) · ${auto.length} aviso(s) automático(s)`);
 }
+// Se muestra sola solo al abrir y a las 9:00, 13:00 y 17:30; nunca dos veces en menos de una hora (aunque el equipo no guarde datos)
+const TD_MEM = { vistos: {}, ult: 0, callar: '' };
+function tdCallarHoy() { TD_MEM.callar = isoD(new Date()); try { localStorage.setItem('coe_fin_tudia_callar_' + cu.id, TD_MEM.callar); } catch { } CM('mGen'); toast('«Tu día» ya no se abrirá solo hoy. Lo ves con el botón «Tu día».', 'info'); }
 function revisarTuDia() {
   if (!cu || document.getElementById('mGen').style.display === 'flex' || document.getElementById('pinOv').style.display === 'flex') return;
-  const ah = new Date(), k = 'coe_fin_tudia_' + cu.id + '_' + isoD(ah);
+  const ah = new Date(), dia = isoD(ah), k = 'coe_fin_tudia_' + cu.id + '_' + dia;
+  let callar = TD_MEM.callar; try { callar = localStorage.getItem('coe_fin_tudia_callar_' + cu.id) || callar; } catch { }
+  if (callar === dia || Date.now() - TD_MEM.ult < 3600000) return;
   let vistos = []; try { vistos = JSON.parse(localStorage.getItem(k) || '[]'); } catch { }
-  const marcar = m => { vistos.push(m); try { localStorage.setItem(k, JSON.stringify(vistos)); } catch { } };
+  vistos = [...new Set([...vistos, ...(TD_MEM.vistos[dia] || [])])];
+  const marcar = m => { vistos.push(m); TD_MEM.vistos[dia] = vistos.slice(); TD_MEM.ult = Date.now(); try { localStorage.setItem(k, JSON.stringify(vistos)); } catch { } };
   if (!vistos.includes('apertura')) { marcar('apertura'); MOMENTOS.forEach(([m, h, mi]) => { if (ah.getHours() > h || (ah.getHours() === h && ah.getMinutes() >= mi)) if (!vistos.includes(m)) marcar(m); }); ventanaTuDia('apertura'); return; }
   if (ah.getDay() === 0) return;
   for (const [m, h, mi] of MOMENTOS) if (!vistos.includes(m) && (ah.getHours() > h || (ah.getHours() === h && ah.getMinutes() >= mi))) { marcar(m); ventanaTuDia(m); return; }
@@ -6885,7 +6891,7 @@ function ppSemanas(L, esDirTab) {
   const tarjeta = i => { const x = L[i], tarde = x.prop && x.fecha && x.prop > x.fecha, v = ppVencido(x) && !x.prop;
     return `<div class="ppcard ${x.prop ? 'p' : ''} ${v ? 'v' : ''} ${x.rec ? 'r' : ''}" draggable="${puede('cxp') ? 'true' : 'false'}" ondragstart="event.dataTransfer.setData('text/plain','${i}');this.classList.add('drag')" ondragend="this.classList.remove('drag')" onclick="${ppAccion(x)}" title="${puede('cxp') ? 'Toca para subir el comprobante' : ''}">
       <div class="ppc1"><b>${esc(nomEnt(x.ent))}</b><span class="amt" style="text-align:right">${x.variable && !VIEW.pp.mon[x.k] && !x.est ? '<span class="mini">variable</span>' : $$(ppMonto(x)) + (x.variable ? '<div class="mini pp-var">variable</div>' : '')}</span></div>
-      <div class="mini">${esc(String(x.desc || '').slice(0, 60))}</div>${ppDescChip(x)}
+      <div class="mini">${esc(String(x.desc || '').slice(0, 60))}</div>${ppDescChip(x)}${x.f ? ppDocsBtns(x.f) : ''}
       <div class="ppc2">${x.prop ? `<span class="bdg bdg-aut">pagar ${fmtD(x.prop).slice(0, 5)}</span>` : ''}${x.nom ? '<span class="bdg pp-rec">nómina</span>' : x.rec ? '<span class="bdg pp-rec">↻</span>' : ''}${x.fecha ? `<span class="mini" style="${v || tarde ? 'color:var(--dg);font-weight:700' : ''}">vence ${fmtD(x.fecha).slice(0, 5)}${tarde ? ' · se paga tarde' : ''}</span>` : ''}
         ${puede('cxp') ? `<button class="btn btn-s btn-sm" style="margin-left:auto;padding:2px 8px" onclick="event.stopPropagation();ppMoverDlg(${i})">Mover</button>` : ''}${ppNomBtn(x)}${x.f ? `<button class="btn btn-s btn-sm" style="padding:2px 8px" onclick="event.stopPropagation();verCuenta('${x.f.id}')">Ver</button>` : ''}${puede('cxp') && (x.f || x.sinCuenta) ? `<button class="btn btn-p btn-sm" style="padding:2px 8px" onclick="event.stopPropagation();${ppAccion(x)}">⬆ Comprobante</button>` : ''}</div></div>`; };
   return `<div class="mini" style="margin:0 0 8px">Cada semana viene compactada por proveedor: toca la flecha ▸ para ver sus pagos. Arrastra un pago a otra semana (o toca «Mover»). Los propuestos se pagan el día marcado; lo demás aparece en la semana en que vence. Si lo mueves después de su vencimiento te aviso.</div>
@@ -6940,6 +6946,17 @@ function ppAccion(x) {
   if (x.f) return `pagarCuenta('${x.f.id}')`;
   if (x.sinCuenta && x.oi !== undefined) return `pagarRecurrenteDesde(${x.oi})`;
   return '';
+}
+// Botones que abren directo el documento (factura PDF/XML, nota, comprobante)
+function docsUrls(f) {
+  const d = DOCS.filter(x => x.tabla === 'fin_facturas' && x.registro_id === f.id), u = t => d.find(x => x.tipo === t)?.url;
+  const ab = ABO.filter(a => a.factura_id === f.id && !a.anulado && a.comprobante_url);
+  return { pdf: u('pdf') || f.pdf_url, xml: u('xml') || f.xml_url, nota: u('recibo_provisional'), pago: f.comprobante_pago_url || ab[0]?.comprobante_url || u('comprobante_pago') };
+}
+function ppDocsBtns(f) {
+  const U = docsUrls(f), b = (url, t, tit) => url ? `<a class="btn btn-s btn-sm" style="padding:2px 8px" href="${esc(url)}" target="_blank" rel="noopener" title="${tit}" onclick="event.stopPropagation()">${t}</a>` : '';
+  const h = b(U.pdf, '📄 Factura', 'Abrir el PDF de la factura') + (!U.pdf ? b(U.xml, '📄 XML', 'Abrir el XML de la factura') : '') + b(U.nota, '📷 Nota', 'Abrir la nota del proveedor') + b(U.pago, '🧾 Pago', 'Abrir el comprobante de pago');
+  return h ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px" onclick="event.stopPropagation()">${h}</div>` : '';
 }
 // Nómina COE (personal fijo): desglosar en personas
 function ppNomBtn(x) {
