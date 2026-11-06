@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Orden de compra · Centro Ocular Especializado</title>
+<link rel="icon" href="../assets/coe-logo.png">
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+:root{--bg:#f3f5f6;--card:#fff;--ink:#121618;--muted:#5a666b;--line:#d5dcdf;--acc:#0f7f8e;--ok:#1c8a4f;--bad:#c23b2f;color-scheme:light;
+ --f:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;--n:"IBM Plex Mono",ui-monospace,monospace}
+*{box-sizing:border-box}html,body{margin:0}[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--f);padding:16px max(16px,env(safe-area-inset-right,0px)) 32px max(16px,env(safe-area-inset-left,0px))}
+.wrap{max-width:640px;margin:0 auto;display:grid;gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;display:grid;gap:10px}
+.brand{display:flex;gap:10px;align-items:center}.brand svg{width:38px;height:38px;color:var(--acc);flex:none}
+.brand b{display:block;font-size:16px}.brand small{color:var(--muted);font-size:12px}
+h1{font-size:20px;margin:0}.num{font-family:var(--n);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted);font-size:13px}
+table{width:100%;border-collapse:collapse;font-size:13.5px}th,td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}td.r,th.r{text-align:right}
+.tw{overflow-x:auto}
+.tot{display:flex;justify-content:space-between;font-weight:700;font-size:16px}
+label{display:grid;gap:4px;font-size:13px;color:var(--muted)}
+input,textarea{font:inherit;color:inherit;background:#fff;border:1px solid var(--line);border-radius:10px;padding:11px 12px;width:100%}
+textarea{min-height:80px}
+.btn{font:inherit;font-weight:600;border:1px solid var(--line);background:#fff;border-radius:10px;padding:12px 14px;cursor:pointer;width:100%}
+.btn.pri{background:var(--acc);border-color:var(--acc);color:#fff}
+.btn:disabled{opacity:.5}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.msg{border-radius:10px;padding:10px 12px;font-size:14px}.msg.ok{background:#e4f4ea;color:var(--ok)}.msg.bad{background:#fbe9e7;color:var(--bad)}
+.pill{display:inline-block;font-size:12px;font-weight:600;border-radius:999px;padding:3px 10px;background:#e6f2f4;color:var(--acc)}
+</style></head><body>
+<div class="wrap">
+  <div class="brand"><img src="../assets/coe-logo.png" alt="Centro Ocular Especializado" style="height:46px;width:auto"><div><b>Centro Ocular Especializado</b><small>Confirmación de orden de compra para proveedores</small></div></div>
+  <div id="main" class="card"><div class="muted">Cargando la orden…</div></div>
+</div>
+<script>
+(function(){
+"use strict";
+var SB_URL="https://ckjkdenwqicdjvodflba.supabase.co",SB_KEY="sb_publishable_6kfSTYsmi2KxAeX0AMwymQ_dWPTAxYz";
+var H={"apikey":SB_KEY,"Authorization":"Bearer "+SB_KEY,"Content-Type":"application/json"};
+var m=document.getElementById("main"),h=decodeURIComponent(location.hash.slice(1)),i=h.lastIndexOf("."),folio=h.slice(0,i),token=h.slice(i+1);
+var money=new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN"});
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function rpc(fn,a){return fetch(SB_URL+"/rest/v1/rpc/"+fn,{method:"POST",headers:H,body:JSON.stringify(a)}).then(function(r){return r.json()})}
+function fd(s){return s?new Date(s.length>10?s:s+"T12:00:00").toLocaleDateString("es-MX",{day:"numeric",month:"long",year:"numeric"}):""}
+if(i<1){m.innerHTML='<div class="msg bad">El enlace está incompleto. Escanee de nuevo el código QR de la orden.</div>';return}
+var EST={solicitado:"En autorización",autorizado:"Autorizada",enviado:"Enviada al proveedor",recibido:"Recibida por el COE",facturado:"Facturada",rechazado:"Cancelada",cancelado:"Cancelada"};
+rpc("fin_pedido_publico",{p_folio:folio,p_token:token}).then(function(o){
+  if(!o||!o.ok){m.innerHTML='<div class="msg bad">No encontramos esta orden. Verifique el enlace con el COE.</div>';return}
+  var abierta=o.estado==="autorizado"||o.estado==="enviado";
+  m.innerHTML='<div><span class="pill">'+esc(EST[o.estado]||o.estado)+'</span></div><h1 class="num">'+esc(o.folio)+'</h1>'+
+   '<div class="muted">Proveedor: <b style="color:var(--ink)">'+esc(o.proveedor||"")+'</b> · Entregar en: '+esc(o.sede)+(o.urgente?' · <b style="color:var(--bad)">URGENTE</b>':'')+'</div>'+
+   '<div class="tw"><table><thead><tr><th>Artículo</th><th class="r">Cant.</th><th class="r">Precio</th></tr></thead><tbody>'+
+   (o.partidas||[]).map(function(p){return '<tr><td>'+esc(p.descripcion)+'<br><span class="muted">'+esc(p.unidad||"")+'</span></td><td class="r num">'+esc(p.cantidad)+'</td><td class="r num">'+money.format(+p.precio||0)+'</td></tr>'}).join("")+'</tbody></table></div>'+
+   '<div class="tot"><span>Total</span><span class="num">'+money.format(+o.monto||0)+'</span></div>'+
+   (o.facturar?'<div class="muted">Facturar a: <b style="color:var(--ink)">'+esc(o.facturar.nombre||"")+'</b>'+(o.facturar.rfc?' · RFC '+esc(o.facturar.rfc):'')+(o.correo_facturas?'<br>Enviar XML y PDF a: '+esc(o.correo_facturas):'')+'</div>':'')+
+   (abierta?'<hr style="border:0;border-top:1px solid var(--line);width:100%">'+
+   '<label for="nom">Su nombre<input id="nom" type="text" autocomplete="name"></label>'+
+   '<button class="btn pri" data-a="recibido">Confirmo que recibí la orden</button>'+
+   '<label for="fec">Fecha de entrega comprometida<input id="fec" type="date"></label><button class="btn" data-a="fecha">Confirmar fecha de entrega</button>'+
+   '<button class="btn" data-a="en_camino">El pedido ya va en camino</button>'+
+   '<label for="txt">Faltantes o cambios de precio<textarea id="txt" placeholder="Ej. el artículo X llega hasta el día 15"></textarea></label><button class="btn" data-a="faltante">Avisar al COE</button>'+
+   '<div id="res" aria-live="polite"></div>':'<div class="muted">Esta orden ya no admite confirmaciones.</div>');
+}).catch(function(){m.innerHTML='<div class="msg bad">Sin conexión. Intente de nuevo.</div>'});
+document.addEventListener("click",function(e){
+  var b=e.target.closest("[data-a]");if(!b)return;var a=b.dataset.a,res=document.getElementById("res");
+  var d={nombre:document.getElementById("nom").value.trim(),fecha:document.getElementById("fec").value,texto:document.getElementById("txt").value.trim()};
+  if(a==="fecha"&&!d.fecha){res.innerHTML='<div class="msg bad">Elija la fecha de entrega.</div>';return}
+  if(a==="faltante"&&!d.texto){res.innerHTML='<div class="msg bad">Escriba el faltante o el cambio.</div>';return}
+  b.disabled=true;
+  rpc("prv_proveedor_confirmar",{p_folio:folio,p_token:token,p_accion:a,p_datos:d}).then(function(r){
+    b.disabled=false;
+    res.innerHTML=r&&r.ok?'<div class="msg ok">Gracias. El COE ya recibió su confirmación'+(a==="fecha"?' de entrega para el '+fd(d.fecha):'')+'.</div>':'<div class="msg bad">No se pudo registrar ('+esc(r&&r.error||"error")+').</div>';
+  }).catch(function(){b.disabled=false;res.innerHTML='<div class="msg bad">Sin conexión. Intente de nuevo.</div>'});
+});
+})();
+</script>
+</body></html>
