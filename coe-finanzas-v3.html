@@ -950,7 +950,7 @@ tr.fps-prov td{background:var(--sf2)}
     <div class="ns">Compras</div>
     <div class="ni" id="n-alm" onclick="goTab('alm')">▦ Almacén e inventarios<span class="nbdg" id="nb-alm" style="display:none"></span></div>
     <div class="ni" id="n-ped" onclick="goTab('ped')">⬡ Pedidos<span class="nbdg" id="nb-ped" style="display:none"></span></div>
-    <div class="ni" id="n-prov" onclick="goTab('prov')">☰ Proveedores</div>
+    <div class="ni" id="n-prov" onclick="VIEW.provV='dir';goTab('prov')">☰ Proveedores</div><div class="ni" id="n-prvc" onclick="VIEW.provV='cmp';goTab('prov')">⇅ Comparar precios</div>
     <div class="ns">Control</div>
     <div class="ni" id="n-fps" onclick="goTab('fps')">⧉ Facturas por solicitar<span class="nbdg" id="nb-fps" style="display:none"></span></div>
     <div class="ni" id="n-fpe" onclick="goTab('fpe')">⧉ Facturas por entregar<span class="nbdg" id="nb-fpe" style="display:none"></span></div>
@@ -1610,7 +1610,7 @@ function goTab(t) {
   if (TAB_MOD[t] && t !== 'dash' && t !== 'alr' && niv(TAB_MOD[t]) < 1) t = 'dash';
   if (t === 'fps' && tab !== 'fps' && VIEW.fpsB) VIEW.fpsB.st = '';   // al entrar se ve todo, sin filtros olvidados
   tab = t; history.replaceState(null, '', '#' + t);
-  document.querySelectorAll('.ni').forEach(n => n.classList.toggle('act', n.id === 'n-' + t));
+  { const cmp = t === 'prov' && VIEW.provV === 'cmp'; document.querySelectorAll('.ni').forEach(n => n.classList.toggle('act', cmp ? n.id === 'n-prvc' : n.id === 'n-' + t)); }
   closeSb(); renderTab();
 }
 function renderTab() {
@@ -3276,6 +3276,7 @@ function niv(m, u = cu) {
 const puede = (m, n = 2) => niv(m) >= n;
 const TAB_MOD = { alm: 'pedidos', dash: 'tablero', alr: 'tablero', cxp: 'cxp', cxc: 'cxc', ingd: 'ingreso', pag: 'cxp', cal: 'cxp', ped: 'pedidos', prov: 'proveedores', fps: 'fps', fpe: 'fps', prop: 'cxp', rev: 'revision', tar: 'tareas', rec: 'recurrentes', rep: 'reportes', aud: 'auditoria', cfg: 'config' };
 function aplicarPermisosMenu() {
+  { const el = document.getElementById('n-prvc'); if (el) el.style.display = niv('pedidos') >= 1 || niv('proveedores') >= 1 ? '' : 'none'; }
   Object.entries(TAB_MOD).forEach(([t, m]) => { const el = document.getElementById('n-' + t); if (el) el.style.display = niv(m) >= 1 || t === 'dash' || t === 'alr' ? '' : 'none'; });
   document.querySelectorAll('.ns').forEach(ns => {
     let n = ns.nextElementSibling, vis = false;
