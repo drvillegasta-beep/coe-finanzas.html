@@ -14,8 +14,9 @@ table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px}th{backgr
 .btn{display:inline-block;background:var(--pr);color:#fff;border:0;border-radius:10px;padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer;margin-top:12px}
 .qr{text-align:center;font-size:11px;color:var(--gris)}.qr img{width:120px;height:120px}
 .pie{font-size:11px;color:var(--gris);text-align:center;margin-top:14px}
+.conf{border:1px solid var(--pr);border-radius:12px;padding:14px;margin-top:16px;display:grid;gap:10px}.conf h2{font-size:15px;margin:0;color:var(--pr)}.conf label{display:grid;gap:4px;font-size:12px;color:var(--gris)}.conf input,.conf textarea{font:inherit;color:var(--ink);border:1px solid var(--linea);border-radius:10px;padding:10px}.conf .btn{margin:0}.btn.sec{background:#fff;color:var(--pr);border:1px solid var(--pr)}.fila{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}.fila label{flex:1;min-width:160px}.msg{border-radius:10px;padding:10px 12px;font-size:14px}.msg.ok{background:#e4f4ea;color:#1c6b3c}.msg.bad{background:#fbe9e7;color:#b42318}.btn:disabled{opacity:.5}
 @media(max-width:600px){.kv{grid-template-columns:1fr}.hoja{margin:0;border-radius:0}}
-@media print{body{background:#fff}.hoja{box-shadow:none;margin:0;max-width:none}.btn{display:none}}
+@media print{.conf{display:none}body{background:#fff}.hoja{box-shadow:none;margin:0;max-width:none}.btn{display:none}}
 </style></head><body>
 <div class="hoja" id="h"><div class="hd"><img src="assets/coe-logo.png" alt="COE"><div><h1>Centro Ocular Especializado</h1><div class="s">Cargando orden de compra…</div></div></div></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
@@ -33,16 +34,29 @@ const fD=s=>{if(!s)return '';const d=new Date(String(s).length<=10?s+'T12:00:00'
     const E={solicitado:0,autorizado:1,enviado:2,recibido:3,facturado:4},e=E[p.estado]??(p.estado==='cancelado'||p.estado==='rechazado'?-1:0);
     const pasos=[['Solicitado',p.solicitado_at],['Autorizado',p.autorizado_at],['Enviado al proveedor',p.enviado_at],['Recibido en clínica',p.recibido_at],['Facturado',null]];
     const pt=(p.partidas&&p.partidas.length)?p.partidas:[{cantidad:1,descripcion:p.descripcion,precio:p.monto}];
-    const tot=pt.reduce((s,l)=>s+(Number(l.cantidad)||0)*(Number(l.precio)||0),0)||Number(p.monto)||0;
+    const imp=l=>(Number(l.cantidad)||0)*(Number(l.precio)||0)*(l.iva_incluido===false?1+(Number(l.iva)||0):1);
+    const sub=pt.reduce((s,l)=>s+imp(l),0),env=pt.some(l=>'iva' in l)&&Number(p.monto)>sub+0.5?Number(p.monto)-sub:0,tot=(sub+env)||Number(p.monto)||0;
     let qr='';try{const c=qrcode(0,'M');c.addData(location.href);c.make();qr=c.createDataURL(4,8)}catch(x){}
     h.innerHTML=`<div class="hd"><img src="assets/coe-logo.png" alt="COE"><div style="flex:1"><h1>Orden de compra ${esc(p.folio)}</h1><div class="s">Centro Ocular Especializado · Av. Luis Donaldo Colosio 151, Col. La Purísima, Tacámbaro, Mich. · Tel. (443) 465 6645 · (459) 596 2268</div></div>${qr?`<div class="qr"><img src="${qr}"><br>Rastreo</div>`:''}</div>
     ${e<0?`<div class="nota urg">Esta orden fue ${esc(p.estado)}. No surtir.</div>`:`<div class="est">${pasos.map((x,i)=>`<div class="paso ${i<=e?'on':''}"><b>${i<=e?'✓ ':''}${x[0]}</b>${x[1]?fD(x[1]):''}</div>`).join('')}</div>`}
     <div class="kv"><b>Proveedor</b><div>${esc(p.proveedor||'—')}</div><b>Área</b><div>${esc(p.area||'')} · ${esc(p.sede||'')}</div><b>Entrega</b><div>${p.fecha_requerida?'a más tardar el '+fD(p.fecha_requerida):'a la brevedad'}${p.urgente?' · <span class="urg">URGENTE</span>':''}</div></div>
-    <table><thead><tr><th>Cant.</th><th>Descripción</th><th class="r">Precio</th><th class="r">Importe</th></tr></thead><tbody>${pt.map(l=>`<tr><td>${esc(l.cantidad)} ${esc(l.unidad||'')}</td><td>${esc(l.descripcion)}</td><td class="r">${Number(l.precio)?$$(l.precio):''}</td><td class="r">${Number(l.precio)?$$((Number(l.cantidad)||0)*Number(l.precio)):''}</td></tr>`).join('')}
-    <tr class="tot"><td colspan="3">Total (IVA incluido)</td><td class="r">${$$(tot)}</td></tr></tbody></table>
+    <table><thead><tr><th>Cant.</th><th>Descripción</th><th class="r">Precio</th><th class="r">Importe</th></tr></thead><tbody>${pt.map(l=>`<tr><td>${esc(l.cantidad)} ${esc(l.unidad||'')}</td><td>${esc(l.descripcion)}</td><td class="r">${Number(l.precio)?$$(l.precio)+(l.iva_incluido===false&&Number(l.iva)?' + IVA':''):''}</td><td class="r">${Number(l.precio)?$$(imp(l)):''}</td></tr>`).join('')}
+    ${env?`<tr><td colspan="3">Envío</td><td class="r">${$$(env)}</td></tr>`:''}<tr class="tot"><td colspan="3">Total (IVA incluido)</td><td class="r">${$$(tot)}</td></tr></tbody></table>
     <div class="nota"><b>Facturar a:</b> ${esc(p.facturar?.nombre||'')} · RFC ${esc(p.facturar?.rfc||'')}${p.correo_facturas?'. Enviar XML y PDF a '+esc(p.correo_facturas):''}. Citar el folio <b>${esc(p.folio)}</b> en factura, remisión y entrega. En medicamentos y material indicar lote y caducidad.</div>
+    ${['autorizado','enviado'].includes(p.estado)?`<div class="conf" id="conf"><h2>Para el proveedor: confirme esta orden</h2>
+      <label>Su nombre<input id="cNom" autocomplete="name"></label>
+      <button class="btn" data-a="recibido">✓ Recibí la orden</button>
+      <div class="fila"><label>Fecha de entrega<input type="date" id="cFec"></label><button class="btn sec" data-a="fecha">Confirmar fecha</button></div>
+      <button class="btn sec" data-a="en_camino">🚚 Ya va en camino</button>
+      <label>Faltantes o cambios de precio<textarea id="cTxt" rows="3" placeholder="Ej. el artículo X llega hasta el día 15"></textarea></label><button class="btn sec" data-a="faltante">Avisar al COE</button>
+      <div id="cRes" aria-live="polite"></div></div>`:''}
     <button class="btn" onclick="print()">🖨 Imprimir o guardar en PDF</button>
     <div class="pie">Documento generado por COE Finanzas · consulta ${new Date().toLocaleString('es-MX')}</div>`;
+    document.getElementById('conf')?.addEventListener('click',async ev=>{const b=ev.target.closest('[data-a]');if(!b)return;const a=b.dataset.a,res=document.getElementById('cRes'),d={nombre:cNom.value.trim(),fecha:cFec.value,texto:cTxt.value.trim()};
+      if(a==='fecha'&&!d.fecha){res.innerHTML='<div class="msg bad">Elija la fecha de entrega.</div>';return}
+      if(a==='faltante'&&!d.texto){res.innerHTML='<div class="msg bad">Escriba el faltante o el cambio.</div>';return}
+      b.disabled=true;try{const r=await(await fetch(SB_URL+'/rest/v1/rpc/prv_proveedor_confirmar',{method:'POST',headers:{'Content-Type':'application/json',apikey:SB_KEY,Authorization:'Bearer '+SB_KEY},body:JSON.stringify({p_folio:q.get('f')||'',p_token:q.get('t')||'',p_accion:a,p_datos:d})})).json();
+        res.innerHTML=r&&r.ok?`<div class="msg ok">Gracias. El COE ya recibió su confirmación${a==='fecha'?' de entrega para el '+fD(d.fecha):''}.</div>`:`<div class="msg bad">No se pudo registrar (${esc(r&&(r.error||r.message)||'error')}).</div>`}catch(x){res.innerHTML='<div class="msg bad">Sin conexión. Intente de nuevo.</div>'}b.disabled=false});
   }catch(x){h.innerHTML=h.innerHTML.replace('Cargando orden de compra…','No se pudo cargar. Intente de nuevo.')}
 })();
 </script></body></html>
