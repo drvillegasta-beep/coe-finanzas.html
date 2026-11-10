@@ -1249,7 +1249,10 @@ async function guardarMiAcceso() {
   if (!maP.value && !maN.value) return toast('No hay cambios', 'warning');
   if (maP.value && maP.value.length < 6) return toast('La contraseña debe tener al menos 6 caracteres', 'warning');
   if (maN.value && !/^\d{4}$/.test(maN.value)) return toast('El PIN debe tener 4 dígitos', 'warning');
-  const { data, error } = await sb.rpc('fin_cambiar_acceso', { p_usuario: cu.usuario, p_password_actual: maA.value, p_password_nueva: maP.value, p_pin_nuevo: maN.value });
+  if (!maA.value) return toast('Escribe tu contraseña actual', 'warning');
+  const usr = cu.usuario || (USR.find(u => u.id === cu.id) || {}).usuario;
+  if (!usr) return toast('Tu sesión no tiene usuario: cierra sesión y vuelve a entrar', 'error');
+  const { data, error } = await sb.rpc('fin_cambiar_acceso', { p_usuario: usr, p_password_actual: maA.value, p_password_nueva: maP.value, p_pin_nuevo: maN.value });
   if (error) return toast(error.message, 'error');
   if (!data?.ok) return toast(data?.error === 'credenciales' ? 'Contraseña actual incorrecta' : ERR[data?.error] || 'No se pudo', 'error');
   CM('mGen'); toast('Acceso actualizado', 'success');
