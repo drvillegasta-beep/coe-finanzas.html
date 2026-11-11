@@ -2269,6 +2269,32 @@ function pedAlmCaja(p) {
     <div class="mini" style="margin:4px 0 6px">${con.length ? `${comp} de ${A.length} producto(s) se pueden surtir completos desde el almacén${con.length > comp ? ` y ${con.length - comp} en parte` : ''}; lo demás sí hay que pedirlo al proveedor.` : 'Nada de este pedido hay en el almacén: hay que pedirlo al proveedor.'}</div>
     <table><tbody>${A.map(x => `<tr><td>${esc(x.n)}</td><td class="amt" style="text-align:right">pide ${almNum(x.q)}</td><td class="amt" style="text-align:right;color:${x.hay >= x.q ? 'var(--sc)' : x.hay > 0 ? 'var(--wn)' : 'var(--tm)'}">almacén ${almNum(x.hay)}</td><td class="amt mini" style="text-align:right">mostrador ${almNum(x.most)}</td></tr>`).join('')}</tbody></table></div>`;
 }
+// Pedido → cuenta por pagar (y, si ya se pagó, registrar el pago con su comprobante)
+function pedACuenta(id, modo) {
+  const p = PED.find(x => x.id === id); if (!p) return;
+  const e = ent(p.entidad_id), venc = isoD(new Date(Date.now() + (num(e?.dias_credito) || 0) * 864e5));
+  modal(modo === 'pagado' ? 'Pedido pagado' : 'Mandar pedido a por pagar', `<div class="fgrd">
+      <div class="fgrp sp2"><label>Proveedor</label><select id="pcE">${optsEnt(p.entidad_id || '')}</select></div>
+      <div class="fgrp sp2"><label>Concepto</label><input type="text" id="pcD" value="${esc(p.folio + ' · ' + (p.descripcion || ''))}"></div>
+      <div class="fgrp"><label>Monto</label><div class="ipfx"><span>$</span><input type="number" step="0.01" id="pcM" value="${num(p.monto_estimado) || ''}"></div></div>
+      <div class="fgrp"><label>${modo === 'pagado' ? 'Fecha de pago' : 'Fecha para pagar'}</label><input type="date" id="pcF" value="${modo === 'pagado' ? hoyISO() : venc}"></div>
+      <div class="fgrp sp2"><label>Documento</label><select id="pcT"><option value="por_pagar">Trae factura (o la entregará)</option><option value="sin_factura">Sin factura / nota</option></select></div>
+    </div><div class="mini" style="margin-top:8px">${modo === 'pagado' ? 'Se crea la cuenta y enseguida se abre el registro del pago para subir el comprobante.' : 'Se crea la cuenta por pagar ligada a este pedido y aparece en Por pagar y en la propuesta de pagos.'}</div>`,
+    `<button class="btn btn-s" onclick="CM('mGen');verPedido('${id}')">Volver</button><button class="btn btn-p" onclick="pedACuentaFirmar('${id}','${modo}')">Firmar</button>`);
+}
+async function pedACuentaFirmar(id, modo) {
+  const p = PED.find(x => x.id === id), monto = num(pcM.value);
+  if (!pcE.value) return toast('Elige el proveedor', 'warning');
+  if (!(monto > 0)) return toast('Escribe el monto', 'warning');
+  { const dup = FAC.find(f => !f.anulado && f.tipo === 'egreso' && f.entidad_id === pcE.value && Math.abs(num(f.monto_total) - monto) <= 1 && (new Date() - new Date(f.created_at)) < 60 * 864e5);
+    if (dup && !confirm(`Ya existe una cuenta de ${nomEnt(pcE.value)} por ${$$(dup.monto_total)}:\n«${dup.descripcion}» (${dup.estado}).\n\n¿Crear otra de todos modos?`)) return; }
+  const r = await rpcFirmado('fin_crear_cxp', { p_pin_director: null, p_datos: { tipo: 'egreso', entidad_id: pcE.value, descripcion: pcD.value.trim() || p.folio, monto_total: monto, fecha_vencimiento: pcF.value, categoria: ent(pcE.value)?.categoria || '', documento_tipo: pcT.value, origen: 'pedidos', sede: p.sede || cu.sede || '', notas: 'Desde el pedido ' + p.folio } }, { titulo: modo === 'pagado' ? 'Pedido pagado' : 'Mandar a por pagar', sub: `${p.folio} · ${$$(monto)}` });
+  if (!r) return;
+  await rpcConPin('fin_pedido_ligar_cuenta', { p_pedido: id, p_factura: r.id }, r._pin);
+  CM('mGen'); toast(modo === 'pagado' ? 'Cuenta creada: registra el pago' : 'Pedido enviado a Por pagar', 'success');
+  await cargarTodo();
+  if (modo === 'pagado') pagarCuenta(r.id); else verPedido(id);
+}
 function verPedido(id) {
   const p = PED.find(x => x.id === id); if (!p) return;
   if (p.estado === 'cotizacion') return nuevoPedido(id, true);
@@ -2297,6 +2323,7 @@ function verPedido(id) {
     ['enviado', 'recibido'].includes(p.estado) ? `<button class="btn btn-s" onclick="correoProveedor('${p.entidad_id}',null,'${id}','aclaracion')">✉ Aclaración</button>` : '',
     p.entidad_id ? `<button class="btn btn-s" onclick="cartaProveedor('${p.entidad_id}','devolucion','${id}')">Carta de devolución</button><button class="btn btn-s" onclick="cartaProveedor('${p.entidad_id}','garantia','${id}')">Carta de garantía</button>` : '',
     ['solicitado', 'autorizado', 'enviado'].includes(p.estado) && pt.length > 1 && puede('pedidos') ? `<button class="btn btn-s" onclick="dividirPedido('${id}')">✂ Separar por proveedor</button>` : '',
+    !p.factura_id && !['cancelado', 'rechazado', 'cotizacion'].includes(p.estado) && puede('cxp') ? `<button class="btn btn-w" onclick="pedACuenta('${id}','porpagar')" title="Crea la cuenta por pagar de este pedido">💳 Mandar a por pagar</button><button class="btn btn-p" onclick="pedACuenta('${id}','pagado')" title="Crea la cuenta y registra el pago con su comprobante">✓ Ya está pagado</button>` : '',
     !['cancelado', 'rechazado', 'facturado'].includes(p.estado) ? `<button class="btn btn-d" onclick="estadoPedido('${id}','cancelado')">Cancelar</button>` : ''
   ].join('');
   modal('Pedido ' + p.folio, b + pedAlmCaja(p) + cotPanel(p), ft, 'xl');
