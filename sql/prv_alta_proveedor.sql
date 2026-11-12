@@ -1,2 +1,3 @@
 -- Aplicada en Supabase: alta de un proveedor del Directorio (fin_entidades) en el comparador (prv_proveedores)
 -- Ver función public.prv_alta_proveedor(p_usuario uuid, p_pin text, p_datos jsonb {entidad_id})
+-- prv_ofertas_sin_precio: prv_ofertas.precio admite null (catálogos sin precio); prv_aplicar_lista guarda artículos sin precio y recalcula sin_precios
