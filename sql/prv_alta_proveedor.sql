@@ -1,0 +1,2 @@
+-- Aplicada en Supabase: alta de un proveedor del Directorio (fin_entidades) en el comparador (prv_proveedores)
+-- Ver función public.prv_alta_proveedor(p_usuario uuid, p_pin text, p_datos jsonb {entidad_id})
