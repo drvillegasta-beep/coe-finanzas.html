@@ -4098,7 +4098,9 @@ function verPendiente(id) {
   const ft = abiertaT(t) && puede('tareas') ? `<button class="btn btn-s" onclick="avancePendiente('${id}')">Registrar avance</button><button class="btn btn-s" onclick="avancePendiente('${id}','reprogramar')">Reprogramar</button><button class="btn btn-p" onclick="cumplirTarea('${id}')">Cumplir</button>` : '';
   const fc = t.requiere_conformidad && t.estado === 'cumplida' && !t.conformidad_at && puedeConformidad(t) ? `<button class="btn btn-d" onclick="conformidad('${id}',false)">✕ No conforme</button><button class="btn btn-p" onclick="conformidad('${id}',true)">✓ Firmar conformidad</button>` : '';
   const fa = esAdmin() && t.estado !== 'cancelada' ? `<button class="btn btn-s" onclick="editarPendiente('${id}')">✎ Editar</button><button class="btn btn-d" onclick="eliminarPendiente('${id}')">🗑 Eliminar</button>` : '';
-  modal('Pendiente', b, fa + ft + fc, 'lg');
+  const nomFid = String(t.clave || '').startsWith('nomdoc:') ? t.clave.slice(7) : null;
+  const irNom = nomFid && FAC.find(x => x.id === nomFid) ? `<div class="okbox" style="margin-bottom:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span style="flex:1">Los documentos se suben en el pago de nómina.</span><button class="btn btn-p btn-sm" onclick="CM('mGen');verCuenta('${nomFid}')">📄 Ir a subir los documentos de nómina</button></div>` : '';
+  modal('Pendiente', irNom + b, fa + ft + fc, 'lg');
 }
 
 // ── Solo Director: editar / eliminar ──
