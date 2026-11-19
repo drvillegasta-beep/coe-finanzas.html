@@ -1058,7 +1058,7 @@ function closeSb() { document.getElementById('sdb').classList.remove('open'); do
 
 // ── Estado ──────────────────────────────────────
 let sb = null, cu = null, tab = 'dash';
-let FM = [], RECSOL = [];
+let FM = [], RECSOL = [], NOM_ARCH = [];
 function sinRevisar(f) { return !f.revision || f.revision === 'pendiente'; }
 let USR = [], ENT = [], FAC = [], ABO = [], REC = [], PED = [], TAR = [], DOCS = [], RS = [], CIE = [], SUC = [], CORR = [], NOM = [], NOM_EMP = [], INV = {};
 let CFG = { monto_doble_firma: 3000, correo_alertas: 'drvillegas.ta@gmail.com', hora_alertas: '09:00', dias_aviso: 3 };
@@ -1376,6 +1376,7 @@ async function cargarTodo(silencioso) {
   CORR = r[11]; AVA = r[12]; CJ = r[13]; SOLB = r[14]; NOM_EMP = r[15] || []; NOM = r[16] || [];
   INV = { farProd: r[17] || [], farLotes: r[18] || [], farPed: r[19] || [], quiInv: r[20] || [], quiLotes: r[21] || [], quiLentes: r[22] || [], quiPed: r[23] || [], farSol: r[24] || [], qxMat: r[25] || [], qxLot: r[26] || [], qxLio: r[27] || [], qxUb: r[28] || [], farMov: r[29] || [], quiLio: r[30] || [], ctl: r[31] || [], farCnt: r[32] || [], qxCnt: r[33] || [] };
   FM = r[r.length - 1] || [];
+  try { NOM_ARCH = await q('fin_nomina_archivo', x => x.order('fecha_pago')) || []; } catch { NOM_ARCH = []; }
   r[10].forEach(c => { CFG[c.clave] = c.valor; });
   if (!RS.length) RS = [{ id: null, nombre: 'José Antonio Villegas Ávila', rfc: 'VIAA870425115' }];
   const crit = FALLO_CARGA.filter(t => /^fin_/.test(t));
@@ -1785,7 +1786,7 @@ async function nomDocAnalizar(file, f, tipo, prog) {
 function nomDocSubir(fid, tipo) {
   const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*,application/pdf';
   inp.onchange = async () => {
-    const file = inp.files[0], f = FAC.find(x => x.id === fid); if (!file || !f) return;
+    const file = inp.files[0], f = nomCuentaPorId(fid); if (!file || !f) return;
     modal(NOMDOC[tipo], `<div class="mini" id="ndProg">⏳ Subiendo y leyendo ${esc(file.name)}…</div>`, '');
     let u, v;
     try { u = await subirArchivo(file, 'nomina'); v = await nomDocAnalizar(file, f, tipo, m => { const e = document.getElementById('ndProg'); if (e) e.textContent = '⏳ ' + m; }); }
@@ -1805,7 +1806,7 @@ function nomDocSubir(fid, tipo) {
   inp.click();
 }
 function nomDocConfirmar(did, fid) {
-  const d = DOCS.find(x => x.id === did), f = FAC.find(x => x.id === fid); if (!d || !f) return;
+  const d = DOCS.find(x => x.id === did), f = nomCuentaPorId(fid); if (!d || !f) return;
   const img = /\.(png|jpe?g|webp|heic)$/i.test(d.url);
   modal('Revisar firma · ' + nomPersonaNombre(f), `${img ? `<img src="${esc(d.url)}" style="max-width:100%;max-height:55vh;border-radius:8px;display:block;margin:0 auto 10px">` : `<div style="margin-bottom:10px"><a class="btn btn-s" href="${esc(d.url)}" target="_blank">Abrir el documento</a></div>`}
     <label style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" id="ndF" ${d.verif?.firmado ? 'checked' : ''}> Viene firmado por ${esc(nomPersonaNombre(f) || 'el trabajador')}</label>
@@ -3546,6 +3547,15 @@ function cabDash(titulo, sub, extra) {
   return `<div class="ph"><div><div class="ptit">${titulo}</div><div class="psub">${new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · ${sub}</div></div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${extra || ''}<button class="btn btn-s btn-sm" onclick="ventanaTuDia('aviso',true)">Tu día</button></div></div>${bannerAvisos()}`;
 }
+// Tablero: estado de los documentos de nómina (Director, Administración y Contadora)
+function cajaNomDocs() {
+  const P = nomPagosTodos(), F = P.filter(f => nomDocsFaltan(f).length);
+  const porPer = {}; F.forEach(f => { const k = nomPersonaNombre(f); porPer[k] = (porPer[k] || 0) + 1; });
+  const cuerpo = !P.length ? '<div class="mini">Sin pagos de nómina registrados</div>'
+    : `<div style="display:flex;gap:12px;align-items:baseline;margin-bottom:8px"><b class="amt" style="font-size:22px;color:${F.length ? 'var(--dg)' : 'var(--sc)'}">${P.length - F.length}/${P.length}</b><span class="mini">pagos con recibo timbrado y transferencia firmados</span></div>`
+      + (F.length ? `<div class="alist">${Object.entries(porPer).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<div class="aitem r" onclick="goTab('fps')"><div style="flex:1"><div class="at">${esc(k)}</div><div class="am">${n} pago(s) con documentos pendientes</div></div><span class="alr-ir">Ir ›</span></div>`).join('')}</div>` : '<div class="mini">✓ Todo completo y firmado</div>');
+  return caja('Documentos de nómina', cuerpo, `<button class="btn btn-s btn-sm" onclick="goTab('fps')">Abrir</button>`);
+}
 function caja(titulo, cuerpo, accion) { return `<div class="cfg-section"><h3 style="display:flex;justify-content:space-between;align-items:center">${titulo}${accion || ''}</h3><div class="body">${cuerpo}</div></div>`; }
 function lista(arr, fila, vacio = 'Nada pendiente') { return arr.length ? `<div class="alist">${arr.map(fila).join('')}</div>` : `<div class="mini">✓ ${vacio}</div>`; }
 const propuestas = () => abiertas('egreso').filter(f => f.propuesta_pago);
@@ -3588,6 +3598,7 @@ function dashDirectorFin(sel) {
         <div class="prog" style="height:9px"><div style="width:${Math.round(s.cx / maxB * 100)}%;background:${s.cx > s.ing && s.ing ? 'var(--dg)' : 'var(--wn)'}"></div></div>
         ${s.ing ? `<div class="prog" style="height:5px;margin-top:3px"><div style="width:${Math.round(s.ing / maxB * 100)}%;background:var(--sc)"></div></div>` : ''}${s.rc ? `<div class="mini">+ ${s.rc} recurrente(s) sin monto</div>` : ''}</div>`).join('') + `<div class="mini"><span class="cal-dot" style="background:var(--wn)"></span> por pagar <span class="cal-dot" style="background:var(--sc)"></span> ingreso estimado de cajas (promedio del mes × 6 días)</div>`)}
       ${caja('Equipo hoy', (() => { const F = equipoResp().map(k => filaEquipo(k, hoyISO())); return F.length ? `<table><thead><tr><th>Responsable</th><th style="text-align:right">Venc.</th><th style="text-align:right">Críticos</th><th style="text-align:right">Atraso</th><th>Día</th></tr></thead><tbody>${F.map(f => `<tr style="cursor:pointer" onclick="VIEW.pAmb='equipo';VIEW.pResp='${f.k}';goTab('tar')"><td>${esc(f.nombre)}</td><td style="text-align:right">${f.vencidos}</td><td style="text-align:right;${f.criticos ? 'color:var(--dg);font-weight:800' : ''}">${f.criticos}</td><td style="text-align:right">${f.prom} d</td><td>${f.esDir ? '' : f.cierre ? '<span class="bdg bdg-apr">cerrado</span>' : '<span class="bdg bdg-pnd">abierto</span>'}</td></tr>`).join('')}</tbody></table>` : '<div class="mini">Sin pendientes asignados</div>'; })() + `<div class="mini" style="margin-top:10px">Cumplimiento a tiempo del mes: <b style="color:${pct >= 90 ? 'var(--sc)' : pct >= 70 ? 'var(--wn)' : 'var(--dg)'}">${pct}%</b> · ${d.noCump.length} no cumplidos</div>`, `<div style="display:flex;gap:6px"><button class="btn btn-s btn-sm" onclick="reporteDia()">Reporte del día</button><button class="btn btn-s btn-sm" onclick="goTab('rep')">Desempeño</button></div>`)}
+      ${cajaNomDocs()}
       ${caja('Críticos vencidos del equipo', lista(TAR.filter(t => vencidaT(t) && t.prioridad === 'critico').sort(ordenPend).slice(0, 6), t => `<div class="aitem r" onclick="verPendiente('${t.id}')"><div><div class="at">${esc(t.titulo)}</div><div class="am">${esc(respNom(respKey(t)))} · atraso ${atraso(t)} d · ${esc(t.ultimo_avance || 'sin avance')}</div></div></div>`, 'Sin críticos vencidos'), puede('tareas') ? `<button class="btn btn-s btn-sm" onclick="nuevoPendiente()">+ Asignar</button>` : '')}
       ${caja('Mayores saldos por proveedor', topProv.length ? `<table><tbody>${topProv.map(([e, s]) => `<tr><td>${esc(nomEnt(e))}</td><td class="amt" style="text-align:right">${$$(s)}</td></tr>`).join('')}</tbody></table>` : '<div class="mini">Sin saldos</div>')}
       ${caja('Caja y observaciones', `<div class="kv"><b>Último cierre</b><div>${ult ? fmtD(ult.fecha) + ' · ' + $$(ult.corte_total) + (Math.abs(num(ult.diferencia)) > 0.5 ? ' · <span style="color:var(--dg)">diferencia ' + $$(ult.diferencia) + '</span>' : '') : 'Sin cierres aún'}</div><b>Ingreso de cajas (mes)</b><div>${$$(cajaMes.reduce((s, c) => s + num(c.corte_total), 0))}</div><b>Observaciones abiertas</b><div>${obs.length}</div></div>` + lista(obs.slice(0, 4), f => `<div class="aitem" onclick="verCuenta('${f.id}')"><div><div class="at">${esc(nomEnt(f.entidad_id))}</div><div class="am">${esc(f.revision_nota || '')}</div></div></div>`, 'Sin observaciones'))}
@@ -3819,6 +3830,7 @@ function dashContadora(sel) {
     <div class="cfgg" style="margin-top:20px">
       ${cajaSolicitudesBaja()}
       ${(() => { const C = complementosPendientes(); return caja(`Complementos de pago por solicitar (${C.length})`, lista(C.slice(0, 8), x => `<div class="aitem ${x.d < 0 ? 'r' : 'a'}" onclick="verCuenta('${x.f.id}')"><div style="flex:1"><div class="at">${esc(nomEnt(x.f.entidad_id))} · faltan ${x.falta} de ${x.pg}</div><div class="am">${esc(x.f.numero_factura || x.f.descripcion)} · pagado ${$$(x.f.monto_pagado)} · límite ${fmtD(x.lim)}${x.d < 0 ? ' · <b>vencido</b>' : ' · quedan ' + x.d + ' d'}</div></div><div class="rowact" onclick="event.stopPropagation()"><button class="btn btn-s btn-sm" onclick="correoProveedor('${x.f.entidad_id}','${x.f.id}',null,'aclaracion')">✉</button><button class="btn btn-p btn-sm" onclick="openUpload('${x.f.id}')">⬆ Complemento</button></div></div>`, 'Sin complementos pendientes'), `<button class="btn btn-s btn-sm" onclick="goTab('fps')">Ver todos</button>`); })()}
+      ${cajaNomDocs()}
       ${caja(`Facturas por solicitar (${fps.length})${fps.filter(fpsNueva).length ? ' · ' + fps.filter(fpsNueva).length + ' nueva(s)' : ''}`, lista(fps.slice().sort((a, b) => (fpsNueva(b) - fpsNueva(a)) || limFps(a).localeCompare(limFps(b))).slice(0, Math.max(8, fps.filter(fpsNueva).length)), f => `<div class="aitem ${diasA(limFps(f)) < 0 ? 'r' : 'a'}" onclick="verCuenta('${f.id}')"><div style="flex:1"><div class="at">${fpsNueva(f) ? '<span class="bdg bdg-aut">NUEVA</span> ' : ''}${esc(nomEnt(f.entidad_id))} · ${$$(f.monto_pagado)}</div><div class="am">${esc(f.descripcion)} · pagado ${fmtD(f.fecha_pago)} · límite ${fmtD(limFps(f))}</div></div><div class="rowact" onclick="event.stopPropagation()"><button class="btn btn-s btn-sm" onclick="correoProveedor('${f.entidad_id}','${f.id}',null,'factura')">✉</button><button class="btn btn-p btn-sm" onclick="openUpload('${f.id}')">⬆ XML</button></div></div>`, 'Lista en cero'), `<button class="btn btn-s btn-sm" onclick="goTab('fps')">Ver todas</button>`)}
       ${(() => { const cobV = abiertas('ingreso').filter(f => semaforo(f) === 'r'); return caja(`Cobros vencidos (${cobV.length})`, lista(cobV, f => `<div class="aitem r" onclick="verCuenta('${f.id}')"><div><div class="at">${esc(nomEnt(f.entidad_id))} · ${$$(saldo(f))}</div><div class="am">${esc(f.descripcion)} · venció ${fmtD(f.fecha_vencimiento)}</div></div></div>`, 'Sin cobros vencidos')); })()}
     </div>
@@ -7606,10 +7618,48 @@ function hmTarjeta(g) {
     ${g.falta.length ? `<div class="hmfalta">Le falta: <b>${g.falta.join(' · ')}</b></div>` : ''}</div>`;
 }
 // Nómina (personal fijo): recibo timbrado y firmado + transferencia firmada, una tarjeta por persona
+// Nóminas anteriores archivadas (solo documentos, no mueven dinero)
+function nomArchPseudo() {
+  const eid = ENT.find(e => /^N.MINA COE$/i.test((e.nombre || '').trim()))?.id;
+  return (NOM_ARCH || []).map(a => ({ id: a.id, _arch: true, tipo: 'egreso', entidad_id: eid, descripcion: 'NÓMINA · ' + a.persona, monto_pagado: num(a.monto), monto_total: num(a.monto), fecha_pago: a.fecha_pago, nota: a.nota }));
+}
+const nomCuentaPorId = id => FAC.find(x => x.id === id) || nomArchPseudo().find(x => x.id === id);
+function nomPagosTodos() {
+  const P = FAC.filter(f => esNomPersona(f) && num(f.monto_pagado) > 0.009 && String(f.fecha_pago || '') >= '2026-10-01');
+  return P.concat(nomArchPseudo().filter(a => !P.some(f => nomPersonaNombre(f) === nomPersonaNombre(a) && f.fecha_pago === a.fecha_pago)));
+}
+function nomArchAlta() {
+  const emp = (NOM_EMP || []).filter(e => e.esquema === 'fijo' && !/^ASEO/i.test(e.nombre || '')).sort((a, b) => (b.activo ? 1 : 0) - (a.activo ? 1 : 0) || a.nombre.localeCompare(b.nombre));
+  modal('Nómina anterior', `<div class="mini" style="margin-bottom:10px">Para archivar los documentos de quincenas ya pagadas que no están en COE Finanzas. <b>No registra pagos ni mueve saldos</b>: solo guarda el recibo timbrado y la transferencia firmados.</div>
+    <div class="fgrd">
+      <div class="fgrp sp2"><label>Persona</label><select id="naP">${emp.map(e => `<option>${esc(e.nombre)}${e.activo ? '' : ' (baja)'}</option>`).join('')}<option value="__otra">Otra persona…</option></select><input type="text" id="naO" placeholder="Nombre completo" style="display:none;margin-top:6px"></div>
+      <div class="fgrp"><label>Quincena desde</label><input type="date" id="naD"></div>
+      <div class="fgrp"><label>Hasta (opcional)</label><input type="date" id="naH"></div>
+      <div class="fgrp"><label>Monto neto (opcional)</label><div class="ipfx"><span>$</span><input type="number" step="0.01" id="naM"></div></div>
+      <div class="fgrp"><label>Nota</label><input type="text" id="naN"></div>
+    </div><div class="mini" style="margin-top:6px">Con «hasta» se agregan todas las quincenas (día 15 y fin de mes) del periodo.</div>`,
+    `<button class="btn btn-s" onclick="CM('mGen')">Cancelar</button><button class="btn btn-p" onclick="nomArchGuardar()">Firmar</button>`);
+  naP.onchange = () => { naO.style.display = naP.value === '__otra' ? '' : 'none'; };
+}
+async function nomArchGuardar() {
+  const persona = (naP.value === '__otra' ? naO.value : naP.value.replace(/ \(baja\)$/, '')).trim();
+  if (!persona || !naD.value) return toast('Elige la persona y la quincena', 'warning');
+  const fechas = [];
+  if (!naH.value) fechas.push(naD.value);
+  else { let d = new Date(naD.value + 'T12:00:00'); const h = new Date(naH.value + 'T12:00:00');
+    for (let y = d.getFullYear(), m = d.getMonth(); new Date(y, m, 1) <= h; m++) { [15, new Date(y, m + 1, 0).getDate()].forEach(dd => { const x = new Date(y, m, dd, 12); if (x >= d && x <= h) fechas.push(isoD(x)); }); } }
+  if (!fechas.length) return toast('No hay quincenas en ese periodo', 'warning');
+  if (fechas.length > 48) return toast('Máximo 48 quincenas a la vez', 'warning');
+  const r = await rpcFirmado('fin_nomina_archivo_alta', { p_persona: persona, p_fecha: fechas[0], p_monto: num(naM.value) || null, p_nota: naN.value }, { titulo: 'Nómina anterior', sub: `${persona} · ${fechas.length} quincena(s)` });
+  if (!r) return;
+  for (const f of fechas.slice(1)) await rpcConPin('fin_nomina_archivo_alta', { p_persona: persona, p_fecha: f, p_monto: num(naM.value) || null, p_nota: naN.value }, r._pin);
+  CM('mGen'); toast(`${fechas.length} quincena(s) agregadas: sube sus documentos`, 'success'); await cargarTodo(); renderTab();
+}
 function nomSeccion() {
   const mes = hoyISO().slice(0, 7);
-  const P = FAC.filter(f => esNomPersona(f) && num(f.monto_pagado) > 0.009 && String(f.fecha_pago || '') >= '2026-11-01' && (String(f.fecha_pago || '').slice(0, 7) === mes || nomDocsFaltan(f).length));
-  if (!P.length) return '';
+  const P = nomPagosTodos().filter(f => String(f.fecha_pago || '').slice(0, 7) === mes || nomDocsFaltan(f).length);
+  const alta = puede('cxp') ? `<button class="btn btn-s btn-sm" onclick="nomArchAlta()" title="Archivar documentos de quincenas anteriores">＋ Nómina anterior</button>` : '';
+  if (!P.length) return alta ? `<div class="dsec" style="margin:0 0 8px;display:flex;justify-content:space-between;align-items:center">Nómina · recibo timbrado y transferencia firmados${alta}</div>` : '';
   const G = {}; P.forEach(f => { const k = nomPersonaNombre(f) || '—'; (G[k] = G[k] || []).push(f); });
   const pend = Object.values(G).filter(L => L.some(f => nomDocsFaltan(f).length)).length;
   const ok = (f, t) => { const d = nomDocDe(f, t); return !!d && d.verificado && (t !== 'recibo_nomina' || !!d.verif?.timbrado); };
@@ -7627,10 +7677,10 @@ function nomSeccion() {
     const urg = !falta.length ? 'ok' : venc ? 'r' : 'a';
     return `<div class="hmcard ${urg}"><div class="hmh"><div><b>${esc(nombre)}</b><div class="mini">Nómina · recibo timbrado y transferencia firmados</div></div>
       <div style="text-align:right"><b class="amt">${$$(L.reduce((s, f) => s + num(f.monto_pagado), 0))}</b><div class="mini" style="${venc ? 'color:var(--dg);font-weight:700' : ''}">${!falta.length ? '✓ completo' : venc ? 'plazo vencido' : '3 días después de cada pago'}</div></div></div>
-      ${L.map(f => `<div class="mini" style="margin:8px 0 2px;font-weight:700">Pago del ${fmtD(f.fecha_pago)} · ${$$(f.monto_pagado)} <a href="#" onclick="event.preventDefault();verCuenta('${f.id}')" style="font-weight:400">ver pago</a></div>${paso(f, 'recibo_nomina', 1)}${paso(f, 'transferencia_firmada', 2)}`).join('')}
+      ${L.map(f => `<div class="mini" style="margin:8px 0 2px;font-weight:700">${f._arch ? 'Quincena anterior' : 'Pago'} del ${fmtD(f.fecha_pago)}${num(f.monto_pagado) ? ' · ' + $$(f.monto_pagado) : ''} ${f._arch ? '<span class="bdg">archivo</span>' : `<a href="#" onclick="event.preventDefault();verCuenta('${f.id}')" style="font-weight:400">ver pago</a>`}</div>${paso(f, 'recibo_nomina', 1)}${paso(f, 'transferencia_firmada', 2)}`).join('')}
       ${falta.length ? `<div class="hmfalta">Le falta: <b>${esc(falta.join(' · '))}</b></div>` : ''}</div>`;
   };
-  return `<div class="dsec" style="margin:0 0 8px">Nómina · recibo timbrado y transferencia firmados (${pend} pendiente${pend === 1 ? '' : 's'})</div>
+  return `<div class="dsec" style="margin:0 0 8px;display:flex;justify-content:space-between;align-items:center"><span>Nómina · recibo timbrado y transferencia firmados (${pend} pendiente${pend === 1 ? '' : 's'})</span>${alta}</div>
     <div class="mini" style="margin-bottom:8px">Por cada pago de nómina: recibo de nómina <b>timbrado y firmado</b> por el trabajador y comprobante de transferencia <b>firmado</b>. Se leen al subirlos; lo que falte es pendiente crítico de la Contadora y cuenta en su evaluación mensual.</div>
     <div class="hmgrid">${Object.keys(G).sort().map(k => tarjeta(k, G[k])).join('')}</div>`;
 }
