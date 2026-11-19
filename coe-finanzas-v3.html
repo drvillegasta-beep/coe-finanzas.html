@@ -1654,7 +1654,8 @@ function docsDe(f) {
   const notas = d.filter(x => x.tipo === 'recibo_provisional');
   const notaTag = notas.length ? notas.map((x, i) => `<a class="dtag ok" href="${esc(x.url)}" target="_blank" onclick="event.stopPropagation()" title="Foto del comprobante del proveedor">NOTA${notas.length > 1 ? ' ' + (i + 1) : ''}</a>`).join('') : '';
   const notaAdd = puede(f.tipo === 'ingreso' ? 'cxc' : 'cxp') && f.tipo === 'egreso' ? `<span class="dtag no" style="cursor:pointer" title="Subir foto de la nota, recibo o ticket del proveedor" onclick="event.stopPropagation();notaFoto('${f.id}')">${notas.length ? '＋' : '📷 NOTA'}</span>` : '';
-  return `<div class="docs">${nf ? `<span class="dtag" title="${f.sin_factura_nota && !ent(f.entidad_id)?.no_factura ? 'Pagada sin factura con nota del proveedor' : 'Proveedor que no da factura'}">SIN FACTURA</span>` + notaTag + notaAdd : tag('XML', tiene('xml'), !sinFac && f.tipo === 'egreso') + tag('PDF', tiene('pdf'), !sinFac && f.tipo === 'egreso')}${tag('PAGO', comp, pagos.length > 0)}${compTag}${baja}${f.propuesta_pago && f.estado !== 'pagado' ? `<span class="dtag ok" title="Propuesto para pagar el ${fmtD(f.propuesta_pago)}">PROP</span>` : ''}${f.revision === 'revisado' ? '<span class="dtag ok">REV</span>' : f.revision === 'observado' ? '<span class="dtag no">OBS</span>' : ''}</div>`;
+  const nomTag = esNomPersona(f) && num(f.monto_pagado) > 0.009 ? (F => `<span class="dtag ${F.length ? 'no' : 'ok'}" title="${F.length ? 'Falta: ' + F.join(', ') : 'Recibo timbrado y transferencia firmados'}">NÓM ${F.length ? '✗' : '✓'}</span>`)(nomDocsFaltan(f)) : '';
+  return `<div class="docs">${nomTag}${nf ? `<span class="dtag" title="${f.sin_factura_nota && !ent(f.entidad_id)?.no_factura ? 'Pagada sin factura con nota del proveedor' : 'Proveedor que no da factura'}">SIN FACTURA</span>` + notaTag + notaAdd : tag('XML', tiene('xml'), !sinFac && f.tipo === 'egreso') + tag('PDF', tiene('pdf'), !sinFac && f.tipo === 'egreso')}${tag('PAGO', comp, pagos.length > 0)}${compTag}${baja}${f.propuesta_pago && f.estado !== 'pagado' ? `<span class="dtag ok" title="Propuesto para pagar el ${fmtD(f.propuesta_pago)}">PROP</span>` : ''}${f.revision === 'revisado' ? '<span class="dtag ok">REV</span>' : f.revision === 'observado' ? '<span class="dtag no">OBS</span>' : ''}</div>`;
 }
 function rCuentas(tipo) {
   const egr = tipo === 'egreso';
@@ -1696,6 +1697,128 @@ function rCuentas(tipo) {
   </div></div>`;
 }
 
+// ══ NÓMINA: recibo timbrado y firmado + transferencia firmada por el trabajador ══
+const esNomPersona = f => !!f && f.tipo === 'egreso' && !f.anulado && /^N.MINA COE$/i.test(nomEnt(f.entidad_id).trim()) && /^N.MINA · /i.test(f.descripcion || '');
+const nomPersonaNombre = f => String(f.descripcion || '').split('·')[1]?.trim() || '';
+const NOMDOC = { recibo_nomina: 'Recibo de nómina timbrado y firmado', transferencia_firmada: 'Comprobante de transferencia firmado' };
+const nomDocDe = (f, t) => DOCS.filter(d => d.registro_id === f.id && d.tipo === t).sort((a, b) => String(b.subido_at || '').localeCompare(String(a.subido_at || '')) || String(b.verif_at || '').localeCompare(String(a.verif_at || '')))[0];
+function nomDocsFaltan(f) {
+  const r = nomDocDe(f, 'recibo_nomina'), t = nomDocDe(f, 'transferencia_firmada'), F = [];
+  if (!r) F.push('recibo de nómina'); else if (!r.verif?.timbrado) F.push('recibo sin timbrar'); else if (!r.verificado) F.push('firma en el recibo');
+  if (!t) F.push('transferencia firmada'); else if (!t.verificado) F.push('firma en la transferencia');
+  return F;
+}
+function nomDocsHtml(f) {
+  if (!esNomPersona(f)) return '';
+  const fila = t => {
+    const d = nomDocDe(f, t), v = d?.verif || {};
+    const chip = (ok, txt) => `<span class="dtag ${ok === true ? 'ok' : ok === false ? 'no' : ''}" style="cursor:default">${ok === true ? '✓' : ok === false ? '✗' : '?'} ${txt}</span>`;
+    const est = !d ? '<span class="dtag no">FALTA</span>'
+      : (t === 'recibo_nomina' ? chip(!!v.timbrado, 'timbrado') : '') + chip(v.firmado === true ? true : v.firmado === false ? false : null, d.verificado ? 'firmado' : v.firmado === false ? 'sin firma' : 'firma por confirmar')
+        + (v.nombre === false ? chip(false, 'no aparece el nombre') : v.nombre ? chip(true, 'nombre') : '') + (t === 'transferencia_firmada' && v.monto === false ? chip(false, 'monto no coincide') : '');
+    return `<div class="fitem" style="flex-wrap:wrap;gap:8px"><span class="fk">${t === 'recibo_nomina' ? 'RECIBO' : 'TRANSF.'}</span>
+      <div style="flex:1;min-width:200px"><b>${NOMDOC[t]}</b><div class="mini" style="margin-top:3px;display:flex;gap:4px;flex-wrap:wrap">${est}${d ? ` <a href="${esc(d.url)}" target="_blank">ver archivo</a>${v.manual ? ` · confirmado por ${esc(v.por || '')}` : v.detalle ? ' · ' + esc(v.detalle) : ''}` : ''}</div></div>
+      ${puede('cxp') ? `<button class="btn ${d ? 'btn-s' : 'btn-p'} btn-sm" onclick="nomDocSubir('${f.id}','${t}')">⬆ ${d ? 'Reemplazar' : t === 'recibo_nomina' ? 'Recibo de nómina' : 'Transferencia firmada'}</button>` : ''}
+      ${d && !d.verificado && puede('cxp') ? `<button class="btn btn-w btn-sm" onclick="nomDocConfirmar('${d.id}','${f.id}')">Revisar firma</button>` : ''}</div>`;
+  };
+  const F = nomDocsFaltan(f);
+  return `<h4 style="margin:18px 0 8px">Documentos de nómina ${F.length ? `<span class="bdg bdg-rt-r">falta: ${esc(F.join(' · '))}</span>` : '<span class="bdg bdg-apr">completos y firmados</span>'}</h4>
+    <div class="mini" style="margin-bottom:6px">Sube el recibo de nómina <b>timbrado (CFDI)</b> y <b>firmado por ${esc(nomPersonaNombre(f) || 'el trabajador')}</b>, y el comprobante de la transferencia <b>firmado</b>. Se leen al subirlos; lo que no cumpla queda como pendiente crítico de la Contadora y sube a Dirección si se atrasa.</div>
+    <div class="flist">${fila('recibo_nomina')}${fila('transferencia_firmada')}</div>`;
+}
+// Lee el archivo: texto (PDF u OCR con posición de palabras) y busca tinta de firma cerca de «Firma / Recibí / Trabajador»
+async function nomDocAnalizar(file, f, tipo, prog) {
+  let tx = '', canvas = null, words = [], original = false;
+  const isPdf = /pdf$/i.test(file.type) || /\.pdf$/i.test(file.name);
+  if (isPdf) {
+    if (!window.pdfjsLib) await cargarScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise, page = await pdf.getPage(1);
+    const c = await page.getTextContent(); tx = c.items.map(x => x.str).join(' ');
+    const ops = await page.getOperatorList(); const hayImg = ops.fnArray.some(fn => fn === pdfjsLib.OPS.paintImageXObject || fn === pdfjsLib.OPS.paintJpegXObject);
+    const vp = page.getViewport({ scale: 2 }); canvas = document.createElement('canvas'); canvas.width = vp.width; canvas.height = vp.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+    original = tx.replace(/\s/g, '').length > 200 && !hayImg;
+  } else {
+    const img = await createImageBitmap(file), k = Math.min(1, 2200 / Math.max(img.width, img.height));
+    canvas = document.createElement('canvas'); canvas.width = Math.round(img.width * k); canvas.height = Math.round(img.height * k);
+    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+  }
+  if (!original) {
+    prog && prog('leyendo el documento…');
+    if (!window.Tesseract) await cargarScript('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js');
+    const r = await Tesseract.recognize(await new Promise(r => canvas.toBlob(r)), 'spa', { logger: m => { if (m.status === 'recognizing text' && prog) prog('leyendo ' + Math.round(m.progress * 100) + '%'); } });
+    tx = (tx + '\n' + (r.data.text || '')).trim(); words = r.data.words || [];
+  }
+  const U = normTx(tx).toUpperCase();
+  const timbrado = /[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}/i.test(tx) || /FOLIO FISCAL|TIMBRE FISCAL|SELLO (DIGITAL|DEL SAT|SAT)|CERTIFICADO (DEL )?SAT|CFDI/.test(U);
+  const toks = normTx(nomPersonaNombre(f)).toUpperCase().split(' ').filter(w => w.length >= 4);
+  const nombre = toks.length ? toks.filter(w => U.includes(w)).length >= Math.min(2, toks.length) : null;
+  let monto = null;
+  if (tipo === 'transferencia_firmada') { const P = parsePago(tx); monto = (P.montos || [P.monto]).filter(Boolean).some(m => Math.abs(num(m) - num(f.monto_pagado || f.monto_total)) <= 1); }
+  // Firma: tinta (oscura o azul) que no es texto, encima/alrededor de la palabra de firma, o en el tercio inferior
+  let firmado = null, tinta = 0;
+  if (original) firmado = false;
+  else if (canvas) {
+    const W = canvas.width, H = canvas.height, ctx = canvas.getContext('2d');
+    const clave = words.filter(w => /FIRMA|RECIB[IÍ]|CONFORM|TRABAJADOR|EMPLEADO/i.test(w.text || '')).sort((a, b) => b.bbox.y0 - a.bbox.y0)[0];
+    let x0, y0, x1, y1;
+    if (clave) { const b = clave.bbox, h = Math.max(12, b.y1 - b.y0), w = Math.max(b.x1 - b.x0, W * 0.15); x0 = Math.max(0, b.x0 - w); x1 = Math.min(W, b.x1 + w); y0 = Math.max(0, b.y0 - h * 6); y1 = Math.max(y0 + 1, b.y0 - 2); }
+    else { x0 = 0; x1 = W; y0 = Math.round(H * 0.65); y1 = H; }
+    const D = ctx.getImageData(x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0)).data, ww = x1 - x0, hh = Math.max(1, y1 - y0);
+    // renglones con raya horizontal (la línea para firmar) no cuentan como firma
+    const oscuro = i => { const r = D[i], g = D[i + 1], b = D[i + 2], l = 0.299 * r + 0.587 * g + 0.114 * b; return l < 95 || (b > r + 35 && b > g + 15 && l < 190); };
+    const raya = new Set();
+    for (let yy = 0; yy < hh; yy++) { let c = 0; for (let xx = 0; xx < ww; xx++) if (oscuro((yy * ww + xx) * 4)) c++; if (c / ww > 0.25) for (let k = -2; k <= 2; k++) raya.add(yy + k); }
+    const enTexto = (x, y) => words.some(w => w !== clave && x >= w.bbox.x0 - 2 && x <= w.bbox.x1 + 2 && y >= w.bbox.y0 - 2 && y <= w.bbox.y1 + 2 && (w.confidence || 0) > 55);
+    let n = 0, ink = 0;
+    for (let i = 0; i < D.length; i += 4 * 3) {
+      const p = i / 4, yy = Math.floor(p / ww), x = x0 + (p % ww), y = y0 + yy; if (raya.has(yy)) continue; n++;
+      if (oscuro(i) && !enTexto(x, y)) ink++;
+    }
+    tinta = n ? ink / n : 0;
+    firmado = tinta >= 0.006 ? true : tinta < 0.0012 ? false : null;
+  }
+  const det = original ? 'es el PDF original del sistema: falta la copia firmada (foto o escaneo)' : firmado === true ? 'se detectó firma' : firmado === false ? 'no se detectó firma' : 'no se pudo asegurar la firma: revísala';
+  return { timbrado: tipo === 'recibo_nomina' ? timbrado : null, firmado, nombre, monto, original, tinta: Math.round(tinta * 10000) / 10000, detalle: det };
+}
+function nomDocSubir(fid, tipo) {
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*,application/pdf';
+  inp.onchange = async () => {
+    const file = inp.files[0], f = FAC.find(x => x.id === fid); if (!file || !f) return;
+    modal(NOMDOC[tipo], `<div class="mini" id="ndProg">⏳ Subiendo y leyendo ${esc(file.name)}…</div>`, '');
+    let u, v;
+    try { u = await subirArchivo(file, 'nomina'); v = await nomDocAnalizar(file, f, tipo, m => { const e = document.getElementById('ndProg'); if (e) e.textContent = '⏳ ' + m; }); }
+    catch (e) { CM('mGen'); return toast(e.message, 'error'); }
+    const fila = (ok, t) => `<div class="row"><span>${t}</span><span style="color:${ok === true ? 'var(--sc)' : ok === false ? 'var(--dg)' : 'var(--wn)'}">${ok === true ? '✓ sí' : ok === false ? '✗ no' : '? por confirmar'}</span></div>`;
+    modal(NOMDOC[tipo], `<div class="prop" style="margin-top:0">${tipo === 'recibo_nomina' ? fila(v.timbrado, 'Timbrado (CFDI de nómina)') : ''}${fila(v.firmado, 'Firmado por el trabajador')}${v.nombre !== null ? fila(v.nombre, 'Aparece el nombre de ' + esc(nomPersonaNombre(f))) : ''}${tipo === 'transferencia_firmada' ? fila(v.monto, 'Monto ' + $$(f.monto_pagado || f.monto_total)) : ''}</div>
+      <div class="mini" style="margin-top:8px">${esc(v.detalle)}. <a href="${esc(u.url)}" target="_blank">Ver archivo</a></div>
+      <div class="mini" style="margin-top:6px">Si algo no cumple se guarda igual y queda como pendiente crítico de la Contadora hasta subir el documento correcto o confirmar la firma.</div>`,
+      `<button class="btn btn-s" onclick="CM('mGen');verCuenta('${fid}')">Cancelar</button><button class="btn btn-p" id="ndOk">Firmar y guardar</button>`);
+    document.getElementById('ndOk').onclick = async () => {
+      const r = await rpcFirmado('fin_nomina_doc_subir', { p_factura: fid, p_tipo: tipo, p_url: u.url, p_sha: u.sha, p_verif: v }, { titulo: NOMDOC[tipo], sub: nomPersonaNombre(f) });
+      if (!r) return; CM('mGen');
+      toast(r.verificado ? 'Documento correcto y firmado' : 'Guardado: queda pendiente · ' + (r.faltan || []).join(', '), r.verificado ? 'success' : 'warning');
+      await cargarTodo(); verCuenta(fid);
+    };
+  };
+  inp.click();
+}
+function nomDocConfirmar(did, fid) {
+  const d = DOCS.find(x => x.id === did), f = FAC.find(x => x.id === fid); if (!d || !f) return;
+  const img = /\.(png|jpe?g|webp|heic)$/i.test(d.url);
+  modal('Revisar firma · ' + nomPersonaNombre(f), `${img ? `<img src="${esc(d.url)}" style="max-width:100%;max-height:55vh;border-radius:8px;display:block;margin:0 auto 10px">` : `<div style="margin-bottom:10px"><a class="btn btn-s" href="${esc(d.url)}" target="_blank">Abrir el documento</a></div>`}
+    <label style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" id="ndF" ${d.verif?.firmado ? 'checked' : ''}> Viene firmado por ${esc(nomPersonaNombre(f) || 'el trabajador')}</label>
+    ${d.tipo === 'recibo_nomina' ? `<label style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" id="ndT" ${d.verif?.timbrado ? 'checked' : ''}> Está timbrado (CFDI de nómina, con folio fiscal)</label>` : ''}
+    <div class="fgrp"><label>Nota</label><input type="text" id="ndN" placeholder="Opcional"></div>
+    <div class="mini">Tu confirmación queda registrada con tu nombre.</div>`,
+    `<button class="btn btn-s" onclick="CM('mGen');verCuenta('${fid}')">Volver</button><button class="btn btn-p" onclick="nomDocConfirmarFirmar('${did}','${fid}')">Firmar</button>`);
+}
+async function nomDocConfirmarFirmar(did, fid) {
+  const t = document.getElementById('ndT');
+  const r = await rpcFirmado('fin_nomina_doc_verificar', { p_doc: did, p_firmado: ndF.checked, p_timbrado: t ? t.checked : null, p_nota: ndN.value }, { titulo: 'Revisión de firma' });
+  if (!r) return; CM('mGen'); toast(r.faltan?.length ? 'Queda pendiente: ' + r.faltan.join(', ') : 'Documentos de nómina completos', r.faltan?.length ? 'warning' : 'success'); await cargarTodo(); verCuenta(fid);
+}
 function verCuenta(id) {
   const f = FAC.find(x => x.id === id); if (!f) return;
   const e = ent(f.entidad_id) || {};
@@ -1718,6 +1841,7 @@ function verCuenta(id) {
   </div>
   ${esNomFijo(f) ? `<h4 style="margin:18px 0 8px;display:flex;justify-content:space-between;align-items:center">Desglose de la nómina${puede('recurrentes') ? `<button class="btn btn-s btn-sm" onclick="nomDesglose('${f.id}')">✎ ${f.desglose?.length ? 'Editar' : 'Desglosar'}</button>` : ''}</h4>${nomDesgTabla(f.desglose, num(f.monto_pagado) || num(f.monto_total))}` : ''}
   ${(G => G.length && puedeEliminar() ? `<div class="warnbox" style="margin-top:14px"><b>Posible duplicado con la caja (COE Conciliación)</b>${G.map(g => `<div style="display:flex;gap:10px;align-items:center;margin-top:6px;flex-wrap:wrap"><span style="flex:1">${g.origen === 'conciliacion' ? 'Pago en caja' : 'Cuenta en Finanzas'}: ${esc(g.descripcion)} · ${$$(g.monto_total)} · ${g.estado === 'pagado' ? 'pagada ' + fmtD(g.fecha_pago) : 'pendiente'}</span><button class="btn btn-w btn-sm" onclick="unirCaja('${f.origen === 'conciliacion' ? g.id : f.id}','${f.origen === 'conciliacion' ? f.id : g.id}')">🔗 Es el mismo: unir</button></div>`).join('')}</div>` : '')(cajaGemelas(f))}
+  ${nomDocsHtml(f)}
   <h4 style="margin:18px 0 8px">Documentos probatorios</h4>
   ${docs.length || f.xml_url || f.pdf_url ? `<div class="flist">${docs.map(d => `<div class="fitem"><span class="fk">${esc(d.tipo.toUpperCase())}</span><a class="fn" href="${esc(d.url)}" target="_blank">${esc(d.url.split('/').pop())}</a><span class="mini">${esc(nomUsr(d.subido_por))} · ${fmtDT(d.subido_at)}</span><span class="mini" title="Huella SHA-256">#${esc((d.sha256 || '').slice(0, 8))}</span></div>`).join('')}</div>` : '<div class="mini">Sin documentos</div>'}
   <h4 style="margin:18px 0 8px">${egr ? 'Pagos' : 'Cobros'}</h4>
