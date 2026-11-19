@@ -1718,8 +1718,8 @@ function nomDocsHtml(f) {
         + (v.nombre === false ? chip(false, 'no aparece el nombre') : v.nombre ? chip(true, 'nombre') : '') + (t === 'transferencia_firmada' && v.monto === false ? chip(false, 'monto no coincide') : '');
     return `<div class="fitem" style="flex-wrap:wrap;gap:8px"><span class="fk">${t === 'recibo_nomina' ? 'RECIBO' : 'TRANSF.'}</span>
       <div style="flex:1;min-width:200px"><b>${NOMDOC[t]}</b><div class="mini" style="margin-top:3px;display:flex;gap:4px;flex-wrap:wrap">${est}${d ? ` <a href="${esc(d.url)}" target="_blank">ver archivo</a>${v.manual ? ` · confirmado por ${esc(v.por || '')}` : v.detalle ? ' · ' + esc(v.detalle) : ''}` : ''}</div></div>
-      ${puede('cxp') ? `<button class="btn ${d ? 'btn-s' : 'btn-p'} btn-sm" onclick="nomDocSubir('${f.id}','${t}')">⬆ ${d ? 'Reemplazar' : t === 'recibo_nomina' ? 'Recibo de nómina' : 'Transferencia firmada'}</button>` : ''}
-      ${d && !d.verificado && puede('cxp') ? `<button class="btn btn-w btn-sm" onclick="nomDocConfirmar('${d.id}','${f.id}')">Revisar firma</button>` : ''}</div>`;
+      ${puede('cxp') ? `<button class="btn ${d ? 'btn-s' : 'btn-p'} btn-sm" onclick="window._ndVolver=null;nomDocSubir('${f.id}','${t}')">⬆ ${d ? 'Reemplazar' : t === 'recibo_nomina' ? 'Recibo de nómina' : 'Transferencia firmada'}</button>` : ''}
+      ${d && !d.verificado && puede('cxp') ? `<button class="btn btn-w btn-sm" onclick="window._ndVolver=null;nomDocConfirmar('${d.id}','${f.id}')">Revisar firma</button>` : ''}</div>`;
   };
   const F = nomDocsFaltan(f);
   return `<h4 style="margin:18px 0 8px">Documentos de nómina ${F.length ? `<span class="bdg bdg-rt-r">falta: ${esc(F.join(' · '))}</span>` : '<span class="bdg bdg-apr">completos y firmados</span>'}</h4>
@@ -1794,12 +1794,12 @@ function nomDocSubir(fid, tipo) {
     modal(NOMDOC[tipo], `<div class="prop" style="margin-top:0">${tipo === 'recibo_nomina' ? fila(v.timbrado, 'Timbrado (CFDI de nómina)') : ''}${fila(v.firmado, 'Firmado por el trabajador')}${v.nombre !== null ? fila(v.nombre, 'Aparece el nombre de ' + esc(nomPersonaNombre(f))) : ''}${tipo === 'transferencia_firmada' ? fila(v.monto, 'Monto ' + $$(f.monto_pagado || f.monto_total)) : ''}</div>
       <div class="mini" style="margin-top:8px">${esc(v.detalle)}. <a href="${esc(u.url)}" target="_blank">Ver archivo</a></div>
       <div class="mini" style="margin-top:6px">Si algo no cumple se guarda igual y queda como pendiente crítico de la Contadora hasta subir el documento correcto o confirmar la firma.</div>`,
-      `<button class="btn btn-s" onclick="CM('mGen');verCuenta('${fid}')">Cancelar</button><button class="btn btn-p" id="ndOk">Firmar y guardar</button>`);
+      `<button class="btn btn-s" onclick="CM('mGen');if(window._ndVolver!=='fps')verCuenta('${fid}')">Cancelar</button><button class="btn btn-p" id="ndOk">Firmar y guardar</button>`);
     document.getElementById('ndOk').onclick = async () => {
       const r = await rpcFirmado('fin_nomina_doc_subir', { p_factura: fid, p_tipo: tipo, p_url: u.url, p_sha: u.sha, p_verif: v }, { titulo: NOMDOC[tipo], sub: nomPersonaNombre(f) });
       if (!r) return; CM('mGen');
       toast(r.verificado ? 'Documento correcto y firmado' : 'Guardado: queda pendiente · ' + (r.faltan || []).join(', '), r.verificado ? 'success' : 'warning');
-      await cargarTodo(); verCuenta(fid);
+      await cargarTodo(); if (window._ndVolver === 'fps') { window._ndVolver = null; renderTab(); } else verCuenta(fid);
     };
   };
   inp.click();
@@ -1812,12 +1812,12 @@ function nomDocConfirmar(did, fid) {
     ${d.tipo === 'recibo_nomina' ? `<label style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" id="ndT" ${d.verif?.timbrado ? 'checked' : ''}> Está timbrado (CFDI de nómina, con folio fiscal)</label>` : ''}
     <div class="fgrp"><label>Nota</label><input type="text" id="ndN" placeholder="Opcional"></div>
     <div class="mini">Tu confirmación queda registrada con tu nombre.</div>`,
-    `<button class="btn btn-s" onclick="CM('mGen');verCuenta('${fid}')">Volver</button><button class="btn btn-p" onclick="nomDocConfirmarFirmar('${did}','${fid}')">Firmar</button>`);
+    `<button class="btn btn-s" onclick="CM('mGen');if(window._ndVolver!=='fps')verCuenta('${fid}')">Volver</button><button class="btn btn-p" onclick="nomDocConfirmarFirmar('${did}','${fid}')">Firmar</button>`);
 }
 async function nomDocConfirmarFirmar(did, fid) {
   const t = document.getElementById('ndT');
   const r = await rpcFirmado('fin_nomina_doc_verificar', { p_doc: did, p_firmado: ndF.checked, p_timbrado: t ? t.checked : null, p_nota: ndN.value }, { titulo: 'Revisión de firma' });
-  if (!r) return; CM('mGen'); toast(r.faltan?.length ? 'Queda pendiente: ' + r.faltan.join(', ') : 'Documentos de nómina completos', r.faltan?.length ? 'warning' : 'success'); await cargarTodo(); verCuenta(fid);
+  if (!r) return; CM('mGen'); toast(r.faltan?.length ? 'Queda pendiente: ' + r.faltan.join(', ') : 'Documentos de nómina completos', r.faltan?.length ? 'warning' : 'success'); await cargarTodo(); if (window._ndVolver === 'fps') { window._ndVolver = null; renderTab(); } else verCuenta(fid);
 }
 function verCuenta(id) {
   const f = FAC.find(x => x.id === id); if (!f) return;
@@ -2942,7 +2942,7 @@ function rFps() {
   return `<div class="ph"><div><div class="ptit" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">Facturas por solicitar <span class="fpstot ${nTot ? '' : 'ok'}">${nTot}<small>${nTot === 1 ? 'pendiente' : 'pendientes'}<br>${CTOD.length} complemento(s) · ${TOD.length} factura(s)${HMG.length ? ' · ' + HMG.length + ' mensual(es)' : ''}</small></span></div><div class="psub">Solo pagos ya hechos (con transferencia o comprobante) a los que les falta la factura o el complemento de pago · lo que aún no se liquida está en Por pagar · al subir el XML se cierran solos</div></div><button class="btn btn-p btn-sm" onclick="openUpload()">⬆ Subir factura</button></div>
   <div class="pad">
     ${buscador}
-    ${!st || st === 'pag' ? hmSeccion() : ''}
+    ${!st || st === 'pag' ? hmSeccion() + nomSeccion() : ''}
     ${listaHTML}
     ${compHTML}
     ${!st || st === 'inc' ? docsIncompletosCaja(st === 'inc') : ''}
@@ -7604,6 +7604,35 @@ function hmTarjeta(g) {
     ${hmPaso(t1 && t2, 1, 'Transferencias de la quincena', `Quincena 15: ${q(g.q1, 1, dia15)}<br>Fin de mes: ${q(g.q2, 2, diaFin)}${!t2 && diaFin > g.lim ? `<br><b style="color:var(--wn)">El ${fmtD(diaFin)} es inhábil: transfiere a más tardar el ${fmtD(g.lim)} para que la factura salga en el mes</b>` : ''}`, `<div style="display:flex;flex-direction:column;gap:4px">${!t1 ? upQ(1, dia15) : ''}${!t2 ? upQ(2, diaFin) : ''}</div>`)}
     ${paso2}${paso3}${paso4}${paso5}
     ${g.falta.length ? `<div class="hmfalta">Le falta: <b>${g.falta.join(' · ')}</b></div>` : ''}</div>`;
+}
+// Nómina (personal fijo): recibo timbrado y firmado + transferencia firmada, una tarjeta por persona
+function nomSeccion() {
+  const mes = hoyISO().slice(0, 7);
+  const P = FAC.filter(f => esNomPersona(f) && num(f.monto_pagado) > 0.009 && String(f.fecha_pago || '') >= '2026-11-01' && (String(f.fecha_pago || '').slice(0, 7) === mes || nomDocsFaltan(f).length));
+  if (!P.length) return '';
+  const G = {}; P.forEach(f => { const k = nomPersonaNombre(f) || '—'; (G[k] = G[k] || []).push(f); });
+  const pend = Object.values(G).filter(L => L.some(f => nomDocsFaltan(f).length)).length;
+  const ok = (f, t) => { const d = nomDocDe(f, t); return !!d && d.verificado && (t !== 'recibo_nomina' || !!d.verif?.timbrado); };
+  const paso = (f, t, n) => {
+    const d = nomDocDe(f, t), v = d?.verif || {}, bien = ok(f, t);
+    const sub = !d ? '<span style="color:var(--wn)">falta subirlo</span>'
+      : [t === 'recibo_nomina' ? (v.timbrado ? '✓ timbrado' : '<span style="color:var(--dg)">✗ sin timbre</span>') : '', d.verificado ? '✓ firmado' : v.firmado === false ? '<span style="color:var(--dg)">✗ sin firma</span>' : '<span style="color:var(--wn)">? firma por confirmar</span>', `<a href="${esc(d.url)}" target="_blank">ver</a>`].filter(Boolean).join(' · ');
+    const acc = puede('cxp') ? `${d && !d.verificado ? `<button class="btn btn-w btn-sm" onclick="window._ndVolver='fps';nomDocConfirmar('${d.id}','${f.id}')">Revisar firma</button>` : ''}<button class="btn ${d ? 'btn-s' : 'btn-p'} btn-sm" onclick="window._ndVolver='fps';nomDocSubir('${f.id}','${t}')">⬆ ${t === 'recibo_nomina' ? 'Recibo' : 'Transferencia'}</button>` : '';
+    return hmPaso(bien, n, t === 'recibo_nomina' ? 'Recibo de nómina timbrado y firmado' : 'Transferencia firmada por el trabajador', sub, `<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${acc}</div>`);
+  };
+  const tarjeta = (nombre, L) => {
+    L.sort((a, b) => String(a.fecha_pago).localeCompare(String(b.fecha_pago)));
+    const falta = L.flatMap(f => nomDocsFaltan(f).map(x => x + ' (' + fmtD(f.fecha_pago) + ')'));
+    const venc = L.some(f => nomDocsFaltan(f).length && diasA(isoD(new Date(new Date(f.fecha_pago + 'T12:00:00').getTime() + 3 * 864e5))) < 0);
+    const urg = !falta.length ? 'ok' : venc ? 'r' : 'a';
+    return `<div class="hmcard ${urg}"><div class="hmh"><div><b>${esc(nombre)}</b><div class="mini">Nómina · recibo timbrado y transferencia firmados</div></div>
+      <div style="text-align:right"><b class="amt">${$$(L.reduce((s, f) => s + num(f.monto_pagado), 0))}</b><div class="mini" style="${venc ? 'color:var(--dg);font-weight:700' : ''}">${!falta.length ? '✓ completo' : venc ? 'plazo vencido' : '3 días después de cada pago'}</div></div></div>
+      ${L.map(f => `<div class="mini" style="margin:8px 0 2px;font-weight:700">Pago del ${fmtD(f.fecha_pago)} · ${$$(f.monto_pagado)} <a href="#" onclick="event.preventDefault();verCuenta('${f.id}')" style="font-weight:400">ver pago</a></div>${paso(f, 'recibo_nomina', 1)}${paso(f, 'transferencia_firmada', 2)}`).join('')}
+      ${falta.length ? `<div class="hmfalta">Le falta: <b>${esc(falta.join(' · '))}</b></div>` : ''}</div>`;
+  };
+  return `<div class="dsec" style="margin:0 0 8px">Nómina · recibo timbrado y transferencia firmados (${pend} pendiente${pend === 1 ? '' : 's'})</div>
+    <div class="mini" style="margin-bottom:8px">Por cada pago de nómina: recibo de nómina <b>timbrado y firmado</b> por el trabajador y comprobante de transferencia <b>firmado</b>. Se leen al subirlos; lo que falte es pendiente crítico de la Contadora y cuenta en su evaluación mensual.</div>
+    <div class="hmgrid">${Object.keys(G).sort().map(k => tarjeta(k, G[k])).join('')}</div>`;
 }
 function hmSeccion() {
   const G = hmGrupos(); if (!G.length) return '';
